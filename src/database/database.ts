@@ -15,6 +15,9 @@ export const AppDataSource = new DataSource({
     entities: [Users, Roles],
     synchronize: true,
     logging: false,
+    ssl: {
+        rejectUnauthorized: false
+    }
 })
 
 export const connectDatabase = async () => {

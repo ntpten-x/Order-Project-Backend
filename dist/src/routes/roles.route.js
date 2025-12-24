@@ -1,0 +1,16 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const roles_controller_1 = require("../controllers/roles.controller");
+const roles_service_1 = require("../services/roles.service");
+const roles_model_1 = require("../models/roles.model");
+const express_1 = require("express");
+const router = (0, express_1.Router)();
+const rolesModel = new roles_model_1.RolesModels();
+const rolesService = new roles_service_1.RolesService(rolesModel);
+const rolesController = new roles_controller_1.RolesController(rolesService);
+router.get("/", rolesController.findAll);
+router.get("/:id", rolesController.findOne);
+router.post("/", rolesController.create);
+router.put("/:id", rolesController.update);
+router.delete("/:id", rolesController.delete);
+exports.default = router;
