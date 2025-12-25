@@ -1,7 +1,11 @@
 import { Roles } from "../entity/Roles"
 import { RolesModels } from "../models/roles.model"
 
+import { SocketService } from "./socket.service"
+
 export class RolesService {
+    private socketService = SocketService.getInstance();
+
     constructor(private rolesModels: RolesModels) { }
 
     async findAll(): Promise<Roles[]> {
@@ -22,7 +26,14 @@ export class RolesService {
 
     async create(data: Roles): Promise<Roles> {
         try {
-            return this.rolesModels.create(data)
+            // @ts-ignore - model returns {id} essentially
+            const savedRole = await this.rolesModels.create(data)
+            const createdRole = await this.rolesModels.findOne(savedRole.id)
+            if (createdRole) {
+                this.socketService.emit('roles:create', createdRole)
+                return createdRole
+            }
+            return savedRole
         } catch (error) {
             throw error
         }
@@ -30,7 +41,13 @@ export class RolesService {
 
     async update(id: string, data: Roles): Promise<Roles> {
         try {
-            return this.rolesModels.update(id, data)
+            await this.rolesModels.update(id, data)
+            const updatedRole = await this.rolesModels.findOne(id)
+            if (updatedRole) {
+                this.socketService.emit('roles:update', updatedRole)
+                return updatedRole
+            }
+            throw new Error("Role updated but not found")
         } catch (error) {
             throw error
         }
@@ -38,7 +55,8 @@ export class RolesService {
 
     async delete(id: string): Promise<void> {
         try {
-            this.rolesModels.delete(id)
+            await this.rolesModels.delete(id)
+            this.socketService.emit('roles:delete', { id })
         } catch (error) {
             throw error
         }
