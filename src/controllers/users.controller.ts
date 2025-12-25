@@ -15,7 +15,7 @@ export class UsersController {
 
     findOne = async (req: Request, res: Response) => {
         try {
-            const users = await this.usersService.findOne(Number(req.params.id))
+            const users = await this.usersService.findOne(req.params.id)
             res.status(200).json(users)
         } catch (error: any) {
             res.status(500).json({ error: error.message })
@@ -33,7 +33,7 @@ export class UsersController {
 
     update = async (req: Request, res: Response) => {
         try {
-            const users = await this.usersService.update(Number(req.params.id), req.body)
+            const users = await this.usersService.update(req.params.id, req.body)
             res.status(200).json(users)
         } catch (error: any) {
             res.status(500).json({ error: error.message })
@@ -42,7 +42,7 @@ export class UsersController {
 
     delete = async (req: Request, res: Response) => {
         try {
-            await this.usersService.delete(Number(req.params.id))
+            await this.usersService.delete(req.params.id)
             res.status(204).json({ message: "User deleted successfully" })
         } catch (error: any) {
             res.status(500).json({ error: error.message })

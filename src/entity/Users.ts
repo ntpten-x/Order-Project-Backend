@@ -1,10 +1,10 @@
-import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, JoinColumn } from "typeorm"
+import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, JoinColumn, CreateDateColumn } from "typeorm"
 import { Roles } from "./Roles"
 
 @Entity()
 export class Users {
-    @PrimaryGeneratedColumn()
-    id!: number
+    @PrimaryGeneratedColumn("uuid")
+    id!: string
 
     @Column({ type: "varchar", length: 100, unique: true })
     username!: string
@@ -12,8 +12,20 @@ export class Users {
     @Column({ type: "varchar", length: 100 })
     password!: string
 
-    @Column({ name: "roles_id" })
-    roles_id!: number
+    @CreateDateColumn()
+    create_date!: Date
+
+    @Column({ type: "timestamp", nullable: true })
+    last_login_at!: Date
+
+    @Column({ default: true })
+    is_use!: boolean
+
+    @Column({ default: true })
+    is_active!: boolean
+
+    @Column({ name: "roles_id", type: "uuid" })
+    roles_id!: string
 
     @ManyToOne(() => Roles, (roles) => roles.users)
     @JoinColumn({ name: "roles_id" })

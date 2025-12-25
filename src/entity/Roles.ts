@@ -3,8 +3,8 @@ import { Users } from "./Users"
 
 @Entity()
 export class Roles {
-    @PrimaryGeneratedColumn()
-    id!: number
+    @PrimaryGeneratedColumn("uuid")
+    id!: string
 
     @Column({ type: "varchar", length: 100, unique: true })
     roles_name!: string

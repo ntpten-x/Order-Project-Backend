@@ -12,7 +12,7 @@ export class RolesModels {
         }
     }
 
-    async findOne(id: number): Promise<Roles | null> {
+    async findOne(id: string): Promise<Roles | null> {
         try {
             return this.rolesRepository.createQueryBuilder("roles").where("roles.id = :id", { id }).getOne()
         } catch (error) {
@@ -28,7 +28,7 @@ export class RolesModels {
         }
     }
 
-    async update(id: number, data: Roles): Promise<Roles> {
+    async update(id: string, data: Roles): Promise<Roles> {
         try {
             return this.rolesRepository.createQueryBuilder("roles").update(data).where("roles.id = :id", { id }).returning("id").execute().then((result) => result.raw[0])
         } catch (error) {
@@ -36,7 +36,7 @@ export class RolesModels {
         }
     }
 
-    async delete(id: number): Promise<void> {
+    async delete(id: string): Promise<void> {
         try {
             this.rolesRepository.createQueryBuilder("roles").delete().where("roles.id = :id", { id }).execute()
         } catch (error) {

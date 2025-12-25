@@ -12,7 +12,7 @@ export class RolesService {
         }
     }
 
-    async findOne(id: number): Promise<Roles | null> {
+    async findOne(id: string): Promise<Roles | null> {
         try {
             return this.rolesModels.findOne(id)
         } catch (error) {
@@ -28,7 +28,7 @@ export class RolesService {
         }
     }
 
-    async update(id: number, data: Roles): Promise<Roles> {
+    async update(id: string, data: Roles): Promise<Roles> {
         try {
             return this.rolesModels.update(id, data)
         } catch (error) {
@@ -36,7 +36,7 @@ export class RolesService {
         }
     }
 
-    async delete(id: number): Promise<void> {
+    async delete(id: string): Promise<void> {
         try {
             this.rolesModels.delete(id)
         } catch (error) {

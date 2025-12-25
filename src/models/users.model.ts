@@ -14,11 +14,22 @@ export class UsersModels {
         }
     }
 
-    async findOne(id: number): Promise<Users | null> {
+    async findOne(id: string): Promise<Users | null> {
         try {
             return this.usersRepository.createQueryBuilder("users")
                 .leftJoinAndSelect("users.roles", "roles")
                 .where("users.id = :id", { id })
+                .getOne()
+        } catch (error) {
+            throw error
+        }
+    }
+
+    async findOneByUsername(username: string): Promise<Users | null> {
+        try {
+            return this.usersRepository.createQueryBuilder("users")
+                .leftJoinAndSelect("users.roles", "roles")
+                .where("users.username = :username", { username })
                 .getOne()
         } catch (error) {
             throw error
@@ -33,7 +44,7 @@ export class UsersModels {
         }
     }
 
-    async update(id: number, users: Users): Promise<Users> {
+    async update(id: string, users: Users): Promise<Users> {
         try {
             return this.usersRepository.save({ ...users, id })
         } catch (error) {
@@ -41,7 +52,7 @@ export class UsersModels {
         }
     }
 
-    async delete(id: number): Promise<void> {
+    async delete(id: string): Promise<void> {
         try {
             await this.usersRepository.delete(id)
         } catch (error) {

@@ -13,7 +13,7 @@ export class RolesController {
     }
     findOne = async (req: Request, res: Response) => {
         try {
-            const roles = await this.rolesService.findOne(parseInt(req.params.id))
+            const roles = await this.rolesService.findOne(req.params.id)
             res.status(200).json(roles)
         } catch (error) {
             res.status(500).json({ error: "Internal Server Error" })
@@ -29,7 +29,7 @@ export class RolesController {
     }
     update = async (req: Request, res: Response) => {
         try {
-            const roles = await this.rolesService.update(parseInt(req.params.id), req.body)
+            const roles = await this.rolesService.update(req.params.id, req.body)
             res.status(200).json(roles)
         } catch (error) {
             res.status(500).json({ error: "Internal Server Error" })
@@ -37,7 +37,7 @@ export class RolesController {
     }
     delete = async (req: Request, res: Response) => {
         try {
-            await this.rolesService.delete(parseInt(req.params.id))
+            await this.rolesService.delete(req.params.id)
             res.status(204).send()
         } catch (error) {
             res.status(500).json({ error: "Internal Server Error" })
