@@ -8,6 +8,8 @@ export class UsersModels {
         try {
             return this.usersRepository.createQueryBuilder("users")
                 .leftJoinAndSelect("users.roles", "roles")
+                .orderBy("users.is_active", "DESC")
+                .addOrderBy("users.create_date", "ASC")
                 .getMany()
         } catch (error) {
             throw error

@@ -12,10 +12,10 @@ export class Users {
     @Column({ type: "varchar", length: 100 })
     password!: string
 
-    @CreateDateColumn()
+    @CreateDateColumn({ type: "timestamptz" })
     create_date!: Date
 
-    @Column({ type: "timestamp", nullable: true })
+    @Column({ type: "timestamptz", nullable: true })
     last_login_at!: Date
 
     @Column({ default: true })

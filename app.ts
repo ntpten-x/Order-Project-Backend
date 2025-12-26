@@ -11,6 +11,8 @@ import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import csurf from "csurf";
+import ingredientsUnitRouter from "./src/routes/ingredientsUnit.route";
+import ingredientsRouter from "./src/routes/ingredients.route";
 
 const app = express();
 const httpServer = createServer(app); // Wrap express with HTTP server
@@ -70,6 +72,8 @@ SocketService.getInstance().init(io);
 app.use("/auth", authRouter);
 app.use("/users", usersRouter);
 app.use("/roles", rolesRouter);
+app.use("/ingredientsUnit", ingredientsUnitRouter);
+app.use("/ingredients", ingredientsRouter);
 
 connectDatabase().then(() => {
     httpServer.listen(port, () => { // Listen on httpServer

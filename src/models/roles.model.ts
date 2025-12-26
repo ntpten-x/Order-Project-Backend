@@ -6,7 +6,9 @@ export class RolesModels {
 
     async findAll(): Promise<Roles[]> {
         try {
-            return this.rolesRepository.createQueryBuilder("roles").getMany()
+            return this.rolesRepository.createQueryBuilder("roles")
+                .orderBy("roles.create_date", "ASC")
+                .getMany()
         } catch (error) {
             throw error
         }

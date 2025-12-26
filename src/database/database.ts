@@ -2,7 +2,8 @@ import "reflect-metadata"
 import { DataSource } from "typeorm"
 import { Users } from "../entity/Users"
 import { Roles } from "../entity/Roles"
-
+import { IngredientsUnit } from "../entity/IngredientsUnit"
+import { Ingredients } from "../entity/Ingredients"
 import * as dotenv from "dotenv"
 dotenv.config()
 export const AppDataSource = new DataSource({
@@ -12,7 +13,7 @@ export const AppDataSource = new DataSource({
     username: process.env.DATABASE_USER,
     password: process.env.DATABASE_PASSWORD,
     database: process.env.DATABASE_NAME,
-    entities: [Users, Roles],
+    entities: [Users, Roles, IngredientsUnit, Ingredients],
     synchronize: true,
     logging: false,
     ssl: {

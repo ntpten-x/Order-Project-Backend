@@ -12,6 +12,9 @@ export class Roles {
     @Column({ type: "varchar", length: 100, unique: true })
     display_name!: string
 
+    @Column({ type: "timestamptz", default: () => "CURRENT_TIMESTAMP" })
+    create_date!: Date
+
     @OneToMany(() => Users, (users) => users.roles)
     users!: Users[]
 }

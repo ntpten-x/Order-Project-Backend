@@ -83,7 +83,14 @@ export class AuthController {
             return res.status(401).json({ message: "Not authenticated" });
         }
 
-        const { password, ...userWithoutPassword } = req.user;
-        return res.json(userWithoutPassword);
+        const user = req.user;
+        return res.json({
+            id: user.id,
+            username: user.username,
+            role: user.roles ? user.roles.roles_name : "unknown",
+            display_name: user.roles ? user.roles.display_name : user.username,
+            is_active: user.is_active,
+            is_use: user.is_use
+        });
     }
 }
