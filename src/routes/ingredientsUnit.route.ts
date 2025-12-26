@@ -2,12 +2,17 @@ import { Router } from "express";
 import { IngredientsUnitModel } from "../models/ingredientsUnit.model";
 import { IngredientsUnitService } from "../services/ingredientsUnit.service";
 import { IngredientsUnitController } from "../controllers/ingredientsUnit.controller";
+import { authenticateToken, authorizeRole } from "../middleware/auth.middleware";
 
 const router = Router()
 
 const ingredientsUnitModel = new IngredientsUnitModel()
 const ingredientsUnitService = new IngredientsUnitService(ingredientsUnitModel)
 const ingredientsUnitController = new IngredientsUnitController(ingredientsUnitService)
+
+// Protect all routes
+router.use(authenticateToken)
+router.use(authorizeRole(["Admin"]))
 
 router.get("/", ingredientsUnitController.findAll)
 router.get("/:id", ingredientsUnitController.findOne)
