@@ -4,10 +4,14 @@ const roles_controller_1 = require("../controllers/roles.controller");
 const roles_service_1 = require("../services/roles.service");
 const roles_model_1 = require("../models/roles.model");
 const express_1 = require("express");
+const auth_middleware_1 = require("../middleware/auth.middleware");
 const router = (0, express_1.Router)();
 const rolesModel = new roles_model_1.RolesModels();
 const rolesService = new roles_service_1.RolesService(rolesModel);
 const rolesController = new roles_controller_1.RolesController(rolesService);
+// Protect all routes
+router.use(auth_middleware_1.authenticateToken);
+router.use((0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]));
 router.get("/", rolesController.findAll);
 router.get("/:id", rolesController.findOne);
 router.post("/", rolesController.create);

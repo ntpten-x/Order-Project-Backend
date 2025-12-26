@@ -9,14 +9,14 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.UsersController = void 0;
-class UsersController {
-    constructor(usersService) {
-        this.usersService = usersService;
+exports.IngredientsUnitController = void 0;
+class IngredientsUnitController {
+    constructor(ingredientsUnitService) {
+        this.ingredientsUnitService = ingredientsUnitService;
         this.findAll = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {
-                const users = yield this.usersService.findAll();
-                res.status(200).json(users);
+                const ingredientsUnit = yield this.ingredientsUnitService.findAll();
+                res.status(200).json(ingredientsUnit);
             }
             catch (error) {
                 res.status(500).json({ error: error.message });
@@ -24,8 +24,17 @@ class UsersController {
         });
         this.findOne = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {
-                const users = yield this.usersService.findOne(req.params.id);
-                res.status(200).json(users);
+                const ingredientsUnit = yield this.ingredientsUnitService.findOne(req.params.id);
+                res.status(200).json(ingredientsUnit);
+            }
+            catch (error) {
+                res.status(500).json({ error: error.message });
+            }
+        });
+        this.findOneByUnitName = (req, res) => __awaiter(this, void 0, void 0, function* () {
+            try {
+                const ingredientsUnit = yield this.ingredientsUnitService.findOneByUnitName(req.params.unit_name);
+                res.status(200).json(ingredientsUnit);
             }
             catch (error) {
                 res.status(500).json({ error: error.message });
@@ -33,8 +42,8 @@ class UsersController {
         });
         this.create = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {
-                const users = yield this.usersService.create(req.body);
-                res.status(201).json(users);
+                const ingredientsUnit = yield this.ingredientsUnitService.create(req.body);
+                res.status(201).json(ingredientsUnit);
             }
             catch (error) {
                 res.status(500).json({ error: error.message });
@@ -42,8 +51,8 @@ class UsersController {
         });
         this.update = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {
-                const users = yield this.usersService.update(req.params.id, req.body);
-                res.status(200).json(users);
+                const ingredientsUnit = yield this.ingredientsUnitService.update(req.params.id, req.body);
+                res.status(200).json(ingredientsUnit);
             }
             catch (error) {
                 res.status(500).json({ error: error.message });
@@ -51,8 +60,8 @@ class UsersController {
         });
         this.delete = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {
-                yield this.usersService.delete(req.params.id);
-                res.status(204).json({ message: "User deleted successfully" });
+                yield this.ingredientsUnitService.delete(req.params.id);
+                res.status(200).json({ message: "หน่วยนับวัตถุดิบลบสำเร็จ" });
             }
             catch (error) {
                 res.status(500).json({ error: error.message });
@@ -60,4 +69,4 @@ class UsersController {
         });
     }
 }
-exports.UsersController = UsersController;
+exports.IngredientsUnitController = IngredientsUnitController;

@@ -9,18 +9,20 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.RolesModels = void 0;
+exports.IngredientsModel = void 0;
 const database_1 = require("../database/database");
-const Roles_1 = require("../entity/Roles");
-class RolesModels {
+const Ingredients_1 = require("../entity/Ingredients");
+class IngredientsModel {
     constructor() {
-        this.rolesRepository = database_1.AppDataSource.getRepository(Roles_1.Roles);
+        this.ingredientsRepository = database_1.AppDataSource.getRepository(Ingredients_1.Ingredients);
     }
     findAll() {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.rolesRepository.createQueryBuilder("roles")
-                    .orderBy("roles.create_date", "ASC")
+                return this.ingredientsRepository.createQueryBuilder("ingredients")
+                    .leftJoinAndSelect("ingredients.unit", "unit")
+                    .orderBy("ingredients.is_active", "DESC")
+                    .addOrderBy("ingredients.create_date", "ASC")
                     .getMany();
             }
             catch (error) {
@@ -31,27 +33,43 @@ class RolesModels {
     findOne(id) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.rolesRepository.createQueryBuilder("roles").where("roles.id = :id", { id }).getOne();
+                return this.ingredientsRepository.createQueryBuilder("ingredients")
+                    .leftJoinAndSelect("ingredients.unit", "unit")
+                    .where("ingredients.id = :id", { id })
+                    .getOne();
             }
             catch (error) {
                 throw error;
             }
         });
     }
-    create(data) {
+    findOneByName(ingredient_name) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.rolesRepository.createQueryBuilder("roles").insert().values(data).returning("id").execute().then((result) => result.raw[0]);
+                return this.ingredientsRepository.createQueryBuilder("ingredients")
+                    .leftJoinAndSelect("ingredients.unit", "unit")
+                    .where("ingredients.ingredient_name = :ingredient_name", { ingredient_name })
+                    .getOne();
             }
             catch (error) {
                 throw error;
             }
         });
     }
-    update(id, data) {
+    create(ingredients) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.rolesRepository.createQueryBuilder("roles").update(data).where("roles.id = :id", { id }).returning("id").execute().then((result) => result.raw[0]);
+                return this.ingredientsRepository.save(ingredients);
+            }
+            catch (error) {
+                throw error;
+            }
+        });
+    }
+    update(id, ingredients) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                return this.ingredientsRepository.save(Object.assign(Object.assign({}, ingredients), { id }));
             }
             catch (error) {
                 throw error;
@@ -61,7 +79,7 @@ class RolesModels {
     delete(id) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                this.rolesRepository.createQueryBuilder("roles").delete().where("roles.id = :id", { id }).execute();
+                yield this.ingredientsRepository.delete(id);
             }
             catch (error) {
                 throw error;
@@ -69,4 +87,4 @@ class RolesModels {
         });
     }
 }
-exports.RolesModels = RolesModels;
+exports.IngredientsModel = IngredientsModel;

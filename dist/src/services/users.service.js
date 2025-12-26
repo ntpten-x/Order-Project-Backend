@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -10,9 +43,12 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UsersService = void 0;
+const bcrypt = __importStar(require("bcrypt"));
+const socket_service_1 = require("./socket.service");
 class UsersService {
     constructor(usersModel) {
         this.usersModel = usersModel;
+        this.socketService = socket_service_1.SocketService.getInstance();
     }
     findAll() {
         return __awaiter(this, void 0, void 0, function* () {
@@ -37,7 +73,15 @@ class UsersService {
     create(users) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.usersModel.create(users);
+                const findUser = yield this.usersModel.findOneByUsername(users.username);
+                if (findUser) {
+                    throw new Error("ผู้ใช้ชื่อ " + users.username + " ถูกใช้แล้ว");
+                }
+                users.password = yield bcrypt.hash(users.password, 10);
+                yield this.usersModel.create(users);
+                const createdUser = yield this.usersModel.findOneByUsername(users.username);
+                this.socketService.emit('users:create', createdUser);
+                return createdUser;
             }
             catch (error) {
                 throw error;
@@ -47,7 +91,23 @@ class UsersService {
     update(id, users) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.usersModel.update(id, users);
+                const findUser = yield this.usersModel.findOne(id);
+                if (!findUser) {
+                    throw new Error("ไม่พบผู้ใช้");
+                }
+                if (users.password) {
+                    users.password = yield bcrypt.hash(users.password, 10);
+                }
+                if (findUser.username !== users.username) {
+                    const findUserByUsername = yield this.usersModel.findOneByUsername(users.username);
+                    if (findUserByUsername) {
+                        throw new Error("ผู้ใช้ชื่อ " + users.username + " ถูกใช้แล้ว");
+                    }
+                }
+                yield this.usersModel.update(id, users);
+                const updatedUser = yield this.usersModel.findOne(id);
+                this.socketService.emit('users:update', updatedUser);
+                return updatedUser;
             }
             catch (error) {
                 throw error;
@@ -57,7 +117,8 @@ class UsersService {
     delete(id) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.usersModel.delete(id);
+                yield this.usersModel.delete(id);
+                this.socketService.emit('users:delete', { id });
             }
             catch (error) {
                 throw error;

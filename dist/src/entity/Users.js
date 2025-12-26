@@ -16,8 +16,8 @@ let Users = class Users {
 };
 exports.Users = Users;
 __decorate([
-    (0, typeorm_1.PrimaryGeneratedColumn)(),
-    __metadata("design:type", Number)
+    (0, typeorm_1.PrimaryGeneratedColumn)("uuid"),
+    __metadata("design:type", String)
 ], Users.prototype, "id", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: "varchar", length: 100, unique: true }),
@@ -28,8 +28,24 @@ __decorate([
     __metadata("design:type", String)
 ], Users.prototype, "password", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ name: "roles_id" }),
-    __metadata("design:type", Number)
+    (0, typeorm_1.CreateDateColumn)({ type: "timestamptz" }),
+    __metadata("design:type", Date)
+], Users.prototype, "create_date", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: "timestamptz", nullable: true }),
+    __metadata("design:type", Date)
+], Users.prototype, "last_login_at", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ default: true }),
+    __metadata("design:type", Boolean)
+], Users.prototype, "is_use", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ default: true }),
+    __metadata("design:type", Boolean)
+], Users.prototype, "is_active", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: "roles_id", type: "uuid" }),
+    __metadata("design:type", String)
 ], Users.prototype, "roles_id", void 0);
 __decorate([
     (0, typeorm_1.ManyToOne)(() => Roles_1.Roles, (roles) => roles.users),

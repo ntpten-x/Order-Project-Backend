@@ -9,17 +9,17 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.RolesService = void 0;
+exports.IngredientsUnitService = void 0;
 const socket_service_1 = require("./socket.service");
-class RolesService {
-    constructor(rolesModels) {
-        this.rolesModels = rolesModels;
+class IngredientsUnitService {
+    constructor(ingredientsUnitModel) {
+        this.ingredientsUnitModel = ingredientsUnitModel;
         this.socketService = socket_service_1.SocketService.getInstance();
     }
     findAll() {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.rolesModels.findAll();
+                return this.ingredientsUnitModel.findAll();
             }
             catch (error) {
                 throw error;
@@ -29,40 +29,50 @@ class RolesService {
     findOne(id) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.rolesModels.findOne(id);
+                return this.ingredientsUnitModel.findOne(id);
             }
             catch (error) {
                 throw error;
             }
         });
     }
-    create(data) {
+    findOneByUnitName(unit_name) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                return this.ingredientsUnitModel.findOneByUnitName(unit_name);
+            }
+            catch (error) {
+                throw error;
+            }
+        });
+    }
+    create(ingredientsUnit) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 // @ts-ignore - model returns {id} essentially
-                const savedRole = yield this.rolesModels.create(data);
-                const createdRole = yield this.rolesModels.findOne(savedRole.id);
-                if (createdRole) {
-                    this.socketService.emit('roles:create', createdRole);
-                    return createdRole;
+                const savedIngredientsUnit = yield this.ingredientsUnitModel.create(ingredientsUnit);
+                const createdIngredientsUnit = yield this.ingredientsUnitModel.findOne(savedIngredientsUnit.id);
+                if (createdIngredientsUnit) {
+                    this.socketService.emit('ingredientsUnit:create', createdIngredientsUnit);
+                    return createdIngredientsUnit;
                 }
-                return savedRole;
+                return savedIngredientsUnit;
             }
             catch (error) {
                 throw error;
             }
         });
     }
-    update(id, data) {
+    update(id, ingredientsUnit) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                yield this.rolesModels.update(id, data);
-                const updatedRole = yield this.rolesModels.findOne(id);
-                if (updatedRole) {
-                    this.socketService.emit('roles:update', updatedRole);
-                    return updatedRole;
+                yield this.ingredientsUnitModel.update(id, ingredientsUnit);
+                const updatedIngredientsUnit = yield this.ingredientsUnitModel.findOne(id);
+                if (updatedIngredientsUnit) {
+                    this.socketService.emit('ingredientsUnit:update', updatedIngredientsUnit);
+                    return updatedIngredientsUnit;
                 }
-                throw new Error("ไม่พบข้อมูลบทบาท");
+                throw new Error("พบข้อผิดพลาดในการอัปเดตหน่วยนับวัตถุดิบ");
             }
             catch (error) {
                 throw error;
@@ -72,8 +82,8 @@ class RolesService {
     delete(id) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                yield this.rolesModels.delete(id);
-                this.socketService.emit('roles:delete', { id });
+                yield this.ingredientsUnitModel.delete(id);
+                this.socketService.emit('ingredientsUnit:delete', { id });
             }
             catch (error) {
                 throw error;
@@ -81,4 +91,4 @@ class RolesService {
         });
     }
 }
-exports.RolesService = RolesService;
+exports.IngredientsUnitService = IngredientsUnitService;

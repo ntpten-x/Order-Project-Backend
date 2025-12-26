@@ -24,7 +24,7 @@ class RolesController {
         });
         this.findOne = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {
-                const roles = yield this.rolesService.findOne(parseInt(req.params.id));
+                const roles = yield this.rolesService.findOne(req.params.id);
                 res.status(200).json(roles);
             }
             catch (error) {
@@ -42,7 +42,7 @@ class RolesController {
         });
         this.update = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {
-                const roles = yield this.rolesService.update(parseInt(req.params.id), req.body);
+                const roles = yield this.rolesService.update(req.params.id, req.body);
                 res.status(200).json(roles);
             }
             catch (error) {
@@ -51,7 +51,7 @@ class RolesController {
         });
         this.delete = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {
-                yield this.rolesService.delete(parseInt(req.params.id));
+                yield this.rolesService.delete(req.params.id);
                 res.status(204).send();
             }
             catch (error) {

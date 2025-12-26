@@ -9,32 +9,49 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.Roles = void 0;
+exports.Ingredients = void 0;
 const typeorm_1 = require("typeorm");
-const Users_1 = require("./Users");
-let Roles = class Roles {
+const IngredientsUnit_1 = require("./IngredientsUnit");
+let Ingredients = class Ingredients {
 };
-exports.Roles = Roles;
+exports.Ingredients = Ingredients;
 __decorate([
     (0, typeorm_1.PrimaryGeneratedColumn)("uuid"),
     __metadata("design:type", String)
-], Roles.prototype, "id", void 0);
+], Ingredients.prototype, "id", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: "varchar", length: 100, unique: true }),
     __metadata("design:type", String)
-], Roles.prototype, "roles_name", void 0);
+], Ingredients.prototype, "ingredient_name", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: "varchar", length: 100, unique: true }),
     __metadata("design:type", String)
-], Roles.prototype, "display_name", void 0);
+], Ingredients.prototype, "display_name", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: "text" }),
+    __metadata("design:type", String)
+], Ingredients.prototype, "description", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: "boolean", default: true }),
+    __metadata("design:type", Boolean)
+], Ingredients.prototype, "is_active", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: "varchar", length: 100 }),
+    __metadata("design:type", String)
+], Ingredients.prototype, "img_url", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: "uuid" }),
+    __metadata("design:type", String)
+], Ingredients.prototype, "unit_id", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: "timestamptz", default: () => "CURRENT_TIMESTAMP" }),
     __metadata("design:type", Date)
-], Roles.prototype, "create_date", void 0);
+], Ingredients.prototype, "create_date", void 0);
 __decorate([
-    (0, typeorm_1.OneToMany)(() => Users_1.Users, (users) => users.roles),
-    __metadata("design:type", Array)
-], Roles.prototype, "users", void 0);
-exports.Roles = Roles = __decorate([
+    (0, typeorm_1.ManyToOne)(() => IngredientsUnit_1.IngredientsUnit, (ingredientsUnit) => ingredientsUnit.ingredients),
+    (0, typeorm_1.JoinColumn)({ name: "unit_id" }),
+    __metadata("design:type", IngredientsUnit_1.IngredientsUnit)
+], Ingredients.prototype, "unit", void 0);
+exports.Ingredients = Ingredients = __decorate([
     (0, typeorm_1.Entity)()
-], Roles);
+], Ingredients);

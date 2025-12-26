@@ -21,6 +21,8 @@ class UsersModels {
             try {
                 return this.usersRepository.createQueryBuilder("users")
                     .leftJoinAndSelect("users.roles", "roles")
+                    .orderBy("users.is_active", "DESC")
+                    .addOrderBy("users.create_date", "ASC")
                     .getMany();
             }
             catch (error) {
@@ -34,6 +36,19 @@ class UsersModels {
                 return this.usersRepository.createQueryBuilder("users")
                     .leftJoinAndSelect("users.roles", "roles")
                     .where("users.id = :id", { id })
+                    .getOne();
+            }
+            catch (error) {
+                throw error;
+            }
+        });
+    }
+    findOneByUsername(username) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                return this.usersRepository.createQueryBuilder("users")
+                    .leftJoinAndSelect("users.roles", "roles")
+                    .where("users.username = :username", { username })
                     .getOne();
             }
             catch (error) {

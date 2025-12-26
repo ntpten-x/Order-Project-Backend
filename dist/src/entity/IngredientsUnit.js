@@ -9,32 +9,36 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.Roles = void 0;
+exports.IngredientsUnit = void 0;
 const typeorm_1 = require("typeorm");
-const Users_1 = require("./Users");
-let Roles = class Roles {
+const Ingredients_1 = require("./Ingredients");
+let IngredientsUnit = class IngredientsUnit {
 };
-exports.Roles = Roles;
+exports.IngredientsUnit = IngredientsUnit;
 __decorate([
     (0, typeorm_1.PrimaryGeneratedColumn)("uuid"),
     __metadata("design:type", String)
-], Roles.prototype, "id", void 0);
+], IngredientsUnit.prototype, "id", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: "varchar", length: 100, unique: true }),
     __metadata("design:type", String)
-], Roles.prototype, "roles_name", void 0);
+], IngredientsUnit.prototype, "unit_name", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: "varchar", length: 100, unique: true }),
     __metadata("design:type", String)
-], Roles.prototype, "display_name", void 0);
+], IngredientsUnit.prototype, "display_name", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: "boolean", default: true }),
+    __metadata("design:type", Boolean)
+], IngredientsUnit.prototype, "is_active", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: "timestamptz", default: () => "CURRENT_TIMESTAMP" }),
     __metadata("design:type", Date)
-], Roles.prototype, "create_date", void 0);
+], IngredientsUnit.prototype, "create_date", void 0);
 __decorate([
-    (0, typeorm_1.OneToMany)(() => Users_1.Users, (users) => users.roles),
+    (0, typeorm_1.OneToMany)(() => Ingredients_1.Ingredients, (ingredients) => ingredients.unit),
     __metadata("design:type", Array)
-], Roles.prototype, "users", void 0);
-exports.Roles = Roles = __decorate([
+], IngredientsUnit.prototype, "ingredients", void 0);
+exports.IngredientsUnit = IngredientsUnit = __decorate([
     (0, typeorm_1.Entity)()
-], Roles);
+], IngredientsUnit);

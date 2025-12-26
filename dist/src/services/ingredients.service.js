@@ -9,17 +9,17 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.RolesService = void 0;
+exports.IngredientsService = void 0;
 const socket_service_1 = require("./socket.service");
-class RolesService {
-    constructor(rolesModels) {
-        this.rolesModels = rolesModels;
+class IngredientsService {
+    constructor(ingredientsModel) {
+        this.ingredientsModel = ingredientsModel;
         this.socketService = socket_service_1.SocketService.getInstance();
     }
     findAll() {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.rolesModels.findAll();
+                return this.ingredientsModel.findAll();
             }
             catch (error) {
                 throw error;
@@ -29,40 +29,50 @@ class RolesService {
     findOne(id) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.rolesModels.findOne(id);
+                return this.ingredientsModel.findOne(id);
             }
             catch (error) {
                 throw error;
             }
         });
     }
-    create(data) {
+    findOneByName(ingredient_name) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                // @ts-ignore - model returns {id} essentially
-                const savedRole = yield this.rolesModels.create(data);
-                const createdRole = yield this.rolesModels.findOne(savedRole.id);
-                if (createdRole) {
-                    this.socketService.emit('roles:create', createdRole);
-                    return createdRole;
-                }
-                return savedRole;
+                return this.ingredientsModel.findOneByName(ingredient_name);
             }
             catch (error) {
                 throw error;
             }
         });
     }
-    update(id, data) {
+    create(ingredients) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                yield this.rolesModels.update(id, data);
-                const updatedRole = yield this.rolesModels.findOne(id);
-                if (updatedRole) {
-                    this.socketService.emit('roles:update', updatedRole);
-                    return updatedRole;
+                // @ts-ignore
+                const savedIngredients = yield this.ingredientsModel.create(ingredients);
+                const createdIngredients = yield this.ingredientsModel.findOne(savedIngredients.id);
+                if (createdIngredients) {
+                    this.socketService.emit('ingredients:create', createdIngredients);
+                    return createdIngredients;
                 }
-                throw new Error("ไม่พบข้อมูลบทบาท");
+                return savedIngredients;
+            }
+            catch (error) {
+                throw error;
+            }
+        });
+    }
+    update(id, ingredients) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                yield this.ingredientsModel.update(id, ingredients);
+                const updatedIngredients = yield this.ingredientsModel.findOne(id);
+                if (updatedIngredients) {
+                    this.socketService.emit('ingredients:update', updatedIngredients);
+                    return updatedIngredients;
+                }
+                throw new Error("พบข้อผิดพลาดในการอัปเดตวัตถุดิบ");
             }
             catch (error) {
                 throw error;
@@ -72,8 +82,8 @@ class RolesService {
     delete(id) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                yield this.rolesModels.delete(id);
-                this.socketService.emit('roles:delete', { id });
+                yield this.ingredientsModel.delete(id);
+                this.socketService.emit('ingredients:delete', { id });
             }
             catch (error) {
                 throw error;
@@ -81,4 +91,4 @@ class RolesService {
         });
     }
 }
-exports.RolesService = RolesService;
+exports.IngredientsService = IngredientsService;

@@ -47,6 +47,11 @@ require("reflect-metadata");
 const typeorm_1 = require("typeorm");
 const Users_1 = require("../entity/Users");
 const Roles_1 = require("../entity/Roles");
+const IngredientsUnit_1 = require("../entity/IngredientsUnit");
+const Ingredients_1 = require("../entity/Ingredients");
+const Orders_1 = require("../entity/Orders");
+const OrdersItem_1 = require("../entity/OrdersItem");
+const OrdersDetail_1 = require("../entity/OrdersDetail");
 const dotenv = __importStar(require("dotenv"));
 dotenv.config();
 exports.AppDataSource = new typeorm_1.DataSource({
@@ -56,7 +61,7 @@ exports.AppDataSource = new typeorm_1.DataSource({
     username: process.env.DATABASE_USER,
     password: process.env.DATABASE_PASSWORD,
     database: process.env.DATABASE_NAME,
-    entities: [Users_1.Users, Roles_1.Roles],
+    entities: [Users_1.Users, Roles_1.Roles, IngredientsUnit_1.IngredientsUnit, Ingredients_1.Ingredients, Orders_1.Orders, OrdersItem_1.OrdersItem, OrdersDetail_1.OrdersDetail],
     synchronize: true,
     logging: false,
     ssl: {
