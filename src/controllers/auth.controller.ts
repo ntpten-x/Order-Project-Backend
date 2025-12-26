@@ -18,12 +18,12 @@ export class AuthController {
             });
 
             if (!user) {
-                return res.status(401).json({ message: "Invalid username or password" });
+                return res.status(401).json({ message: "ไม่พบข้อมูลผู้ใช้" });
             }
 
             // Check if user is disabled
             if (user.is_use === false) {
-                return res.status(403).json({ message: "Account disabled." });
+                return res.status(403).json({ message: "บัญชีถูกปิด" });
             }
 
             // Compare password
@@ -34,7 +34,7 @@ export class AuthController {
             const isMatch = await bcrypt.compare(password, user.password);
 
             if (!isMatch) {
-                return res.status(401).json({ message: "Invalid username or password" });
+                return res.status(401).json({ message: "ไม่พบข้อมูลผู้ใช้" });
             }
 
             // Generate Token
@@ -58,7 +58,7 @@ export class AuthController {
             await userRepository.save(user);
 
             return res.status(200).json({
-                message: "Login successful",
+                message: "เข้าสู่ระบบสำเร็จ",
                 user: {
                     id: user.id,
                     username: user.username,
@@ -68,19 +68,19 @@ export class AuthController {
             });
 
         } catch (error) {
-            console.error("Login error:", error);
-            return res.status(500).json({ message: "Internal server error" });
+            console.error("เกิดข้อผิดพลาดในการเข้าสู่ระบบ:", error);
+            return res.status(500).json({ message: "เกิดข้อผิดพลาดในการเข้าสู่ระบบ" });
         }
     }
 
     static async logout(req: Request, res: Response) {
         res.clearCookie("token");
-        return res.status(200).json({ message: "Logout successful" });
+        return res.status(200).json({ message: "ออกจากระบบสำเร็จ" });
     }
 
     static async getMe(req: AuthRequest, res: Response) {
         if (!req.user) {
-            return res.status(401).json({ message: "Not authenticated" });
+            return res.status(401).json({ message: "ไม่พบข้อมูลผู้ใช้" });
         }
 
         const user = req.user;

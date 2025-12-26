@@ -13,7 +13,7 @@ export class OrdersController {
             const { ordered_by_id, items, remark } = req.body;
             // Validate input
             if (!ordered_by_id || !items || !Array.isArray(items) || items.length === 0) {
-                return res.status(400).json({ message: "Invalid order data" });
+                return res.status(400).json({ message: "ไม่พบข้อมูลการสั่งซื้อ" });
             }
 
             const order = await this.ordersService.createOrder(ordered_by_id, items, remark);
@@ -39,7 +39,7 @@ export class OrdersController {
             const { id } = req.params;
             const order = await this.ordersService.getOrderById(id);
             if (!order) {
-                return res.status(404).json({ message: "Order not found" });
+                return res.status(404).json({ message: "ไม่พบข้อมูลการสั่งซื้อ" });
             }
             return res.status(200).json(order);
         } catch (error: any) {
@@ -54,7 +54,7 @@ export class OrdersController {
             const { items } = req.body;
 
             if (!items || !Array.isArray(items)) {
-                return res.status(400).json({ message: "Invalid items data" });
+                return res.status(400).json({ message: "ไม่พบข้อมูลสินค้า" });
             }
 
             const updatedOrder = await this.ordersService.updateOrder(id, items);
@@ -71,7 +71,7 @@ export class OrdersController {
             const { status } = req.body;
 
             if (!Object.values(OrderStatus).includes(status)) {
-                return res.status(400).json({ message: "Invalid status" });
+                return res.status(400).json({ message: "ไม่พบข้อมูลสถานะ" });
             }
 
             const updatedOrder = await this.ordersService.updateStatus(id, status);
@@ -86,7 +86,7 @@ export class OrdersController {
         try {
             const { id } = req.params;
             await this.ordersService.deleteOrder(id);
-            return res.status(200).json({ message: "Order deleted successfully" });
+            return res.status(200).json({ message: "การสั่งซื้อลบสำเร็จ" });
         } catch (error: any) {
             console.error("Error deleting order:", error);
             return res.status(500).json({ message: "Internal server error", error: error.message });
@@ -102,18 +102,18 @@ export class OrdersController {
             const purchased_by_id = (req as any).user?.userId || req.body.purchased_by_id;
 
             if (!items || !Array.isArray(items)) {
-                return res.status(400).json({ message: "Invalid items data" });
+                return res.status(400).json({ message: "ไม่พบข้อมูลสินค้า" });
             }
 
             if (!purchased_by_id) {
-                return res.status(400).json({ message: "Purchaser ID required" });
+                return res.status(400).json({ message: "ไม่พบข้อมูลผู้สั่งซื้อ" });
             }
 
             const updatedOrder = await this.ordersService.confirmPurchase(id, items, purchased_by_id);
             return res.status(200).json(updatedOrder);
         } catch (error: any) {
-            console.error("Error confirming purchase:", error);
-            return res.status(500).json({ message: "Internal server error", error: error.message });
+            console.error("เกิดข้อผิดพลาดในการยืนยันการสั่งซื้อ:", error);
+            return res.status(500).json({ message: "เกิดข้อผิดพลาดในการยืนยันการสั่งซื้อ", error: error.message });
         }
     }
 }

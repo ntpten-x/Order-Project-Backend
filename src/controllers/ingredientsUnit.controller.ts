@@ -52,7 +52,7 @@ export class IngredientsUnitController {
     delete = async (req: Request, res: Response) => {
         try {
             await this.ingredientsUnitService.delete(req.params.id)
-            res.status(200).json({ message: "IngredientsUnit deleted successfully" })
+            res.status(200).json({ message: "หน่วยนับวัตถุดิบลบสำเร็จ" })
         } catch (error: any) {
             res.status(500).json({ error: error.message })
         }

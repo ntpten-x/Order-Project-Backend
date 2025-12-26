@@ -54,7 +54,7 @@ export class IngredientsUnitService {
                 this.socketService.emit('ingredientsUnit:update', updatedIngredientsUnit)
                 return updatedIngredientsUnit
             }
-            throw new Error("IngredientsUnit updated but not found")
+            throw new Error("พบข้อผิดพลาดในการอัปเดตหน่วยนับวัตถุดิบ")
         } catch (error) {
             throw error
         }

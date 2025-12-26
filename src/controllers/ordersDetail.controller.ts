@@ -12,7 +12,7 @@ export class OrdersDetailController {
             const { orders_item_id, actual_quantity, purchased_by_id, is_purchased } = req.body;
 
             if (!orders_item_id || !purchased_by_id) {
-                return res.status(400).json({ message: "Missing required fields" });
+                return res.status(400).json({ message: "ไม่พบข้อมูลสินค้า" });
             }
 
             const result = await this.ordersDetailService.updatePurchaseDetail(orders_item_id, {
@@ -23,8 +23,8 @@ export class OrdersDetailController {
 
             return res.status(200).json(result);
         } catch (error: any) {
-            console.error("Error updating purchase detail:", error);
-            return res.status(500).json({ message: "Internal server error", error: error.message });
+            console.error("เกิดข้อผิดพลาดในการยืนยันการสั่งซื้อ:", error);
+            return res.status(500).json({ message: "เกิดข้อผิดพลาดในการยืนยันการสั่งซื้อ", error: error.message });
         }
     }
 }

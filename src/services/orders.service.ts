@@ -46,7 +46,7 @@ export class OrdersService {
     async updateStatus(id: string, status: OrderStatus) {
         try {
             const updatedOrder = await this.ordersModel.updateStatus(id, status);
-            if (!updatedOrder) throw new Error("Order not found");
+            if (!updatedOrder) throw new Error("ไม่พบข้อมูลการสั่งซื้อ");
 
             this.socketService.emit("orders_updated", { action: "update_status", data: updatedOrder });
             return updatedOrder;

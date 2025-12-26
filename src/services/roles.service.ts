@@ -47,7 +47,7 @@ export class RolesService {
                 this.socketService.emit('roles:update', updatedRole)
                 return updatedRole
             }
-            throw new Error("Role updated but not found")
+            throw new Error("ไม่พบข้อมูลบทบาท")
         } catch (error) {
             throw error
         }
