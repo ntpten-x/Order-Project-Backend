@@ -92,4 +92,28 @@ export class OrdersController {
             return res.status(500).json({ message: "Internal server error", error: error.message });
         }
     }
+    confirmPurchase = async (req: Request, res: Response) => {
+        try {
+            const { id } = req.params;
+            const { items } = req.body;
+            // Assuming user id is available in req.user from auth middleware, but for now getting from body or header if not strict
+            // Adjust based on your Auth implementation. Providing default or extracting from req if available.
+            // Check if req.user exists (from middleware)
+            const purchased_by_id = (req as any).user?.userId || req.body.purchased_by_id;
+
+            if (!items || !Array.isArray(items)) {
+                return res.status(400).json({ message: "Invalid items data" });
+            }
+
+            if (!purchased_by_id) {
+                return res.status(400).json({ message: "Purchaser ID required" });
+            }
+
+            const updatedOrder = await this.ordersService.confirmPurchase(id, items, purchased_by_id);
+            return res.status(200).json(updatedOrder);
+        } catch (error: any) {
+            console.error("Error confirming purchase:", error);
+            return res.status(500).json({ message: "Internal server error", error: error.message });
+        }
+    }
 }

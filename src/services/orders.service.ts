@@ -66,4 +66,13 @@ export class OrdersService {
             throw error;
         }
     }
+    async confirmPurchase(id: string, items: { ingredient_id: string; actual_quantity: number; is_purchased: boolean }[], purchasedById: string) {
+        try {
+            const updatedOrder = await this.ordersModel.confirmPurchase(id, items, purchasedById);
+            this.socketService.emit("orders_updated", { action: "update_status", data: updatedOrder });
+            return updatedOrder;
+        } catch (error) {
+            throw error;
+        }
+    }
 }

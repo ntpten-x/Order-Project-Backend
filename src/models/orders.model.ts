@@ -1,6 +1,7 @@
 import { AppDataSource } from "../database/database";
 import { Orders, OrderStatus } from "../entity/Orders";
 import { OrdersItem } from "../entity/OrdersItem";
+import { OrdersDetail } from "../entity/OrdersDetail";
 
 export class OrdersModel {
     private ordersRepository = AppDataSource.getRepository(Orders);
@@ -114,6 +115,41 @@ export class OrdersModel {
     async delete(id: string): Promise<boolean> {
         const result = await this.ordersRepository.delete(id);
         return result.affected !== 0;
+    }
+
+    async confirmPurchase(orderId: string, items: { ingredient_id: string; actual_quantity: number; is_purchased: boolean }[], purchasedById: string): Promise<Orders> {
+        return await AppDataSource.transaction(async (transactionalEntityManager) => {
+            // 1. Fetch Order Items
+            const orderItems = await transactionalEntityManager.find(OrdersItem, {
+                where: { orders_id: orderId },
+                relations: { ordersDetail: true }
+            });
+
+            // 2. Update/Create OrdersDetail for each item
+            for (const item of items) {
+                const orderItem = orderItems.find(oi => oi.ingredient_id === item.ingredient_id);
+                if (orderItem) {
+                    let detail = orderItem.ordersDetail;
+                    if (!detail) {
+                        detail = transactionalEntityManager.create(OrdersDetail, {
+                            orders_item_id: orderItem.id
+                        });
+                    }
+
+                    detail.actual_quantity = item.actual_quantity;
+                    detail.is_purchased = item.is_purchased;
+                    detail.purchased_by_id = purchasedById;
+
+                    await transactionalEntityManager.save(OrdersDetail, detail);
+                }
+            }
+
+            // 3. Update Order Status to COMPLETED
+            await transactionalEntityManager.update(Orders, { id: orderId }, { status: OrderStatus.COMPLETED });
+
+            // 4. Return updated order
+            return this.findByIdInternal(orderId, transactionalEntityManager);
+        });
     }
 
     // internal helper for transaction
