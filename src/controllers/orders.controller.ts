@@ -48,6 +48,23 @@ export class OrdersController {
         }
     }
 
+    updateOrder = async (req: Request, res: Response) => {
+        try {
+            const { id } = req.params;
+            const { items } = req.body;
+
+            if (!items || !Array.isArray(items)) {
+                return res.status(400).json({ message: "Invalid items data" });
+            }
+
+            const updatedOrder = await this.ordersService.updateOrder(id, items);
+            return res.status(200).json(updatedOrder);
+        } catch (error: any) {
+            console.error("Error updating order:", error);
+            return res.status(500).json({ message: "Internal server error", error: error.message });
+        }
+    }
+
     updateStatus = async (req: Request, res: Response) => {
         try {
             const { id } = req.params;

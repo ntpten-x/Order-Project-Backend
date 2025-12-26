@@ -45,6 +45,47 @@ export class OrdersModel {
         });
     }
 
+    async updateOrderItems(orderId: string, newItems: { ingredient_id: string; quantity_ordered: number }[]): Promise<Orders> {
+        return await AppDataSource.transaction(async (transactionalEntityManager) => {
+            // 1. Fetch existing items
+            const existingItems = await transactionalEntityManager.find(OrdersItem, {
+                where: { orders_id: orderId }
+            });
+
+            // 2. Identify items to delete (in DB but not in newItems)
+            const newItemIds = newItems.map(i => i.ingredient_id);
+            const itemsToDelete = existingItems.filter(item => !newItemIds.includes(item.ingredient_id));
+
+            if (itemsToDelete.length > 0) {
+                await transactionalEntityManager.remove(itemsToDelete);
+            }
+
+            // 3. Identify items to update or create
+            for (const newItem of newItems) {
+                const existingItem = existingItems.find(item => item.ingredient_id === newItem.ingredient_id);
+
+                if (existingItem) {
+                    // Update existing
+                    if (existingItem.quantity_ordered !== newItem.quantity_ordered) {
+                        existingItem.quantity_ordered = newItem.quantity_ordered;
+                        await transactionalEntityManager.save(existingItem);
+                    }
+                } else {
+                    // Create new
+                    const createdItem = transactionalEntityManager.create(OrdersItem, {
+                        orders_id: orderId,
+                        ingredient_id: newItem.ingredient_id,
+                        quantity_ordered: newItem.quantity_ordered
+                    });
+                    await transactionalEntityManager.save(createdItem);
+                }
+            }
+
+            // 4. Return updated order
+            return this.findByIdInternal(orderId, transactionalEntityManager);
+        });
+    }
+
     async findById(id: string): Promise<Orders | null> {
         return await this.ordersRepository.findOne({
             where: { id },

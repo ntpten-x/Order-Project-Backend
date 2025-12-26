@@ -33,6 +33,16 @@ export class OrdersService {
         }
     }
 
+    async updateOrder(id: string, items: { ingredient_id: string; quantity_ordered: number }[]) {
+        try {
+            const updatedOrder = await this.ordersModel.updateOrderItems(id, items);
+            this.socketService.emit("orders_updated", { action: "update_order", data: updatedOrder });
+            return updatedOrder;
+        } catch (error) {
+            throw error;
+        }
+    }
+
     async updateStatus(id: string, status: OrderStatus) {
         try {
             const updatedOrder = await this.ordersModel.updateStatus(id, status);
