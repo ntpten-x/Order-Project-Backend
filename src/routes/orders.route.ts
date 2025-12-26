@@ -14,7 +14,9 @@ router.get("/", ordersController.getAllOrders);
 router.get("/:id", ordersController.getOrderById);
 router.put("/:id/status", ordersController.updateStatus);
 router.put("/:id", ordersController.updateOrder);
-router.post("/:id/purchase", ordersController.confirmPurchase);
-router.delete("/:id", ordersController.deleteOrder);
+
+// Restricted routes
+router.post("/:id/purchase", authorizeRole(["Admin", "Manager"]), ordersController.confirmPurchase);
+router.delete("/:id", authorizeRole(["Admin"]), ordersController.deleteOrder);
 
 export default router;

@@ -14,11 +14,14 @@ const ingredientsController = new IngredientsController(ingredientsService)
 router.use(authenticateToken)
 router.use(authorizeRole(["Admin", "Manager", "Employee"]))
 
+// Public-ish routes (All authenticated roles)
 router.get("/", ingredientsController.findAll)
 router.get("/:id", ingredientsController.findOne)
 router.get("/name/:ingredient_name", ingredientsController.findOneByName)
-router.post("/", ingredientsController.create)
-router.put("/:id", ingredientsController.update)
-router.delete("/:id", ingredientsController.delete)
+
+// Admin only routes for management
+router.post("/", authorizeRole(["Admin"]), ingredientsController.create)
+router.put("/:id", authorizeRole(["Admin"]), ingredientsController.update)
+router.delete("/:id", authorizeRole(["Admin"]), ingredientsController.delete)
 
 export default router
