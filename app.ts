@@ -13,6 +13,8 @@ import rateLimit from "express-rate-limit";
 import csurf from "csurf";
 import ingredientsUnitRouter from "./src/routes/ingredientsUnit.route";
 import ingredientsRouter from "./src/routes/ingredients.route";
+import ordersRouter from "./src/routes/orders.route";
+import ordersDetailRouter from "./src/routes/ordersDetail.route";
 
 const app = express();
 const httpServer = createServer(app); // Wrap express with HTTP server
@@ -74,6 +76,8 @@ app.use("/users", usersRouter);
 app.use("/roles", rolesRouter);
 app.use("/ingredientsUnit", ingredientsUnitRouter);
 app.use("/ingredients", ingredientsRouter);
+app.use("/orders", ordersRouter);
+app.use("/ordersDetail", ordersDetailRouter);
 
 connectDatabase().then(() => {
     httpServer.listen(port, () => { // Listen on httpServer
