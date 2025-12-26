@@ -49,7 +49,7 @@ export class AuthController {
             res.cookie("token", token, {
                 httpOnly: true,
                 secure: process.env.NODE_ENV === "production", // true in production
-                sameSite: "strict", // Protects against CSRF
+                sameSite: process.env.NODE_ENV === "production" ? "none" : "lax", // None for cross-site (Render subdomains)
                 maxAge: 36000000 // 10 hours in ms
             });
 
