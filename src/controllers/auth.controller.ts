@@ -59,6 +59,7 @@ export class AuthController {
 
             return res.status(200).json({
                 message: "เข้าสู่ระบบสำเร็จ",
+                token,
                 user: {
                     id: user.id,
                     username: user.username,
