@@ -37,7 +37,7 @@ app.use(limiter);
 // For dev, we might assume localhost:3000 or 3001. 
 // If frontend is on same port or served by back, internal usage is fine.
 app.use(cors({
-    origin: ["http://localhost:3000", "http://localhost:3001", "http://127.0.0.1:3000"],
+    origin: ["http://localhost:3000", "http://localhost:3001", "http://127.0.0.1:3000", "https://order-project-frontend.onrender.com", process.env.FRONTEND_URL || ""],
     credentials: true
 }));
 
@@ -46,7 +46,7 @@ app.use(express.json());
 // Initialize Socket.IO
 const io = new Server(httpServer, {
     cors: {
-        origin: ["http://localhost:3000", "http://localhost:3001", "http://127.0.0.1:3000"],
+        origin: ["http://localhost:3000", "http://localhost:3001", "http://127.0.0.1:3000", "https://order-project-frontend.onrender.com", process.env.FRONTEND_URL || ""],
         methods: ["GET", "POST", "PUT", "DELETE"],
         credentials: true
     }
