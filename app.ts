@@ -79,6 +79,10 @@ SocketService.getInstance().init(io);
 //   res.json({ csrfToken: req.csrfToken() });
 // });
 
+app.get('/health', (req, res) => {
+    res.status(200).json({ status: 'ok', uptime: process.uptime() });
+});
+
 app.use("/auth", authRouter);
 app.use("/users", usersRouter);
 app.use("/roles", rolesRouter);
