@@ -18,8 +18,8 @@ export class Ingredients {
     @Column({ type: "boolean", default: true })
     is_active!: boolean
 
-    @Column({ type: "varchar", length: 100 })
-    img_url!: string
+    @Column({ type: "text", nullable: true })
+    img_url!: string | null
 
     @Column({ type: "uuid" })
     unit_id!: string

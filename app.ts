@@ -27,7 +27,7 @@ app.use(cookieParser());
 // Rate Limiting
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // limit each IP to 100 requests per windowMs
+    max: 1000, // limit each IP to 1000 requests per windowMs
     message: "Too many requests from this IP, please try again after 15 minutes"
 });
 app.use(limiter);
@@ -49,7 +49,8 @@ app.use(cors({
     credentials: true
 }));
 
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Initialize Socket.IO
 const io = new Server(httpServer, {
