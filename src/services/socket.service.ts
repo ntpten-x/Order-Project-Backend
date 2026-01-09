@@ -28,8 +28,7 @@ const parseCookies = (cookieHeader: string | undefined): { [key: string]: string
 export class SocketService {
     private static instance: SocketService;
     private io: Server | null = null;
-    // Map to track number of active connections per user: userId -> count
-    private activeConnections: Map<string, number> = new Map();
+
 
     private constructor() { }
 
@@ -81,32 +80,30 @@ export class SocketService {
             const user = (socket as any).user as Users;
             const userId = user.id;
 
-            // Increment connection count
-            const currentCount = this.activeConnections.get(userId) || 0;
-            this.activeConnections.set(userId, currentCount + 1);
+            // Join a room with the user's ID
+            await socket.join(userId);
 
-            console.log(`User connected: ${user.username} (${userId}). Total connections: ${currentCount + 1}`);
+            // Count sockets in this room
+            const sockets = await this.io?.in(userId).fetchSockets();
+            const count = sockets?.length || 0;
 
-            // If this is the first connection, set is_active = true
-            if (currentCount === 0) {
+            console.log(`User connected: ${user.username} (${userId}). Total connections: ${count}`);
+
+            // If this is the only connection (count is 1 because we just joined), set online
+            if (count === 1) {
                 await this.updateUserStatus(userId, true);
-                // Emit status update to all clients immediately
                 this.emit('users:update-status', { id: userId, is_active: true });
             }
 
             socket.on('disconnect', async () => {
-                const userCount = this.activeConnections.get(userId) || 0;
+                // Check remaining sockets in the room
+                const sockets = await this.io?.in(userId).fetchSockets();
+                const count = sockets?.length || 0;
 
-                if (userCount > 1) {
-                    // Decrement if more than 1
-                    this.activeConnections.set(userId, userCount - 1);
-                    console.log(`User disconnected: ${user.username} (${userId}). Remaining connections: ${userCount - 1}`);
-                } else {
-                    // Last connection closed, remove from map and set is_active = false
-                    this.activeConnections.delete(userId);
-                    console.log(`User disconnected: ${user.username} (${userId}). No remaining connections. Setting offline.`);
+                console.log(`User disconnected: ${user.username} (${userId}). Remaining connections: ${count}`);
+
+                if (count === 0) {
                     await this.updateUserStatus(userId, false);
-                    // Emit status update to all clients
                     this.emit('users:update-status', { id: userId, is_active: false });
                 }
             });
