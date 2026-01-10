@@ -36,6 +36,10 @@ __decorate([
     __metadata("design:type", String)
 ], Orders.prototype, "ordered_by_id", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ type: "text", nullable: true }),
+    __metadata("design:type", String)
+], Orders.prototype, "remark", void 0);
+__decorate([
     (0, typeorm_1.Column)({
         type: "enum",
         enum: OrderStatus,

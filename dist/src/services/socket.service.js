@@ -40,8 +40,6 @@ const parseCookies = (cookieHeader) => {
 class SocketService {
     constructor() {
         this.io = null;
-        // Map to track number of active connections per user: userId -> count
-        this.activeConnections = new Map();
     }
     static getInstance() {
         if (!SocketService.instance) {
@@ -80,31 +78,28 @@ class SocketService {
             }
         }));
         this.io.on('connection', (socket) => __awaiter(this, void 0, void 0, function* () {
+            var _a;
             const user = socket.user;
             const userId = user.id;
-            // Increment connection count
-            const currentCount = this.activeConnections.get(userId) || 0;
-            this.activeConnections.set(userId, currentCount + 1);
-            console.log(`User connected: ${user.username} (${userId}). Total connections: ${currentCount + 1}`);
-            // If this is the first connection, set is_active = true
-            if (currentCount === 0) {
+            // Join a room with the user's ID
+            yield socket.join(userId);
+            // Count sockets in this room
+            const sockets = yield ((_a = this.io) === null || _a === void 0 ? void 0 : _a.in(userId).fetchSockets());
+            const count = (sockets === null || sockets === void 0 ? void 0 : sockets.length) || 0;
+            console.log(`User connected: ${user.username} (${userId}). Total connections: ${count}`);
+            // If this is the only connection (count is 1 because we just joined), set online
+            if (count === 1) {
                 yield this.updateUserStatus(userId, true);
-                // Emit status update to all clients immediately
                 this.emit('users:update-status', { id: userId, is_active: true });
             }
             socket.on('disconnect', () => __awaiter(this, void 0, void 0, function* () {
-                const userCount = this.activeConnections.get(userId) || 0;
-                if (userCount > 1) {
-                    // Decrement if more than 1
-                    this.activeConnections.set(userId, userCount - 1);
-                    console.log(`User disconnected: ${user.username} (${userId}). Remaining connections: ${userCount - 1}`);
-                }
-                else {
-                    // Last connection closed, remove from map and set is_active = false
-                    this.activeConnections.delete(userId);
-                    console.log(`User disconnected: ${user.username} (${userId}). No remaining connections. Setting offline.`);
+                var _a;
+                // Check remaining sockets in the room
+                const sockets = yield ((_a = this.io) === null || _a === void 0 ? void 0 : _a.in(userId).fetchSockets());
+                const count = (sockets === null || sockets === void 0 ? void 0 : sockets.length) || 0;
+                console.log(`User disconnected: ${user.username} (${userId}). Remaining connections: ${count}`);
+                if (count === 0) {
                     yield this.updateUserStatus(userId, false);
-                    // Emit status update to all clients
                     this.emit('users:update-status', { id: userId, is_active: false });
                 }
             }));

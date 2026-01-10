@@ -36,8 +36,8 @@ __decorate([
     __metadata("design:type", Boolean)
 ], Ingredients.prototype, "is_active", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: "varchar", length: 100 }),
-    __metadata("design:type", String)
+    (0, typeorm_1.Column)({ type: "text", nullable: true }),
+    __metadata("design:type", Object)
 ], Ingredients.prototype, "img_url", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: "uuid" }),

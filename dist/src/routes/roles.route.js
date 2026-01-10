@@ -11,7 +11,7 @@ const rolesService = new roles_service_1.RolesService(rolesModel);
 const rolesController = new roles_controller_1.RolesController(rolesService);
 // Protect all routes
 router.use(auth_middleware_1.authenticateToken);
-router.use((0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]));
+router.use((0, auth_middleware_1.authorizeRole)(["Admin"]));
 router.get("/", rolesController.findAll);
 router.get("/:id", rolesController.findOne);
 router.post("/", rolesController.create);

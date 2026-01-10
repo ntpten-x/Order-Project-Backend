@@ -47,9 +47,7 @@ class OrdersModel {
                         ingredient: {
                             unit: true
                         },
-                        ordersDetail: {
-                            purchased_by: true
-                        }
+                        ordersDetail: true
                     }
                 },
                 order: {
