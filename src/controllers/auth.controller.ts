@@ -53,9 +53,14 @@ export class AuthController {
                 maxAge: 36000000 // 10 hours in ms
             });
 
-            // Update last_login_at
+            // Update last_login_at and is_active
             user.last_login_at = new Date();
+            user.is_active = true;
             await userRepository.save(user);
+
+            // Notify via Socket
+            const { SocketService } = require("../services/socket.service");
+            SocketService.getInstance().emit('users:update-status', { id: user.id, is_active: true });
 
             return res.status(200).json({
                 message: "เข้าสู่ระบบสำเร็จ",
@@ -75,6 +80,38 @@ export class AuthController {
     }
 
     static async logout(req: Request, res: Response) {
+        let userId: string | undefined;
+
+        // 1. Try to get from authenticated request
+        if ((req as AuthRequest).user) {
+            userId = (req as AuthRequest).user?.id;
+        }
+        // 2. Fallback: Decode token from cookie (even if expired)
+        else if (req.cookies && req.cookies.token) {
+            try {
+                const decoded: any = jwt.decode(req.cookies.token);
+                if (decoded && typeof decoded === 'object' && decoded.id) {
+                    userId = decoded.id;
+                }
+            } catch (ignore) {
+                // Ignore decoding errors during logout
+            }
+        }
+
+        if (userId) {
+            try {
+                const userRepository = AppDataSource.getRepository(Users);
+                // Set is_active to false
+                await userRepository.update(userId, { is_active: false });
+
+                // Emit socket event
+                const { SocketService } = require("../services/socket.service");
+                SocketService.getInstance().emit('users:update-status', { id: userId, is_active: false });
+            } catch (err) {
+                console.error("Error updating logout status for user " + userId, err);
+            }
+        }
+
         res.clearCookie("token", {
             httpOnly: true,
             secure: process.env.NODE_ENV === "production",

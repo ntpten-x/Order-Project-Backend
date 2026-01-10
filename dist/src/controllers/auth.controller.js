@@ -54,9 +54,13 @@ class AuthController {
                     sameSite: process.env.NODE_ENV === "production" ? "none" : "lax", // None for cross-site (Render subdomains)
                     maxAge: 36000000 // 10 hours in ms
                 });
-                // Update last_login_at
+                // Update last_login_at and is_active
                 user.last_login_at = new Date();
+                user.is_active = true;
                 yield userRepository.save(user);
+                // Notify via Socket
+                const { SocketService } = require("../services/socket.service");
+                SocketService.getInstance().emit('users:update-status', { id: user.id, is_active: true });
                 return res.status(200).json({
                     message: "เข้าสู่ระบบสำเร็จ",
                     token,
@@ -76,6 +80,37 @@ class AuthController {
     }
     static logout(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
+            var _a;
+            let userId;
+            // 1. Try to get from authenticated request
+            if (req.user) {
+                userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
+            }
+            // 2. Fallback: Decode token from cookie (even if expired)
+            else if (req.cookies && req.cookies.token) {
+                try {
+                    const decoded = jsonwebtoken_1.default.decode(req.cookies.token);
+                    if (decoded && typeof decoded === 'object' && decoded.id) {
+                        userId = decoded.id;
+                    }
+                }
+                catch (ignore) {
+                    // Ignore decoding errors during logout
+                }
+            }
+            if (userId) {
+                try {
+                    const userRepository = database_1.AppDataSource.getRepository(Users_1.Users);
+                    // Set is_active to false
+                    yield userRepository.update(userId, { is_active: false });
+                    // Emit socket event
+                    const { SocketService } = require("../services/socket.service");
+                    SocketService.getInstance().emit('users:update-status', { id: userId, is_active: false });
+                }
+                catch (err) {
+                    console.error("Error updating logout status for user " + userId, err);
+                }
+            }
             res.clearCookie("token", {
                 httpOnly: true,
                 secure: process.env.NODE_ENV === "production",
