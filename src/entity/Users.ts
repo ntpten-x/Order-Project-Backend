@@ -21,7 +21,7 @@ export class Users {
     @Column({ default: true })
     is_use!: boolean
 
-    @Column({ default: true })
+    @Column({ default: false })
     is_active!: boolean
 
     @Column({ name: "roles_id", type: "uuid" })

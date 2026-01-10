@@ -75,7 +75,12 @@ export class AuthController {
     }
 
     static async logout(req: Request, res: Response) {
-        res.clearCookie("token");
+        res.clearCookie("token", {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+            path: "/"
+        });
         return res.status(200).json({ message: "ออกจากระบบสำเร็จ" });
     }
 

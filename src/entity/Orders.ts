@@ -20,6 +20,9 @@ export class Orders {
     @Column({ name: "ordered_by_id", type: "uuid" })
     ordered_by_id!: string
 
+    @Column({ type: "text", nullable: true })
+    remark?: string
+
     @Column({
         type: "enum",
         enum: OrderStatus,

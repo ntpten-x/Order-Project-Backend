@@ -73,12 +73,28 @@ SocketService.getInstance().init(io);
 
 // Conditional CSRF for now to avoid breaking existing API instantly without frontend changes.
 // Uncomment below to enable strict CSRF.
-// const csrfProtection = csurf({ cookie: true });
-// app.use(csrfProtection);
+// Initialize CSRF protection
+const csrfProtection = csurf({
+    cookie: {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax"
+    }
+});
 
-// app.get('/csrf-token', (req, res) => {
-//   res.json({ csrfToken: req.csrfToken() });
-// });
+// Apply CSRF protection to all routes except those that don't need it (if any)
+// Typically, we apply it globally, but we might need to exclude the /csrf-token endpoint from check if strictly needed
+// Csurf middleware checks token on mutating requests (POST, PUT, DELETE), not GET.
+// So applying it globally is usually fine as long as we have a way to get the token.
+app.get('/health', (req, res) => {
+    res.status(200).json({ status: 'ok', uptime: process.uptime() });
+});
+
+app.use(csrfProtection);
+
+app.get('/csrf-token', (req, res) => {
+    res.json({ csrfToken: req.csrfToken() });
+});
 
 app.get('/health', (req, res) => {
     res.status(200).json({ status: 'ok', uptime: process.uptime() });
