@@ -12,7 +12,7 @@ const rolesController = new RolesController(rolesService)
 
 // Protect all routes
 router.use(authenticateToken)
-router.use(authorizeRole(["Admin", "Manager", "Employee"]))
+router.use(authorizeRole(["Admin"]))
 
 router.get("/", rolesController.findAll)
 router.get("/:id", rolesController.findOne)
