@@ -11,6 +11,7 @@ import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import csurf from "csurf";
+import compression from "compression";
 import ingredientsUnitRouter from "./src/routes/ingredientsUnit.route";
 import ingredientsRouter from "./src/routes/ingredients.route";
 import ordersRouter from "./src/routes/orders.route";
@@ -23,6 +24,7 @@ const port = process.env.PORT || 3000;
 // Security Middlewares
 app.use(helmet());
 app.use(cookieParser());
+app.use(compression());
 
 // Rate Limiting
 const limiter = rateLimit({
