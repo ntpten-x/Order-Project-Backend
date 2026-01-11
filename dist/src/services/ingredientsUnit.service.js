@@ -16,10 +16,10 @@ class IngredientsUnitService {
         this.ingredientsUnitModel = ingredientsUnitModel;
         this.socketService = socket_service_1.SocketService.getInstance();
     }
-    findAll() {
+    findAll(filters) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.ingredientsUnitModel.findAll();
+                return this.ingredientsUnitModel.findAll(filters);
             }
             catch (error) {
                 throw error;

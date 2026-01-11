@@ -34,7 +34,14 @@ class OrdersController {
         });
         this.getAllOrders = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {
-                const orders = yield this.ordersService.getAllOrders();
+                const statusParam = req.query.status;
+                let statusFilter;
+                if (statusParam) {
+                    const statuses = statusParam.split(',');
+                    // Optional: Validate statuses against OrderStatus enum
+                    statusFilter = statuses.length > 1 ? statuses : statuses[0];
+                }
+                const orders = yield this.ordersService.getAllOrders(statusFilter ? { status: statusFilter } : undefined);
                 return res.status(200).json(orders);
             }
             catch (error) {

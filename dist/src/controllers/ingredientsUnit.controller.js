@@ -15,7 +15,8 @@ class IngredientsUnitController {
         this.ingredientsUnitService = ingredientsUnitService;
         this.findAll = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {
-                const ingredientsUnit = yield this.ingredientsUnitService.findAll();
+                const active = req.query.active === 'true' ? true : req.query.active === 'false' ? false : undefined;
+                const ingredientsUnit = yield this.ingredientsUnitService.findAll(active !== undefined ? { is_active: active } : undefined);
                 res.status(200).json(ingredientsUnit);
             }
             catch (error) {

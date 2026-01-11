@@ -16,14 +16,17 @@ class UsersModels {
     constructor() {
         this.usersRepository = database_1.AppDataSource.getRepository(Users_1.Users);
     }
-    findAll() {
+    findAll(filters) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.usersRepository.createQueryBuilder("users")
+                const query = this.usersRepository.createQueryBuilder("users")
                     .leftJoinAndSelect("users.roles", "roles")
                     .orderBy("users.is_active", "DESC")
-                    .addOrderBy("users.create_date", "ASC")
-                    .getMany();
+                    .addOrderBy("users.create_date", "ASC");
+                if (filters === null || filters === void 0 ? void 0 : filters.role) {
+                    query.where("roles.roles_name = :role", { role: filters.role });
+                }
+                return yield query.getMany();
             }
             catch (error) {
                 throw error;

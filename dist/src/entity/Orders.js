@@ -40,6 +40,7 @@ __decorate([
     __metadata("design:type", String)
 ], Orders.prototype, "remark", void 0);
 __decorate([
+    (0, typeorm_1.Index)(),
     (0, typeorm_1.Column)({
         type: "enum",
         enum: OrderStatus,
@@ -60,5 +61,6 @@ __decorate([
     __metadata("design:type", Array)
 ], Orders.prototype, "ordersItems", void 0);
 exports.Orders = Orders = __decorate([
-    (0, typeorm_1.Entity)()
+    (0, typeorm_1.Entity)(),
+    (0, typeorm_1.Index)("IDX_ORDERS_STATUS_DATE", ["status", "create_date"])
 ], Orders);

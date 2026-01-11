@@ -32,6 +32,7 @@ __decorate([
     __metadata("design:type", String)
 ], Ingredients.prototype, "description", void 0);
 __decorate([
+    (0, typeorm_1.Index)(),
     (0, typeorm_1.Column)({ type: "boolean", default: true }),
     __metadata("design:type", Boolean)
 ], Ingredients.prototype, "is_active", void 0);
@@ -40,6 +41,7 @@ __decorate([
     __metadata("design:type", Object)
 ], Ingredients.prototype, "img_url", void 0);
 __decorate([
+    (0, typeorm_1.Index)(),
     (0, typeorm_1.Column)({ type: "uuid" }),
     __metadata("design:type", String)
 ], Ingredients.prototype, "unit_id", void 0);

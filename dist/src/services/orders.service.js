@@ -28,10 +28,10 @@ class OrdersService {
             }
         });
     }
-    getAllOrders() {
+    getAllOrders(filters) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return yield this.ordersModel.findAll();
+                return yield this.ordersModel.findAll(filters);
             }
             catch (error) {
                 throw error;

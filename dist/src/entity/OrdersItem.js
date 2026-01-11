@@ -22,6 +22,7 @@ __decorate([
     __metadata("design:type", String)
 ], OrdersItem.prototype, "id", void 0);
 __decorate([
+    (0, typeorm_1.Index)(),
     (0, typeorm_1.Column)({ name: "ingredient_id", type: "uuid" }),
     __metadata("design:type", String)
 ], OrdersItem.prototype, "ingredient_id", void 0);
@@ -31,6 +32,7 @@ __decorate([
     __metadata("design:type", Ingredients_1.Ingredients)
 ], OrdersItem.prototype, "ingredient", void 0);
 __decorate([
+    (0, typeorm_1.Index)(),
     (0, typeorm_1.Column)({ name: "orders_id", type: "uuid" }),
     __metadata("design:type", String)
 ], OrdersItem.prototype, "orders_id", void 0);

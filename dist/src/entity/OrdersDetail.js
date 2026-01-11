@@ -21,6 +21,7 @@ __decorate([
     __metadata("design:type", String)
 ], OrdersDetail.prototype, "id", void 0);
 __decorate([
+    (0, typeorm_1.Index)(),
     (0, typeorm_1.Column)({ name: "orders_item_id", type: "uuid", unique: true }),
     __metadata("design:type", String)
 ], OrdersDetail.prototype, "orders_item_id", void 0);
@@ -34,6 +35,7 @@ __decorate([
     __metadata("design:type", Number)
 ], OrdersDetail.prototype, "actual_quantity", void 0);
 __decorate([
+    (0, typeorm_1.Index)(),
     (0, typeorm_1.Column)({ name: "purchased_by_id", type: "uuid", nullable: true }),
     __metadata("design:type", Object)
 ], OrdersDetail.prototype, "purchased_by_id", void 0);
@@ -43,6 +45,7 @@ __decorate([
     __metadata("design:type", Object)
 ], OrdersDetail.prototype, "purchased_by", void 0);
 __decorate([
+    (0, typeorm_1.Index)(),
     (0, typeorm_1.Column)({ name: "is_purchased", type: "boolean", default: false }),
     __metadata("design:type", Boolean)
 ], OrdersDetail.prototype, "is_purchased", void 0);

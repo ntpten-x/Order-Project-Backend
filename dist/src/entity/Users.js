@@ -36,17 +36,20 @@ __decorate([
     __metadata("design:type", Date)
 ], Users.prototype, "last_login_at", void 0);
 __decorate([
+    (0, typeorm_1.Index)(),
+    (0, typeorm_1.Column)({ name: "roles_id", type: "uuid" }),
+    __metadata("design:type", String)
+], Users.prototype, "roles_id", void 0);
+__decorate([
+    (0, typeorm_1.Index)(),
     (0, typeorm_1.Column)({ default: true }),
     __metadata("design:type", Boolean)
 ], Users.prototype, "is_use", void 0);
 __decorate([
+    (0, typeorm_1.Index)(),
     (0, typeorm_1.Column)({ default: false }),
     __metadata("design:type", Boolean)
 ], Users.prototype, "is_active", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ name: "roles_id", type: "uuid" }),
-    __metadata("design:type", String)
-], Users.prototype, "roles_id", void 0);
 __decorate([
     (0, typeorm_1.ManyToOne)(() => Roles_1.Roles, (roles) => roles.users),
     (0, typeorm_1.JoinColumn)({ name: "roles_id" }),

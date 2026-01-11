@@ -16,14 +16,18 @@ class IngredientsModel {
     constructor() {
         this.ingredientsRepository = database_1.AppDataSource.getRepository(Ingredients_1.Ingredients);
     }
-    findAll() {
+    findAll(filters) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.ingredientsRepository.createQueryBuilder("ingredients")
+                const query = this.ingredientsRepository.createQueryBuilder("ingredients")
                     .leftJoinAndSelect("ingredients.unit", "unit")
-                    .orderBy("ingredients.is_active", "DESC")
-                    .addOrderBy("ingredients.create_date", "ASC")
-                    .getMany();
+                    .orderBy("ingredients.create_date", "ASC");
+                if ((filters === null || filters === void 0 ? void 0 : filters.is_active) !== undefined) {
+                    query.andWhere("ingredients.is_active = :is_active", { is_active: filters.is_active });
+                }
+                // Secondary sort for consistent ordering when active ones are mixed
+                query.addOrderBy("ingredients.is_active", "DESC");
+                return query.getMany();
             }
             catch (error) {
                 throw error;

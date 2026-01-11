@@ -15,7 +15,8 @@ class UsersController {
         this.usersService = usersService;
         this.findAll = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {
-                const users = yield this.usersService.findAll();
+                const role = req.query.role;
+                const users = yield this.usersService.findAll(role ? { role } : undefined);
                 res.status(200).json(users);
             }
             catch (error) {

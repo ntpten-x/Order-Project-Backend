@@ -28,6 +28,7 @@ __decorate([
     __metadata("design:type", String)
 ], IngredientsUnit.prototype, "display_name", void 0);
 __decorate([
+    (0, typeorm_1.Index)(),
     (0, typeorm_1.Column)({ type: "boolean", default: true }),
     __metadata("design:type", Boolean)
 ], IngredientsUnit.prototype, "is_active", void 0);
