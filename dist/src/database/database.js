@@ -47,11 +47,11 @@ require("reflect-metadata");
 const typeorm_1 = require("typeorm");
 const Users_1 = require("../entity/Users");
 const Roles_1 = require("../entity/Roles");
-const IngredientsUnit_1 = require("../entity/IngredientsUnit");
-const Ingredients_1 = require("../entity/Ingredients");
-const Orders_1 = require("../entity/Orders");
-const OrdersItem_1 = require("../entity/OrdersItem");
-const OrdersDetail_1 = require("../entity/OrdersDetail");
+const IngredientsUnit_1 = require("../entity/stock/IngredientsUnit");
+const Ingredients_1 = require("../entity/stock/Ingredients");
+const Orders_1 = require("../entity/stock/Orders");
+const OrdersItem_1 = require("../entity/stock/OrdersItem");
+const OrdersDetail_1 = require("../entity/stock/OrdersDetail");
 const dotenv = __importStar(require("dotenv"));
 dotenv.config();
 exports.AppDataSource = new typeorm_1.DataSource({

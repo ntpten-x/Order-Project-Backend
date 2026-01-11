@@ -10,7 +10,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const database_1 = require("./database/database");
-const Ingredients_1 = require("./entity/Ingredients");
+const Ingredients_1 = require("./entity/stock/Ingredients");
 const inspectImages = () => __awaiter(void 0, void 0, void 0, function* () {
     try {
         yield (0, database_1.connectDatabase)();

@@ -17,10 +17,10 @@ const helmet_1 = __importDefault(require("helmet"));
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const csurf_1 = __importDefault(require("csurf"));
 const compression_1 = __importDefault(require("compression"));
-const ingredientsUnit_route_1 = __importDefault(require("./src/routes/ingredientsUnit.route"));
-const ingredients_route_1 = __importDefault(require("./src/routes/ingredients.route"));
-const orders_route_1 = __importDefault(require("./src/routes/orders.route"));
-const ordersDetail_route_1 = __importDefault(require("./src/routes/ordersDetail.route"));
+const ingredientsUnit_route_1 = __importDefault(require("./src/routes/stock/ingredientsUnit.route"));
+const ingredients_route_1 = __importDefault(require("./src/routes/stock/ingredients.route"));
+const orders_route_1 = __importDefault(require("./src/routes/stock/orders.route"));
+const ordersDetail_route_1 = __importDefault(require("./src/routes/stock/ordersDetail.route"));
 const app = (0, express_1.default)();
 const httpServer = (0, http_1.createServer)(app); // Wrap express with HTTP server
 const port = process.env.PORT || 3000;
@@ -95,10 +95,10 @@ app.get('/health', (req, res) => {
 app.use("/auth", auth_route_1.default);
 app.use("/users", users_route_1.default);
 app.use("/roles", roles_route_1.default);
-app.use("/ingredientsUnit", ingredientsUnit_route_1.default);
-app.use("/ingredients", ingredients_route_1.default);
-app.use("/orders", orders_route_1.default);
-app.use("/ordersDetail", ordersDetail_route_1.default);
+app.use("/stock/ingredientsUnit", ingredientsUnit_route_1.default);
+app.use("/stock/ingredients", ingredients_route_1.default);
+app.use("/stock/orders", orders_route_1.default);
+app.use("/stock/ordersDetail", ordersDetail_route_1.default);
 (0, database_1.connectDatabase)().then(() => {
     httpServer.listen(port, () => {
         console.log(`Server is running on http://localhost:${port}`);
