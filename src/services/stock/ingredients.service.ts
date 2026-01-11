@@ -1,6 +1,6 @@
-import { Ingredients } from "../entity/Ingredients";
-import { IngredientsModel } from "../models/ingredients.model";
-import { SocketService } from "./socket.service";
+import { Ingredients } from "../../entity/stock/Ingredients";
+import { IngredientsModel } from "../../models/stock/ingredients.model";
+import { SocketService } from "../socket.service";
 
 export class IngredientsService {
     private socketService = SocketService.getInstance();

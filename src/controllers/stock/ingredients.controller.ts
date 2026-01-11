@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { IngredientsService } from "../services/ingredients.service";
+import { IngredientsService } from "../../services/stock/ingredients.service";
 
 export class IngredientsController {
     constructor(private ingredientsService: IngredientsService) { }

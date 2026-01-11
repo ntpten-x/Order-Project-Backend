@@ -1,7 +1,7 @@
-import { AppDataSource } from "../database/database";
-import { Orders, OrderStatus } from "../entity/Orders";
-import { OrdersItem } from "../entity/OrdersItem";
-import { OrdersDetail } from "../entity/OrdersDetail";
+import { AppDataSource } from "../../database/database";
+import { Orders, OrderStatus } from "../../entity/stock/Orders";
+import { OrdersItem } from "../../entity/stock/OrdersItem";
+import { OrdersDetail } from "../../entity/stock/OrdersDetail";
 
 export class OrdersModel {
     private ordersRepository = AppDataSource.getRepository(Orders);

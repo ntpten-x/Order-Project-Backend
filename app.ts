@@ -12,10 +12,10 @@ import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import csurf from "csurf";
 import compression from "compression";
-import ingredientsUnitRouter from "./src/routes/ingredientsUnit.route";
-import ingredientsRouter from "./src/routes/ingredients.route";
-import ordersRouter from "./src/routes/orders.route";
-import ordersDetailRouter from "./src/routes/ordersDetail.route";
+import ingredientsUnitStockRouter from "./src/routes/stock/ingredientsUnit.route";
+import ingredientsStockRouter from "./src/routes/stock/ingredients.route";
+import ordersStockRouter from "./src/routes/stock/orders.route";
+import ordersDetailStockRouter from "./src/routes/stock/ordersDetail.route";
 
 const app = express();
 const httpServer = createServer(app); // Wrap express with HTTP server
@@ -105,10 +105,10 @@ app.get('/health', (req, res) => {
 app.use("/auth", authRouter);
 app.use("/users", usersRouter);
 app.use("/roles", rolesRouter);
-app.use("/ingredientsUnit", ingredientsUnitRouter);
-app.use("/ingredients", ingredientsRouter);
-app.use("/orders", ordersRouter);
-app.use("/ordersDetail", ordersDetailRouter);
+app.use("/stock/ingredientsUnit", ingredientsUnitStockRouter);
+app.use("/stock/ingredients", ingredientsStockRouter);
+app.use("/stock/orders", ordersStockRouter);
+app.use("/stock/ordersDetail", ordersDetailStockRouter);
 
 connectDatabase().then(() => {
     httpServer.listen(port, () => { // Listen on httpServer

@@ -1,8 +1,8 @@
 import { Request, Response } from "express";
-import { OrdersService } from "../services/orders.service";
-import { OrderStatus } from "../entity/Orders";
+import { OrdersService } from "../../services/stock/orders.service";
+import { OrderStatus } from "../../entity/stock/Orders";
 
-import { OrdersModel } from "../models/orders.model";
+import { OrdersModel } from "../../models/stock/orders.model";
 
 export class OrdersController {
     private ordersModel = new OrdersModel();

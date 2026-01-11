@@ -1,5 +1,5 @@
-import { AppDataSource } from "../database/database";
-import { Ingredients } from "../entity/Ingredients";
+import { AppDataSource } from "../../database/database";
+import { Ingredients } from "../../entity/stock/Ingredients";
 
 export class IngredientsModel {
     private ingredientsRepository = AppDataSource.getRepository(Ingredients)

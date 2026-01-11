@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
-import { OrdersDetailService } from "../services/ordersDetail.service";
+import { OrdersDetailService } from "../../services/stock/ordersDetail.service";
 
-import { OrdersDetailModel } from "../models/ordersDetail.model";
+import { OrdersDetailModel } from "../../models/stock/ordersDetail.model";
 
 export class OrdersDetailController {
     private ordersDetailModel = new OrdersDetailModel();

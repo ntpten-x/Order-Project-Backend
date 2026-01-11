@@ -1,5 +1,5 @@
 import { AppDataSource, connectDatabase } from "./database/database";
-import { Ingredients } from "./entity/Ingredients";
+import { Ingredients } from "./entity/stock/Ingredients";
 
 const inspectImages = async () => {
     try {

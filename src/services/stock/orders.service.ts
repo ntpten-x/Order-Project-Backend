@@ -1,6 +1,6 @@
-import { Orders, OrderStatus } from "../entity/Orders";
-import { OrdersModel } from "../models/orders.model";
-import { SocketService } from "./socket.service";
+import { Orders, OrderStatus } from "../../entity/stock/Orders";
+import { OrdersModel } from "../../models/stock/orders.model";
+import { SocketService } from "../socket.service";
 
 export class OrdersService {
     private socketService = SocketService.getInstance();

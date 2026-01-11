@@ -1,5 +1,5 @@
-import { OrdersDetailModel } from "../models/ordersDetail.model";
-import { SocketService } from "./socket.service";
+import { OrdersDetailModel } from "../../models/stock/ordersDetail.model";
+import { SocketService } from "../socket.service";
 
 export class OrdersDetailService {
     private socketService = SocketService.getInstance();

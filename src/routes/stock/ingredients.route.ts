@@ -1,8 +1,8 @@
 import { Router } from "express";
-import { IngredientsModel } from "../models/ingredients.model";
-import { IngredientsService } from "../services/ingredients.service";
-import { IngredientsController } from "../controllers/ingredients.controller";
-import { authenticateToken, authorizeRole } from "../middleware/auth.middleware";
+import { IngredientsModel } from "../../models/stock/ingredients.model";
+import { IngredientsService } from "../../services/stock/ingredients.service";
+import { IngredientsController } from "../../controllers/stock/ingredients.controller";
+import { authenticateToken, authorizeRole } from "../../middleware/auth.middleware";
 
 const router = Router()
 

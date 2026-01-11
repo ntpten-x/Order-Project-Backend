@@ -1,5 +1,5 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn, OneToMany, Index } from "typeorm"
-import { Users } from "./Users"
+import { Users } from "../Users"
 import { OrdersItem } from "./OrdersItem"
 
 export enum OrderStatus {
