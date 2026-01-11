@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from "typeorm"
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, Index } from "typeorm"
 import { IngredientsUnit } from "./IngredientsUnit"
 
 @Entity()
@@ -15,12 +15,14 @@ export class Ingredients {
     @Column({ type: "text" })
     description!: string
 
+    @Index()
     @Column({ type: "boolean", default: true })
     is_active!: boolean
 
     @Column({ type: "text", nullable: true })
     img_url!: string | null
 
+    @Index()
     @Column({ type: "uuid" })
     unit_id!: string
 

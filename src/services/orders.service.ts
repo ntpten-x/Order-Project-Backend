@@ -17,9 +17,9 @@ export class OrdersService {
         }
     }
 
-    async getAllOrders() {
+    async getAllOrders(filters?: { status?: OrderStatus | OrderStatus[] }) {
         try {
-            return await this.ordersModel.findAll();
+            return await this.ordersModel.findAll(filters);
         } catch (error) {
             throw error;
         }

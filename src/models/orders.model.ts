@@ -27,8 +27,12 @@ export class OrdersModel {
         });
     }
 
-    async findAll(): Promise<Orders[]> {
-        return await this.ordersRepository.find({
+    async findAll(filters?: { status?: OrderStatus | OrderStatus[] }): Promise<Orders[]> {
+        // To support "IN" query with TypeORM find options, we need the "In" operator
+        // Importing In from typeorm
+        const { In } = require("typeorm");
+
+        const findOptions: any = {
             relations: {
                 ordered_by: true,
                 ordersItems: {
@@ -41,7 +45,17 @@ export class OrdersModel {
             order: {
                 create_date: "DESC"
             }
-        });
+        };
+
+        if (filters?.status) {
+            if (Array.isArray(filters.status)) {
+                findOptions.where = { status: In(filters.status) };
+            } else {
+                findOptions.where = { status: filters.status };
+            }
+        }
+
+        return await this.ordersRepository.find(findOptions);
     }
 
     async updateOrderItems(orderId: string, newItems: { ingredient_id: string; quantity_ordered: number }[]): Promise<Orders> {

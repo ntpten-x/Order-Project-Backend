@@ -1,4 +1,4 @@
-import { Entity, Column, PrimaryGeneratedColumn, OneToOne, JoinColumn, ManyToOne, CreateDateColumn } from "typeorm"
+import { Entity, Column, PrimaryGeneratedColumn, OneToOne, JoinColumn, ManyToOne, CreateDateColumn, Index } from "typeorm"
 import { OrdersItem } from "./OrdersItem"
 import { Users } from "./Users"
 
@@ -7,6 +7,7 @@ export class OrdersDetail {
     @PrimaryGeneratedColumn("uuid")
     id!: string
 
+    @Index()
     @Column({ name: "orders_item_id", type: "uuid", unique: true })
     orders_item_id!: string
 
@@ -17,6 +18,7 @@ export class OrdersDetail {
     @Column({ name: "actual_quantity", type: "int", nullable: true })
     actual_quantity!: number
 
+    @Index()
     @Column({ name: "purchased_by_id", type: "uuid", nullable: true })
     purchased_by_id!: string | null
 
@@ -24,6 +26,7 @@ export class OrdersDetail {
     @JoinColumn({ name: "purchased_by_id" })
     purchased_by!: Users | null
 
+    @Index()
     @Column({ name: "is_purchased", type: "boolean", default: false })
     is_purchased!: boolean
 

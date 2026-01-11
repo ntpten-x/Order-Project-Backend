@@ -4,13 +4,20 @@ import { Ingredients } from "../entity/Ingredients";
 export class IngredientsModel {
     private ingredientsRepository = AppDataSource.getRepository(Ingredients)
 
-    async findAll(): Promise<Ingredients[]> {
+    async findAll(filters?: { is_active?: boolean }): Promise<Ingredients[]> {
         try {
-            return this.ingredientsRepository.createQueryBuilder("ingredients")
+            const query = this.ingredientsRepository.createQueryBuilder("ingredients")
                 .leftJoinAndSelect("ingredients.unit", "unit")
-                .orderBy("ingredients.is_active", "DESC")
-                .addOrderBy("ingredients.create_date", "ASC")
-                .getMany()
+                .orderBy("ingredients.create_date", "ASC")
+
+            if (filters?.is_active !== undefined) {
+                query.andWhere("ingredients.is_active = :is_active", { is_active: filters.is_active })
+            }
+
+            // Secondary sort for consistent ordering when active ones are mixed
+            query.addOrderBy("ingredients.is_active", "DESC")
+
+            return query.getMany()
         } catch (error) {
             throw error
         }

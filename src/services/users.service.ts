@@ -8,9 +8,9 @@ export class UsersService {
 
     constructor(private usersModel: UsersModels) { }
 
-    async findAll(): Promise<Users[]> {
+    async findAll(filters?: { role?: string }): Promise<Users[]> {
         try {
-            return this.usersModel.findAll()
+            return this.usersModel.findAll(filters)
         } catch (error) {
             throw error
         }

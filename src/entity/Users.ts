@@ -1,4 +1,4 @@
-import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, JoinColumn, CreateDateColumn } from "typeorm"
+import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, JoinColumn, CreateDateColumn, Index } from "typeorm"
 import { Roles } from "./Roles"
 
 @Entity()
@@ -18,14 +18,17 @@ export class Users {
     @Column({ type: "timestamptz", nullable: true })
     last_login_at!: Date
 
+    @Index()
+    @Column({ name: "roles_id", type: "uuid" })
+    roles_id!: string
+
+    @Index()
     @Column({ default: true })
     is_use!: boolean
 
+    @Index()
     @Column({ default: false })
     is_active!: boolean
-
-    @Column({ name: "roles_id", type: "uuid" })
-    roles_id!: string
 
     @ManyToOne(() => Roles, (roles) => roles.users)
     @JoinColumn({ name: "roles_id" })

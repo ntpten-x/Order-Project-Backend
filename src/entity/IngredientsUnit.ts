@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from "typeorm"
+import { Entity, PrimaryGeneratedColumn, Column, OneToMany, Index } from "typeorm"
 import { Ingredients } from "./Ingredients"
 
 @Entity()
@@ -12,6 +12,7 @@ export class IngredientsUnit {
     @Column({ type: "varchar", length: 100, unique: true })
     display_name!: string
 
+    @Index()
     @Column({ type: "boolean", default: true })
     is_active!: boolean
 

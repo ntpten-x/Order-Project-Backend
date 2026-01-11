@@ -6,7 +6,8 @@ export class IngredientsUnitController {
 
     findAll = async (req: Request, res: Response) => {
         try {
-            const ingredientsUnit = await this.ingredientsUnitService.findAll()
+            const active = req.query.active === 'true' ? true : req.query.active === 'false' ? false : undefined;
+            const ingredientsUnit = await this.ingredientsUnitService.findAll(active !== undefined ? { is_active: active } : undefined)
             res.status(200).json(ingredientsUnit)
         } catch (error: any) {
             res.status(500).json({ error: error.message })

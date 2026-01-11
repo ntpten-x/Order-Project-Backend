@@ -7,9 +7,9 @@ export class IngredientsService {
 
     constructor(private ingredientsModel: IngredientsModel) { }
 
-    async findAll(): Promise<Ingredients[]> {
+    async findAll(filters?: { is_active?: boolean }): Promise<Ingredients[]> {
         try {
-            return this.ingredientsModel.findAll()
+            return this.ingredientsModel.findAll(filters)
         } catch (error) {
             throw error
         }

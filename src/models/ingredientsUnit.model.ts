@@ -4,13 +4,20 @@ import { IngredientsUnit } from "../entity/IngredientsUnit";
 export class IngredientsUnitModel {
     private ingredientsUnitRepository = AppDataSource.getRepository(IngredientsUnit)
 
-    async findAll(): Promise<IngredientsUnit[]> {
+    async findAll(filters?: { is_active?: boolean }): Promise<IngredientsUnit[]> {
         try {
-            return this.ingredientsUnitRepository.createQueryBuilder("ingredientsUnit")
+            const query = this.ingredientsUnitRepository.createQueryBuilder("ingredientsUnit")
                 // .leftJoinAndSelect("ingredientsUnit.ingredients", "ingredients")
-                .orderBy("ingredientsUnit.is_active", "DESC")
-                .addOrderBy("ingredientsUnit.create_date", "ASC")
-                .getMany()
+                .orderBy("ingredientsUnit.create_date", "ASC")
+
+            if (filters?.is_active !== undefined) {
+                query.andWhere("ingredientsUnit.is_active = :is_active", { is_active: filters.is_active })
+            }
+
+            // Secondary sort
+            query.addOrderBy("ingredientsUnit.is_active", "DESC")
+
+            return query.getMany()
         } catch (error) {
             throw error
         }

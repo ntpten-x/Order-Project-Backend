@@ -4,13 +4,18 @@ import { Users } from "../entity/Users";
 export class UsersModels {
     private usersRepository = AppDataSource.getRepository(Users)
 
-    async findAll(): Promise<Users[]> {
+    async findAll(filters?: { role?: string }): Promise<Users[]> {
         try {
-            return this.usersRepository.createQueryBuilder("users")
+            const query = this.usersRepository.createQueryBuilder("users")
                 .leftJoinAndSelect("users.roles", "roles")
                 .orderBy("users.is_active", "DESC")
-                .addOrderBy("users.create_date", "ASC")
-                .getMany()
+                .addOrderBy("users.create_date", "ASC");
+
+            if (filters?.role) {
+                query.where("roles.roles_name = :role", { role: filters.role });
+            }
+
+            return await query.getMany();
         } catch (error) {
             throw error
         }

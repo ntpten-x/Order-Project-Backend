@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn, OneToMany } from "typeorm"
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn, OneToMany, Index } from "typeorm"
 import { Users } from "./Users"
 import { OrdersItem } from "./OrdersItem"
 
@@ -9,6 +9,7 @@ export enum OrderStatus {
 }
 
 @Entity()
+@Index("IDX_ORDERS_STATUS_DATE", ["status", "create_date"])
 export class Orders {
     @PrimaryGeneratedColumn("uuid")
     id!: string
@@ -23,6 +24,7 @@ export class Orders {
     @Column({ type: "text", nullable: true })
     remark?: string
 
+    @Index()
     @Column({
         type: "enum",
         enum: OrderStatus,

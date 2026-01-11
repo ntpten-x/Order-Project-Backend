@@ -6,7 +6,8 @@ export class UsersController {
 
     findAll = async (req: Request, res: Response) => {
         try {
-            const users = await this.usersService.findAll()
+            const role = req.query.role as string;
+            const users = await this.usersService.findAll(role ? { role } : undefined)
             res.status(200).json(users)
         } catch (error: any) {
             res.status(500).json({ error: error.message })

@@ -26,7 +26,16 @@ export class OrdersController {
 
     getAllOrders = async (req: Request, res: Response) => {
         try {
-            const orders = await this.ordersService.getAllOrders();
+            const statusParam = req.query.status as string;
+            let statusFilter: OrderStatus | OrderStatus[] | undefined;
+
+            if (statusParam) {
+                const statuses = statusParam.split(',') as OrderStatus[];
+                // Optional: Validate statuses against OrderStatus enum
+                statusFilter = statuses.length > 1 ? statuses : statuses[0];
+            }
+
+            const orders = await this.ordersService.getAllOrders(statusFilter ? { status: statusFilter } : undefined);
             return res.status(200).json(orders);
         } catch (error: any) {
             console.error("Error fetching orders:", error);

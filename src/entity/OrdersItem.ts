@@ -1,4 +1,4 @@
-import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, JoinColumn, OneToOne } from "typeorm"
+import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, JoinColumn, OneToOne, Index } from "typeorm"
 import { Ingredients } from "./Ingredients"
 import { Orders } from "./Orders"
 import { OrdersDetail } from "./OrdersDetail"
@@ -8,6 +8,7 @@ export class OrdersItem {
     @PrimaryGeneratedColumn("uuid")
     id!: string
 
+    @Index()
     @Column({ name: "ingredient_id", type: "uuid" })
     ingredient_id!: string
 
@@ -15,6 +16,7 @@ export class OrdersItem {
     @JoinColumn({ name: "ingredient_id" })
     ingredient!: Ingredients
 
+    @Index()
     @Column({ name: "orders_id", type: "uuid" })
     orders_id!: string
 
