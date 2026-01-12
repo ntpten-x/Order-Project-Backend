@@ -6,7 +6,11 @@ export class ProductsUnitModels {
 
     async findAll(): Promise<ProductsUnit[]> {
         try {
-            return this.productsUnitRepository.createQueryBuilder("productsUnit").orderBy("productsUnit.create_date", "ASC").getMany()
+            return this.productsUnitRepository.find({
+                order: {
+                    create_date: "ASC"
+                }
+            })
         } catch (error) {
             throw error
         }
@@ -14,7 +18,9 @@ export class ProductsUnitModels {
 
     async findOne(id: string): Promise<ProductsUnit | null> {
         try {
-            return this.productsUnitRepository.createQueryBuilder("productsUnit").where("productsUnit.id = :id", { id }).getOne()
+            return this.productsUnitRepository.findOne({
+                where: { id }
+            })
         } catch (error) {
             throw error
         }
@@ -22,23 +28,27 @@ export class ProductsUnitModels {
 
     async findOneByName(name: string): Promise<ProductsUnit | null> {
         try {
-            return this.productsUnitRepository.createQueryBuilder("productsUnit").where("productsUnit.name = :name", { name }).getOne()
+            return this.productsUnitRepository.findOne({
+                where: { unit_name: name }
+            })
         } catch (error) {
             throw error
         }
     }
 
-    async create(data: ProductsUnit): Promise<ProductsUnit> {
+    async create(data: Partial<ProductsUnit>): Promise<ProductsUnit> {
         try {
-            return this.productsUnitRepository.createQueryBuilder("productsUnit").insert().values(data).returning("id").execute().then((result) => result.raw[0])
+            const entity = this.productsUnitRepository.create(data);
+            return this.productsUnitRepository.save(entity);
         } catch (error) {
             throw error
         }
     }
 
-    async update(id: string, data: ProductsUnit): Promise<ProductsUnit> {
+    async update(id: string, data: Partial<ProductsUnit>): Promise<ProductsUnit | null> {
         try {
-            return this.productsUnitRepository.createQueryBuilder("productsUnit").update(data).where("productsUnit.id = :id", { id }).returning("id").execute().then((result) => result.raw[0])
+            await this.productsUnitRepository.update(id, data);
+            return this.findOne(id);
         } catch (error) {
             throw error
         }
@@ -46,7 +56,7 @@ export class ProductsUnitModels {
 
     async delete(id: string): Promise<void> {
         try {
-            this.productsUnitRepository.createQueryBuilder("productsUnit").delete().where("productsUnit.id = :id", { id }).execute()
+            await this.productsUnitRepository.delete(id);
         } catch (error) {
             throw error
         }

@@ -53,7 +53,7 @@ export class ProductsUnitService {
     async update(id: string, productsUnit: ProductsUnit): Promise<ProductsUnit> {
         try {
             const findProductsUnit = await this.productsUnitModel.findOneByName(productsUnit.unit_name)
-            if (findProductsUnit) {
+            if (findProductsUnit && findProductsUnit.id !== id) {
                 throw new Error("หน่วยนี้มีอยู่ในระบบแล้ว")
             }
             const updatedProductsUnit = await this.productsUnitModel.update(id, productsUnit)
@@ -61,7 +61,7 @@ export class ProductsUnitService {
                 this.socketService.emit('productsUnit:update', updatedProductsUnit)
                 return updatedProductsUnit
             }
-            return updatedProductsUnit
+            throw new Error("ไม่สามารถอัปเดตข้อมูลได้")
         } catch (error) {
             throw error
         }
