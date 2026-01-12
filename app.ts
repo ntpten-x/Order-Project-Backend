@@ -16,6 +16,9 @@ import ingredientsUnitStockRouter from "./src/routes/stock/ingredientsUnit.route
 import ingredientsStockRouter from "./src/routes/stock/ingredients.route";
 import ordersStockRouter from "./src/routes/stock/orders.route";
 import ordersDetailStockRouter from "./src/routes/stock/ordersDetail.route";
+import categoryPosRouter from "./src/routes/pos/category.route";
+import productsUnitPosRouter from "./src/routes/pos/productsUnit.route";
+import productsPosRouter from "./src/routes/pos/products.route";
 
 const app = express();
 const httpServer = createServer(app); // Wrap express with HTTP server
@@ -109,6 +112,9 @@ app.use("/stock/ingredientsUnit", ingredientsUnitStockRouter);
 app.use("/stock/ingredients", ingredientsStockRouter);
 app.use("/stock/orders", ordersStockRouter);
 app.use("/stock/ordersDetail", ordersDetailStockRouter);
+app.use("/pos/category", categoryPosRouter);
+app.use("/pos/productsUnit", productsUnitPosRouter);
+app.use("/pos/products", productsPosRouter);
 
 connectDatabase().then(() => {
     httpServer.listen(port, () => { // Listen on httpServer
