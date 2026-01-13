@@ -70,5 +70,6 @@ __decorate([
     __metadata("design:type", Array)
 ], Payments.prototype, "payment_details", void 0);
 exports.Payments = Payments = __decorate([
+    (0, typeorm_1.Index)(["payment_date"]),
     (0, typeorm_1.Entity)()
 ], Payments);

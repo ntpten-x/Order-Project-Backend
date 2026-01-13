@@ -1,4 +1,4 @@
-import { Column, Entity, PrimaryGeneratedColumn, ManyToOne, JoinColumn, OneToMany } from "typeorm";
+import { Column, Entity, PrimaryGeneratedColumn, ManyToOne, JoinColumn, OneToMany, Index } from "typeorm";
 import { Orders } from "./Orders";
 import { PaymentMethod } from "./PaymentMethod";
 import { PaymentDetails } from "./PaymentDetails";
@@ -9,6 +9,7 @@ export enum PaymentStatus {
     Failed = "Failed"       // ล้มเหลว
 }
 
+@Index(["payment_date"])
 @Entity()
 export class Payments {
     @PrimaryGeneratedColumn("uuid")

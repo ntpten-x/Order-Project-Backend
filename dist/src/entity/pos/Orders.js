@@ -131,5 +131,8 @@ __decorate([
     __metadata("design:type", Array)
 ], Orders.prototype, "payments", void 0);
 exports.Orders = Orders = __decorate([
-    (0, typeorm_1.Entity)()
+    (0, typeorm_1.Entity)(),
+    (0, typeorm_1.Index)(["create_date"]) // Index for sorting/filtering by date
+    ,
+    (0, typeorm_1.Index)(["status"]) // Index for filtering by status
 ], Orders);

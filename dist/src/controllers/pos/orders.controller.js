@@ -15,8 +15,10 @@ class OrdersController {
         this.ordersService = ordersService;
         this.findAll = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {
-                const orders = yield this.ordersService.findAll();
-                res.status(200).json(orders);
+                const page = parseInt(req.query.page) || 1;
+                const limit = parseInt(req.query.limit) || 50;
+                const result = yield this.ordersService.findAll(page, limit);
+                res.status(200).json(result);
             }
             catch (error) {
                 res.status(500).json({ error: error.message });
@@ -33,8 +35,15 @@ class OrdersController {
         });
         this.create = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {
-                const order = yield this.ordersService.create(req.body);
-                res.status(201).json(order);
+                // Check if input has items, if so use createFullOrder
+                if (req.body.items && Array.isArray(req.body.items) && req.body.items.length > 0) {
+                    const order = yield this.ordersService.createFullOrder(req.body);
+                    res.status(201).json(order);
+                }
+                else {
+                    const order = yield this.ordersService.create(req.body);
+                    res.status(201).json(order);
+                }
             }
             catch (error) {
                 res.status(500).json({ error: error.message });

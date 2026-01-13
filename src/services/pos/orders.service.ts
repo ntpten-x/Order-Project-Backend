@@ -7,9 +7,9 @@ export class OrdersService {
 
     constructor(private ordersModel: OrdersModels) { }
 
-    async findAll(): Promise<Orders[]> {
+    async findAll(page: number, limit: number): Promise<{ data: Orders[], total: number, page: number, limit: number }> {
         try {
-            return this.ordersModel.findAll()
+            return this.ordersModel.findAll(page, limit)
         } catch (error) {
             throw error
         }
@@ -34,11 +34,47 @@ export class OrdersService {
                 throw new Error("เลขที่ออเดอร์นี้มีอยู่ในระบบแล้ว")
             }
 
+            // Check if there are items to create transactionally
+            // The controller might pass items in a separate property or we attach them to the 'orders' object?
+            // Usually 'orders' entity object doesn't have 'items' populated on create unless we type cast.
+            // For now, let's assume if 'items' exists in the input object (even if not in Entity type during strict checking, but here it's JS runtime).
+            // Better approach: Method specific for full creation.
+
+            // Standard create (Header only)
             const createdOrder = await this.ordersModel.create(orders)
             this.socketService.emit('orders:create', createdOrder)
             return createdOrder
         } catch (error) {
             throw error
+        }
+    }
+
+    async createFullOrder(data: any): Promise<Orders> {
+        try {
+            if (!data.order_no) {
+                throw new Error("กรุณาระบุเลขที่ออเดอร์")
+            }
+
+            const existingOrder = await this.ordersModel.findOneByOrderNo(data.order_no)
+            if (existingOrder) {
+                throw new Error("เลขที่ออเดอร์นี้มีอยู่ในระบบแล้ว")
+            }
+
+            // Separate items from order data
+            const { items, ...orderData } = data;
+
+            const createdOrder = await this.ordersModel.createFullOrder(orderData, items);
+
+            // Fetch full data to emit
+            const fullOrder = await this.ordersModel.findOne(createdOrder.id);
+            if (fullOrder) {
+                this.socketService.emit('orders:create', fullOrder);
+                return fullOrder;
+            }
+            return createdOrder;
+
+        } catch (error) {
+            throw error;
         }
     }
 

@@ -1,5 +1,5 @@
 
-import { Column, Entity, PrimaryGeneratedColumn, ManyToOne, JoinColumn, OneToMany } from "typeorm";
+import { Column, Entity, PrimaryGeneratedColumn, ManyToOne, JoinColumn, OneToMany, Index } from "typeorm";
 import { Tables } from "./Tables";
 import { Delivery } from "./Delivery";
 import { OrdersItem } from "./OrdersItem";
@@ -22,6 +22,8 @@ export enum OrderStatus {
 }
 
 @Entity()
+@Index(["create_date"]) // Index for sorting/filtering by date
+@Index(["status"])      // Index for filtering by status
 export class Orders {
     @PrimaryGeneratedColumn("uuid")
     id!: string; // รหัสอ้างอิงหลักของออเดอร์

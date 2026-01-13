@@ -12,19 +12,30 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.OrdersModels = void 0;
 const database_1 = require("../../database/database");
 const Orders_1 = require("../../entity/pos/Orders");
+const OrdersItem_1 = require("../../entity/pos/OrdersItem");
+const OrdersDetail_1 = require("../../entity/pos/OrdersDetail");
 class OrdersModels {
     constructor() {
         this.ordersRepository = database_1.AppDataSource.getRepository(Orders_1.Orders);
     }
     findAll() {
-        return __awaiter(this, void 0, void 0, function* () {
+        return __awaiter(this, arguments, void 0, function* (page = 1, limit = 50) {
             try {
-                return this.ordersRepository.find({
+                const skip = (page - 1) * limit;
+                const [data, total] = yield this.ordersRepository.findAndCount({
                     order: {
                         create_date: "DESC"
                     },
-                    relations: ["table", "delivery", "discount", "created_by"]
+                    relations: ["table", "delivery", "discount", "created_by"],
+                    take: limit,
+                    skip: skip
                 });
+                return {
+                    data,
+                    total,
+                    page,
+                    limit
+                };
             }
             catch (error) {
                 throw error;
@@ -65,6 +76,39 @@ class OrdersModels {
             catch (error) {
                 throw error;
             }
+        });
+    }
+    // Transactional Create
+    createFullOrder(data, items) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return yield database_1.AppDataSource.manager.transaction((transactionalEntityManager) => __awaiter(this, void 0, void 0, function* () {
+                // 1. Save Order Header
+                const savedOrder = yield transactionalEntityManager.save(Orders_1.Orders, data);
+                // 2. Save Items and Details
+                if (items && items.length > 0) {
+                    for (const itemData of items) {
+                        const item = new OrdersItem_1.OrdersItem();
+                        item.order_id = savedOrder.id;
+                        item.product_id = itemData.product_id;
+                        item.quantity = itemData.quantity;
+                        item.price = itemData.price;
+                        item.discount_amount = itemData.discount_amount || 0;
+                        item.total_price = itemData.total_price;
+                        item.notes = itemData.notes;
+                        const savedItem = yield transactionalEntityManager.save(OrdersItem_1.OrdersItem, item);
+                        if (itemData.details && itemData.details.length > 0) {
+                            for (const detailData of itemData.details) {
+                                const detail = new OrdersDetail_1.OrdersDetail();
+                                detail.orders_item_id = savedItem.id;
+                                detail.detail_name = detailData.detail_name;
+                                detail.extra_price = detailData.extra_price || 0;
+                                yield transactionalEntityManager.save(OrdersDetail_1.OrdersDetail, detail);
+                            }
+                        }
+                    }
+                }
+                return savedOrder;
+            }));
         });
     }
     update(id, data) {

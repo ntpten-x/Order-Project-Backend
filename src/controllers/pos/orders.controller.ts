@@ -6,8 +6,11 @@ export class OrdersController {
 
     findAll = async (req: Request, res: Response) => {
         try {
-            const orders = await this.ordersService.findAll()
-            res.status(200).json(orders)
+            const page = parseInt(req.query.page as string) || 1;
+            const limit = parseInt(req.query.limit as string) || 50;
+
+            const result = await this.ordersService.findAll(page, limit)
+            res.status(200).json(result)
         } catch (error: any) {
             res.status(500).json({ error: error.message })
         }
@@ -24,8 +27,14 @@ export class OrdersController {
 
     create = async (req: Request, res: Response) => {
         try {
-            const order = await this.ordersService.create(req.body)
-            res.status(201).json(order)
+            // Check if input has items, if so use createFullOrder
+            if (req.body.items && Array.isArray(req.body.items) && req.body.items.length > 0) {
+                const order = await this.ordersService.createFullOrder(req.body)
+                res.status(201).json(order)
+            } else {
+                const order = await this.ordersService.create(req.body)
+                res.status(201).json(order)
+            }
         } catch (error: any) {
             res.status(500).json({ error: error.message })
         }
