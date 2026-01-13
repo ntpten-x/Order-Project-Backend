@@ -1,5 +1,5 @@
 import { AppDataSource } from "../../database/database";
-import { Payments } from "../../entity/pos/Payment";
+import { Payments } from "../../entity/pos/Payments";
 
 export class PaymentsModels {
     private paymentsRepository = AppDataSource.getRepository(Payments)

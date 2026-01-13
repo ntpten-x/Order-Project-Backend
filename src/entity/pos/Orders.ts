@@ -3,7 +3,7 @@ import { Column, Entity, PrimaryGeneratedColumn, ManyToOne, JoinColumn, OneToMan
 import { Tables } from "./Tables";
 import { Delivery } from "./Delivery";
 import { OrdersItem } from "./OrdersItem";
-import { Payments } from "./Payment";
+import { Payments } from "./Payments";
 import { Discounts } from "./Discounts";
 import { Users } from "../Users";
 
@@ -18,7 +18,12 @@ export enum OrderStatus {
     Cooking = "Cooking",    // กำลังปรุงอาหาร
     Served = "Served",      // เสิร์ฟแล้ว
     Paid = "Paid",          // ชำระเงินแล้ว
-    Cancelled = "Cancelled" // ยกเลิกออเดอร์
+    Cancelled = "Cancelled", // ยกเลิกออเดอร์
+
+    // Legacy values for migration
+    pending = "pending",
+    completed = "completed",
+    cancelled = "cancelled"
 }
 
 @Entity()
@@ -28,10 +33,10 @@ export class Orders {
     @PrimaryGeneratedColumn("uuid")
     id!: string; // รหัสอ้างอิงหลักของออเดอร์
 
-    @Column({ type: "varchar", unique: true })
+    @Column({ type: "varchar", unique: true, nullable: true })
     order_no!: string; // เลขที่ออเดอร์ (เช่น ORD-20240501-001)
 
-    @Column({ type: "enum", enum: OrderType })
+    @Column({ type: "enum", enum: OrderType, nullable: true })
     order_type!: OrderType; // ประเภทของออเดอร์ (ทานร้าน/กลับบ้าน/ส่ง)
 
     @Column({ name: "table_id", type: "uuid", nullable: true })

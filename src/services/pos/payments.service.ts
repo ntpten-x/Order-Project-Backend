@@ -1,6 +1,6 @@
 import { PaymentsModels } from "../../models/pos/payments.model";
 import { SocketService } from "../socket.service";
-import { Payments } from "../../entity/pos/Payment";
+import { Payments } from "../../entity/pos/Payments";
 
 export class PaymentsService {
     private socketService = SocketService.getInstance();

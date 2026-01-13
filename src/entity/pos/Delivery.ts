@@ -8,6 +8,9 @@ export class Delivery {
     @Column({ type: 'varchar', length: 255 })
     delivery_name!: string; // ชื่อบริการส่ง (เช่น Grab, Lineman)
 
+    @Column({ type: 'text', nullable: true })
+    logo?: string; // โลโก้บริการส่ง (URL)
+
     @Column({ type: 'timestamptz', default: () => 'CURRENT_TIMESTAMP' })
     create_date!: Date; // วันที่สร้าง
 

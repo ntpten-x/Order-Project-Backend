@@ -13,7 +13,7 @@ export class OrdersDetail {
     @JoinColumn({ name: "orders_item_id" })
     orders_item!: OrdersItem; // ความสัมพันธ์เชื่อมไปยังรายการสินค้า
 
-    @Column({ type: "varchar", length: 255 })
+    @Column({ type: "varchar", length: 255, default: "" })
     detail_name!: string; // ชื่อรายละเอียด (เช่น "หวาน 50%", "เพิ่มชีส")
 
     @Column({ type: "decimal", precision: 12, scale: 2, default: 0 })

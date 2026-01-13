@@ -8,14 +8,14 @@ export class OrdersItem {
     @PrimaryGeneratedColumn("uuid")
     id!: string; // รหัสอ้างอิงรายการสินค้าในบิล
 
-    @Column({ name: "order_id", type: "uuid" })
+    @Column({ name: "order_id", type: "uuid", nullable: true })
     order_id!: string; // รหัสออเดอร์หลัก
 
     @ManyToOne(() => Orders, (order) => order.items)
     @JoinColumn({ name: "order_id" })
     order!: Orders; // ความสัมพันธ์เชื่อมไปยังออเดอร์
 
-    @Column({ name: "product_id", type: "uuid" })
+    @Column({ name: "product_id", type: "uuid", nullable: true })
     product_id!: string; // รหัสสินค้า
 
     @ManyToOne(() => Products)
