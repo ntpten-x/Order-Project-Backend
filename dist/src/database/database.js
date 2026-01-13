@@ -52,6 +52,10 @@ const Ingredients_1 = require("../entity/stock/Ingredients");
 const Orders_1 = require("../entity/stock/Orders");
 const OrdersItem_1 = require("../entity/stock/OrdersItem");
 const OrdersDetail_1 = require("../entity/stock/OrdersDetail");
+const Category_1 = require("../entity/pos/Category");
+const Products_1 = require("../entity/pos/Products");
+const ProductsUnit_1 = require("../entity/pos/ProductsUnit");
+const Tables_1 = require("../entity/pos/Tables");
 const dotenv = __importStar(require("dotenv"));
 dotenv.config();
 exports.AppDataSource = new typeorm_1.DataSource({
@@ -61,7 +65,7 @@ exports.AppDataSource = new typeorm_1.DataSource({
     username: process.env.DATABASE_USER,
     password: process.env.DATABASE_PASSWORD,
     database: process.env.DATABASE_NAME,
-    entities: [Users_1.Users, Roles_1.Roles, IngredientsUnit_1.IngredientsUnit, Ingredients_1.Ingredients, Orders_1.Orders, OrdersItem_1.OrdersItem, OrdersDetail_1.OrdersDetail],
+    entities: [Users_1.Users, Roles_1.Roles, IngredientsUnit_1.IngredientsUnit, Ingredients_1.Ingredients, Orders_1.Orders, OrdersItem_1.OrdersItem, OrdersDetail_1.OrdersDetail, Category_1.Category, Products_1.Products, ProductsUnit_1.ProductsUnit, Tables_1.Tables],
     synchronize: true,
     logging: false,
     ssl: {

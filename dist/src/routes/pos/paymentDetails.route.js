@@ -1,0 +1,18 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const paymentDetails_model_1 = require("../../models/pos/paymentDetails.model");
+const paymentDetails_service_1 = require("../../services/pos/paymentDetails.service");
+const paymentDetails_controller_1 = require("../../controllers/pos/paymentDetails.controller");
+const auth_middleware_1 = require("../../middleware/auth.middleware");
+const router = (0, express_1.Router)();
+const paymentDetailsModel = new paymentDetails_model_1.PaymentDetailsModels();
+const paymentDetailsService = new paymentDetails_service_1.PaymentDetailsService(paymentDetailsModel);
+const paymentDetailsController = new paymentDetails_controller_1.PaymentDetailsController(paymentDetailsService);
+router.use(auth_middleware_1.authenticateToken);
+router.get("/", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), paymentDetailsController.findAll);
+router.get("/:id", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), paymentDetailsController.findOne);
+router.post("/", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), paymentDetailsController.create);
+router.put("/:id", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), paymentDetailsController.update);
+router.delete("/:id", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager"]), paymentDetailsController.delete);
+exports.default = router;

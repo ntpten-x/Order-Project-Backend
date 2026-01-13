@@ -21,6 +21,18 @@ const ingredientsUnit_route_1 = __importDefault(require("./src/routes/stock/ingr
 const ingredients_route_1 = __importDefault(require("./src/routes/stock/ingredients.route"));
 const orders_route_1 = __importDefault(require("./src/routes/stock/orders.route"));
 const ordersDetail_route_1 = __importDefault(require("./src/routes/stock/ordersDetail.route"));
+const category_route_1 = __importDefault(require("./src/routes/pos/category.route"));
+const productsUnit_route_1 = __importDefault(require("./src/routes/pos/productsUnit.route"));
+const products_route_1 = __importDefault(require("./src/routes/pos/products.route"));
+const tables_route_1 = __importDefault(require("./src/routes/pos/tables.route"));
+const delivery_route_1 = __importDefault(require("./src/routes/pos/delivery.route"));
+const discounts_route_1 = __importDefault(require("./src/routes/pos/discounts.route"));
+const paymentMethod_route_1 = __importDefault(require("./src/routes/pos/paymentMethod.route"));
+const payments_route_1 = __importDefault(require("./src/routes/pos/payments.route"));
+const paymentDetails_route_1 = __importDefault(require("./src/routes/pos/paymentDetails.route"));
+const orders_route_2 = __importDefault(require("./src/routes/pos/orders.route"));
+const ordersItem_route_1 = __importDefault(require("./src/routes/pos/ordersItem.route"));
+const ordersDetail_route_2 = __importDefault(require("./src/routes/pos/ordersDetail.route"));
 const app = (0, express_1.default)();
 const httpServer = (0, http_1.createServer)(app); // Wrap express with HTTP server
 const port = process.env.PORT || 3000;
@@ -99,6 +111,18 @@ app.use("/stock/ingredientsUnit", ingredientsUnit_route_1.default);
 app.use("/stock/ingredients", ingredients_route_1.default);
 app.use("/stock/orders", orders_route_1.default);
 app.use("/stock/ordersDetail", ordersDetail_route_1.default);
+app.use("/pos/category", category_route_1.default);
+app.use("/pos/productsUnit", productsUnit_route_1.default);
+app.use("/pos/products", products_route_1.default);
+app.use("/pos/tables", tables_route_1.default);
+app.use("/pos/delivery", delivery_route_1.default);
+app.use("/pos/discounts", discounts_route_1.default);
+app.use("/pos/paymentMethod", paymentMethod_route_1.default);
+app.use("/pos/payments", payments_route_1.default);
+app.use("/pos/paymentDetails", paymentDetails_route_1.default);
+app.use("/pos/orders", orders_route_2.default);
+app.use("/pos/ordersItem", ordersItem_route_1.default);
+app.use("/pos/ordersDetail", ordersDetail_route_2.default);
 (0, database_1.connectDatabase)().then(() => {
     httpServer.listen(port, () => {
         console.log(`Server is running on http://localhost:${port}`);

@@ -19,6 +19,15 @@ import ordersDetailStockRouter from "./src/routes/stock/ordersDetail.route";
 import categoryPosRouter from "./src/routes/pos/category.route";
 import productsUnitPosRouter from "./src/routes/pos/productsUnit.route";
 import productsPosRouter from "./src/routes/pos/products.route";
+import tablesPosRouter from "./src/routes/pos/tables.route";
+import deliveryPosRouter from "./src/routes/pos/delivery.route";
+import discountsPosRouter from "./src/routes/pos/discounts.route";
+import paymentMethodPosRouter from "./src/routes/pos/paymentMethod.route";
+import paymentsPosRouter from "./src/routes/pos/payments.route";
+import paymentDetailsPosRouter from "./src/routes/pos/paymentDetails.route";
+import ordersPosRouter from "./src/routes/pos/orders.route";
+import ordersItemPosRouter from "./src/routes/pos/ordersItem.route";
+import ordersDetailPosRouter from "./src/routes/pos/ordersDetail.route";
 
 const app = express();
 const httpServer = createServer(app); // Wrap express with HTTP server
@@ -115,6 +124,15 @@ app.use("/stock/ordersDetail", ordersDetailStockRouter);
 app.use("/pos/category", categoryPosRouter);
 app.use("/pos/productsUnit", productsUnitPosRouter);
 app.use("/pos/products", productsPosRouter);
+app.use("/pos/tables", tablesPosRouter);
+app.use("/pos/delivery", deliveryPosRouter);
+app.use("/pos/discounts", discountsPosRouter);
+app.use("/pos/paymentMethod", paymentMethodPosRouter);
+app.use("/pos/payments", paymentsPosRouter);
+app.use("/pos/paymentDetails", paymentDetailsPosRouter);
+app.use("/pos/orders", ordersPosRouter);
+app.use("/pos/ordersItem", ordersItemPosRouter);
+app.use("/pos/ordersDetail", ordersDetailPosRouter);
 
 connectDatabase().then(() => {
     httpServer.listen(port, () => { // Listen on httpServer

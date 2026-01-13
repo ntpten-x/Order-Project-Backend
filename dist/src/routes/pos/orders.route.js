@@ -1,0 +1,18 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const orders_model_1 = require("../../models/pos/orders.model");
+const orders_service_1 = require("../../services/pos/orders.service");
+const orders_controller_1 = require("../../controllers/pos/orders.controller");
+const auth_middleware_1 = require("../../middleware/auth.middleware");
+const router = (0, express_1.Router)();
+const ordersModel = new orders_model_1.OrdersModels();
+const ordersService = new orders_service_1.OrdersService(ordersModel);
+const ordersController = new orders_controller_1.OrdersController(ordersService);
+router.use(auth_middleware_1.authenticateToken);
+router.get("/", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), ordersController.findAll);
+router.get("/:id", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), ordersController.findOne);
+router.post("/", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), ordersController.create);
+router.put("/:id", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), ordersController.update);
+router.delete("/:id", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager"]), ordersController.delete);
+exports.default = router;

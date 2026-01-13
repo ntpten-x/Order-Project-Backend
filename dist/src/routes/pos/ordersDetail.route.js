@@ -1,0 +1,18 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const ordersDetail_model_1 = require("../../models/pos/ordersDetail.model");
+const ordersDetail_service_1 = require("../../services/pos/ordersDetail.service");
+const ordersDetail_controller_1 = require("../../controllers/pos/ordersDetail.controller");
+const auth_middleware_1 = require("../../middleware/auth.middleware");
+const router = (0, express_1.Router)();
+const ordersDetailModel = new ordersDetail_model_1.OrdersDetailModels();
+const ordersDetailService = new ordersDetail_service_1.OrdersDetailService(ordersDetailModel);
+const ordersDetailController = new ordersDetail_controller_1.OrdersDetailController(ordersDetailService);
+router.use(auth_middleware_1.authenticateToken);
+router.get("/", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), ordersDetailController.findAll);
+router.get("/:id", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), ordersDetailController.findOne);
+router.post("/", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), ordersDetailController.create);
+router.put("/:id", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), ordersDetailController.update);
+router.delete("/:id", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager"]), ordersDetailController.delete);
+exports.default = router;
