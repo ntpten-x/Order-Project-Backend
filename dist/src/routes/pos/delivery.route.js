@@ -15,6 +15,7 @@ router.use(auth_middleware_1.authenticateToken);
 // Employee can View
 router.get("/", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), deliveryController.findAll);
 router.get("/:id", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), deliveryController.findOne);
+router.get("/getByName/:name", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), deliveryController.findByName);
 router.post("/", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager"]), deliveryController.create);
 router.put("/:id", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager"]), deliveryController.update);
 router.delete("/:id", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager"]), deliveryController.delete);

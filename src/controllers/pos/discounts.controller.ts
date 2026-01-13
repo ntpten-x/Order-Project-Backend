@@ -22,6 +22,15 @@ export class DiscountsController {
         }
     }
 
+    findByName = async (req: Request, res: Response) => {
+        try {
+            const discount = await this.discountsService.findOneByName(req.params.name)
+            res.status(200).json(discount)
+        } catch (error: any) {
+            res.status(500).json({ error: error.message })
+        }
+    }
+
     create = async (req: Request, res: Response) => {
         try {
             const discount = await this.discountsService.create(req.body)

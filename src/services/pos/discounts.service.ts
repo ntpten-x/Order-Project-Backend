@@ -23,6 +23,14 @@ export class DiscountsService {
         }
     }
 
+    async findOneByName(discount_name: string): Promise<Discounts | null> {
+        try {
+            return this.discountsModel.findOneByName(discount_name)
+        } catch (error) {
+            throw error
+        }
+    }
+
     async create(discounts: Discounts): Promise<Discounts> {
         try {
             if (!discounts.discount_name) {

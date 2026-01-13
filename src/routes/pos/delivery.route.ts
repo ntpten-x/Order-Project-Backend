@@ -11,12 +11,14 @@ const deliveryService = new DeliveryService(deliveryModel)
 const deliveryController = new DeliveryController(deliveryService)
 
 router.use(authenticateToken)
+router.use(authorizeRole(["Admin", "Manager", "Employee"]))
 // Authorization: 
 // Admin/Manager can Manage
 // Employee can View
 
 router.get("/", authorizeRole(["Admin", "Manager", "Employee"]), deliveryController.findAll)
 router.get("/:id", authorizeRole(["Admin", "Manager", "Employee"]), deliveryController.findOne)
+router.get("/getByName/:name", authorizeRole(["Admin", "Manager", "Employee"]), deliveryController.findByName)
 
 router.post("/", authorizeRole(["Admin", "Manager"]), deliveryController.create)
 router.put("/:id", authorizeRole(["Admin", "Manager"]), deliveryController.update)

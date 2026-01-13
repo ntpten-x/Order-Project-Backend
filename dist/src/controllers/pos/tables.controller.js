@@ -31,6 +31,15 @@ class TablesController {
                 res.status(500).json({ error: error.message });
             }
         });
+        this.findByName = (req, res) => __awaiter(this, void 0, void 0, function* () {
+            try {
+                const table = yield this.tablesService.findOneByName(req.params.name);
+                res.status(200).json(table);
+            }
+            catch (error) {
+                res.status(500).json({ error: error.message });
+            }
+        });
         this.create = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {
                 const table = yield this.tablesService.create(req.body);

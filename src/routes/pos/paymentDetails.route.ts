@@ -11,6 +11,7 @@ const paymentDetailsService = new PaymentDetailsService(paymentDetailsModel)
 const paymentDetailsController = new PaymentDetailsController(paymentDetailsService)
 
 router.use(authenticateToken)
+router.use(authorizeRole(["Admin", "Manager", "Employee"]))
 
 router.get("/", authorizeRole(["Admin", "Manager", "Employee"]), paymentDetailsController.findAll)
 router.get("/:id", authorizeRole(["Admin", "Manager", "Employee"]), paymentDetailsController.findOne)

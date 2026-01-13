@@ -11,12 +11,14 @@ const discountsService = new DiscountsService(discountsModel)
 const discountsController = new DiscountsController(discountsService)
 
 router.use(authenticateToken)
+router.use(authorizeRole(["Admin", "Manager", "Employee"]))
 // Authorization:
 // Admin/Manager can Manage
 // Employee can Read
 
 router.get("/", authorizeRole(["Admin", "Manager", "Employee"]), discountsController.findAll)
 router.get("/:id", authorizeRole(["Admin", "Manager", "Employee"]), discountsController.findOne)
+router.get("/getByName/:name", authorizeRole(["Admin", "Manager", "Employee"]), discountsController.findByName)
 
 router.post("/", authorizeRole(["Admin", "Manager"]), discountsController.create)
 router.put("/:id", authorizeRole(["Admin", "Manager"]), discountsController.update)

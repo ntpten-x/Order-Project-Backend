@@ -11,6 +11,7 @@ const ordersService = new OrdersService(ordersModel)
 const ordersController = new OrdersController(ordersService)
 
 router.use(authenticateToken)
+router.use(authorizeRole(["Admin", "Manager", "Employee"]))
 
 router.get("/", authorizeRole(["Admin", "Manager", "Employee"]), ordersController.findAll)
 router.get("/:id", authorizeRole(["Admin", "Manager", "Employee"]), ordersController.findOne)

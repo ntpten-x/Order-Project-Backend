@@ -11,6 +11,7 @@ const tablesService = new TablesService(tablesModel)
 const tablesController = new TablesController(tablesService)
 
 router.use(authenticateToken)
+router.use(authorizeRole(["Admin", "Manager", "Employee"]))
 // Authorization: Assuming all authenticated users can view/update status, 
 // but creation/deletion might be restricted. 
 // For now, I will follow the pattern in products.route.ts
@@ -19,6 +20,7 @@ router.use(authenticateToken)
 
 router.get("/", authorizeRole(["Admin", "Manager", "Employee"]), tablesController.findAll)
 router.get("/:id", authorizeRole(["Admin", "Manager", "Employee"]), tablesController.findOne)
+router.get("/getByName/:name", authorizeRole(["Admin", "Manager", "Employee"]), tablesController.findByName)
 
 router.post("/", authorizeRole(["Admin", "Manager"]), tablesController.create)
 router.put("/:id", authorizeRole(["Admin", "Manager", "Employee"]), tablesController.update) // Employee can update status

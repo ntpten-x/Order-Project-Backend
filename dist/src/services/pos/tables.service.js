@@ -36,6 +36,16 @@ class TablesService {
             }
         });
     }
+    findOneByName(table_name) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                return this.tablesModel.findOneByName(table_name);
+            }
+            catch (error) {
+                throw error;
+            }
+        });
+    }
     create(tables) {
         return __awaiter(this, void 0, void 0, function* () {
             try {

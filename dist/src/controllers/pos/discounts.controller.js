@@ -31,6 +31,15 @@ class DiscountsController {
                 res.status(500).json({ error: error.message });
             }
         });
+        this.findByName = (req, res) => __awaiter(this, void 0, void 0, function* () {
+            try {
+                const discount = yield this.discountsService.findOneByName(req.params.name);
+                res.status(200).json(discount);
+            }
+            catch (error) {
+                res.status(500).json({ error: error.message });
+            }
+        });
         this.create = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {
                 const discount = yield this.discountsService.create(req.body);

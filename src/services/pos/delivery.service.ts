@@ -23,6 +23,14 @@ export class DeliveryService {
         }
     }
 
+    async findOneByName(delivery_name: string): Promise<Delivery | null> {
+        try {
+            return this.deliveryModel.findOneByName(delivery_name)
+        } catch (error) {
+            throw error
+        }
+    }
+
     async create(delivery: Delivery): Promise<Delivery> {
         try {
             if (!delivery.delivery_name) {

@@ -11,6 +11,7 @@ const paymentMethodService = new PaymentMethodService(paymentMethodModel)
 const paymentMethodController = new PaymentMethodController(paymentMethodService)
 
 router.use(authenticateToken)
+router.use(authorizeRole(["Admin", "Manager", "Employee"]))
 // Authorization:
 // Admin manage, Employee read.
 

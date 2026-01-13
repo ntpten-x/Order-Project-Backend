@@ -22,6 +22,15 @@ export class DeliveryController {
         }
     }
 
+    findByName = async (req: Request, res: Response) => {
+        try {
+            const delivery = await this.deliveryService.findOneByName(req.params.name)
+            res.status(200).json(delivery)
+        } catch (error: any) {
+            res.status(500).json({ error: error.message })
+        }
+    }
+
     create = async (req: Request, res: Response) => {
         try {
             const delivery = await this.deliveryService.create(req.body)

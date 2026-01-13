@@ -23,6 +23,14 @@ export class TablesService {
         }
     }
 
+    async findOneByName(table_name: string): Promise<Tables | null> {
+        try {
+            return this.tablesModel.findOneByName(table_name)
+        } catch (error) {
+            throw error
+        }
+    }
+
     async create(tables: Tables): Promise<Tables> {
         try {
             if (!tables.table_name) {

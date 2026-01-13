@@ -31,6 +31,15 @@ class DeliveryController {
                 res.status(500).json({ error: error.message });
             }
         });
+        this.findByName = (req, res) => __awaiter(this, void 0, void 0, function* () {
+            try {
+                const delivery = yield this.deliveryService.findOneByName(req.params.name);
+                res.status(200).json(delivery);
+            }
+            catch (error) {
+                res.status(500).json({ error: error.message });
+            }
+        });
         this.create = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {
                 const delivery = yield this.deliveryService.create(req.body);

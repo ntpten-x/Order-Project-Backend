@@ -36,6 +36,16 @@ class DeliveryService {
             }
         });
     }
+    findOneByName(delivery_name) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                return this.deliveryModel.findOneByName(delivery_name);
+            }
+            catch (error) {
+                throw error;
+            }
+        });
+    }
     create(delivery) {
         return __awaiter(this, void 0, void 0, function* () {
             try {

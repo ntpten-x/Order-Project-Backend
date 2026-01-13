@@ -36,6 +36,16 @@ class DiscountsService {
             }
         });
     }
+    findOneByName(discount_name) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                return this.discountsModel.findOneByName(discount_name);
+            }
+            catch (error) {
+                throw error;
+            }
+        });
+    }
     create(discounts) {
         return __awaiter(this, void 0, void 0, function* () {
             try {

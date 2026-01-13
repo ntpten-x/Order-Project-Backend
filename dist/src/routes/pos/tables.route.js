@@ -17,6 +17,7 @@ router.use(auth_middleware_1.authenticateToken);
 // Actually, Waiters need to update table status, so they need update rights.
 router.get("/", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), tablesController.findAll);
 router.get("/:id", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), tablesController.findOne);
+router.get("/getByName/:name", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), tablesController.findByName);
 router.post("/", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager"]), tablesController.create);
 router.put("/:id", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), tablesController.update); // Employee can update status
 router.delete("/:id", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager"]), tablesController.delete);
