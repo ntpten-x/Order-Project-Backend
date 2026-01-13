@@ -16,8 +16,8 @@ export class Discounts {
     @Column({ type: "varchar", length: 100, unique: true })
     display_name!: string // ชื่อส่วนลดที่แสดงให้ลูกค้าเห็น
 
-    @Column({ type: "text" })
-    description!: string // รายละเอียดเงื่อนไข
+    @Column({ type: "text", nullable: true })
+    description?: string // รายละเอียดเงื่อนไข
 
     @Column({ type: "decimal", precision: 12, scale: 2, default: 0 })
     discount_amount!: number // มูลค่าส่วนลด (บาท หรือ %)
