@@ -38,11 +38,12 @@ class OrdersModel {
             }));
         });
     }
-    findAll(filters) {
-        return __awaiter(this, void 0, void 0, function* () {
+    findAll(filters_1) {
+        return __awaiter(this, arguments, void 0, function* (filters, page = 1, limit = 50) {
             // To support "IN" query with TypeORM find options, we need the "In" operator
             // Importing In from typeorm
             const { In } = require("typeorm");
+            const skip = (page - 1) * limit;
             const findOptions = {
                 relations: {
                     ordered_by: true,
@@ -55,7 +56,9 @@ class OrdersModel {
                 },
                 order: {
                     create_date: "DESC"
-                }
+                },
+                take: limit,
+                skip: skip
             };
             if (filters === null || filters === void 0 ? void 0 : filters.status) {
                 if (Array.isArray(filters.status)) {
@@ -65,7 +68,13 @@ class OrdersModel {
                     findOptions.where = { status: filters.status };
                 }
             }
-            return yield this.ordersRepository.find(findOptions);
+            const [data, total] = yield this.ordersRepository.findAndCount(findOptions);
+            return {
+                data,
+                total,
+                page,
+                limit
+            };
         });
     }
     updateOrderItems(orderId, newItems) {

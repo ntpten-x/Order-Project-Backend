@@ -17,9 +17,9 @@ export class OrdersService {
         }
     }
 
-    async getAllOrders(filters?: { status?: OrderStatus | OrderStatus[] }) {
+    async getAllOrders(filters?: { status?: OrderStatus | OrderStatus[] }, page: number = 1, limit: number = 50) {
         try {
-            return await this.ordersModel.findAll(filters);
+            return await this.ordersModel.findAll(filters, page, limit);
         } catch (error) {
             throw error;
         }

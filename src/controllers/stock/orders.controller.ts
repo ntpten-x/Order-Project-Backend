@@ -27,6 +27,9 @@ export class OrdersController {
     getAllOrders = async (req: Request, res: Response) => {
         try {
             const statusParam = req.query.status as string;
+            const page = parseInt(req.query.page as string) || 1;
+            const limit = parseInt(req.query.limit as string) || 50;
+
             let statusFilter: OrderStatus | OrderStatus[] | undefined;
 
             if (statusParam) {
@@ -35,7 +38,7 @@ export class OrdersController {
                 statusFilter = statuses.length > 1 ? statuses : statuses[0];
             }
 
-            const orders = await this.ordersService.getAllOrders(statusFilter ? { status: statusFilter } : undefined);
+            const orders = await this.ordersService.getAllOrders(statusFilter ? { status: statusFilter } : undefined, page, limit);
             return res.status(200).json(orders);
         } catch (error: any) {
             console.error("Error fetching orders:", error);

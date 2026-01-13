@@ -27,10 +27,12 @@ export class OrdersModel {
         });
     }
 
-    async findAll(filters?: { status?: OrderStatus | OrderStatus[] }): Promise<Orders[]> {
+    async findAll(filters?: { status?: OrderStatus | OrderStatus[] }, page: number = 1, limit: number = 50): Promise<{ data: Orders[], total: number, page: number, limit: number }> {
         // To support "IN" query with TypeORM find options, we need the "In" operator
         // Importing In from typeorm
         const { In } = require("typeorm");
+
+        const skip = (page - 1) * limit;
 
         const findOptions: any = {
             relations: {
@@ -44,7 +46,9 @@ export class OrdersModel {
             },
             order: {
                 create_date: "DESC"
-            }
+            },
+            take: limit,
+            skip: skip
         };
 
         if (filters?.status) {
@@ -55,7 +59,14 @@ export class OrdersModel {
             }
         }
 
-        return await this.ordersRepository.find(findOptions);
+        const [data, total] = await this.ordersRepository.findAndCount(findOptions);
+
+        return {
+            data,
+            total,
+            page,
+            limit
+        };
     }
 
     async updateOrderItems(orderId: string, newItems: { ingredient_id: string; quantity_ordered: number }[]): Promise<Orders> {
