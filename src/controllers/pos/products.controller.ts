@@ -7,8 +7,10 @@ export class ProductsController {
 
     findAll = async (req: Request, res: Response) => {
         try {
-            const products = await this.productsService.findAll()
-            res.status(200).json(products)
+            const page = parseInt(req.query.page as string) || 1;
+            const limit = parseInt(req.query.limit as string) || 50;
+            const result = await this.productsService.findAll(page, limit)
+            res.status(200).json(result)
         } catch (error: any) {
             res.status(500).json({ error: error.message })
         }

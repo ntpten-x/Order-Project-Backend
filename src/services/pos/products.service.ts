@@ -7,9 +7,9 @@ export class ProductsService {
 
     constructor(private productsModel: ProductsModels) { }
 
-    async findAll(): Promise<Products[]> {
+    async findAll(page: number, limit: number): Promise<{ data: Products[], total: number, page: number, last_page: number }> {
         try {
-            return this.productsModel.findAll()
+            return this.productsModel.findAll(page, limit)
         } catch (error) {
             throw error
         }

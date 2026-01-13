@@ -4,13 +4,23 @@ import { Products } from "../../entity/pos/Products";
 export class ProductsModels {
     private productsRepository = AppDataSource.getRepository(Products)
 
-    async findAll(): Promise<Products[]> {
+    async findAll(page: number = 1, limit: number = 50): Promise<{ data: Products[], total: number, page: number, last_page: number }> {
         try {
-            return this.productsRepository.createQueryBuilder("products")
+            const skip = (page - 1) * limit;
+            const [data, total] = await this.productsRepository.createQueryBuilder("products")
                 .leftJoinAndSelect("products.category", "category")
                 .leftJoinAndSelect("products.unit", "unit")
                 .orderBy("products.create_date", "ASC")
-                .getMany()
+                .skip(skip)
+                .take(limit)
+                .getManyAndCount();
+
+            return {
+                data,
+                total,
+                page,
+                last_page: Math.ceil(total / limit)
+            }
         } catch (error) {
             throw error
         }
