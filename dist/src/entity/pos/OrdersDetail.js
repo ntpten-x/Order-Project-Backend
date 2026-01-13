@@ -29,7 +29,7 @@ __decorate([
     __metadata("design:type", OrdersItem_1.OrdersItem)
 ], OrdersDetail.prototype, "orders_item", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: "varchar", length: 255 }),
+    (0, typeorm_1.Column)({ type: "varchar", length: 255, default: "" }),
     __metadata("design:type", String)
 ], OrdersDetail.prototype, "detail_name", void 0);
 __decorate([

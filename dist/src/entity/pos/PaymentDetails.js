@@ -11,7 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PaymentDetails = void 0;
 const typeorm_1 = require("typeorm");
-const Payment_1 = require("./Payment");
+const Payments_1 = require("./Payments");
 let PaymentDetails = class PaymentDetails {
 };
 exports.PaymentDetails = PaymentDetails;
@@ -24,9 +24,9 @@ __decorate([
     __metadata("design:type", String)
 ], PaymentDetails.prototype, "payment_id", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)(() => Payment_1.Payments, (payment) => payment.payment_details),
+    (0, typeorm_1.ManyToOne)(() => Payments_1.Payments, (payment) => payment.payment_details),
     (0, typeorm_1.JoinColumn)({ name: "payment_id" }),
-    __metadata("design:type", Payment_1.Payments)
+    __metadata("design:type", Payments_1.Payments)
 ], PaymentDetails.prototype, "payment", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: "varchar", length: 100, nullable: true }),

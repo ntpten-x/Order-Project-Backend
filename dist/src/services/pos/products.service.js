@@ -16,10 +16,10 @@ class ProductsService {
         this.productsModel = productsModel;
         this.socketService = socket_service_1.SocketService.getInstance();
     }
-    findAll() {
+    findAll(page, limit) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.productsModel.findAll();
+                return this.productsModel.findAll(page, limit);
             }
             catch (error) {
                 throw error;

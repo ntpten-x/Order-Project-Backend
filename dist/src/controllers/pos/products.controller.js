@@ -15,8 +15,10 @@ class ProductsController {
         this.productsService = productsService;
         this.findAll = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {
-                const products = yield this.productsService.findAll();
-                res.status(200).json(products);
+                const page = parseInt(req.query.page) || 1;
+                const limit = parseInt(req.query.limit) || 50;
+                const result = yield this.productsService.findAll(page, limit);
+                res.status(200).json(result);
             }
             catch (error) {
                 res.status(500).json({ error: error.message });

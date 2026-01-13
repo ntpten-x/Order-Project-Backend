@@ -49,13 +49,18 @@ const Users_1 = require("../entity/Users");
 const Roles_1 = require("../entity/Roles");
 const IngredientsUnit_1 = require("../entity/stock/IngredientsUnit");
 const Ingredients_1 = require("../entity/stock/Ingredients");
-const Orders_1 = require("../entity/stock/Orders");
-const OrdersItem_1 = require("../entity/stock/OrdersItem");
-const OrdersDetail_1 = require("../entity/stock/OrdersDetail");
+const Orders_1 = require("../entity/pos/Orders");
+const OrdersItem_1 = require("../entity/pos/OrdersItem");
+const OrdersDetail_1 = require("../entity/pos/OrdersDetail");
 const Category_1 = require("../entity/pos/Category");
 const Products_1 = require("../entity/pos/Products");
 const ProductsUnit_1 = require("../entity/pos/ProductsUnit");
 const Tables_1 = require("../entity/pos/Tables");
+const Delivery_1 = require("../entity/pos/Delivery");
+const Discounts_1 = require("../entity/pos/Discounts");
+const Payments_1 = require("../entity/pos/Payments");
+const PaymentMethod_1 = require("../entity/pos/PaymentMethod");
+const PaymentDetails_1 = require("../entity/pos/PaymentDetails");
 const dotenv = __importStar(require("dotenv"));
 dotenv.config();
 exports.AppDataSource = new typeorm_1.DataSource({
@@ -65,7 +70,7 @@ exports.AppDataSource = new typeorm_1.DataSource({
     username: process.env.DATABASE_USER,
     password: process.env.DATABASE_PASSWORD,
     database: process.env.DATABASE_NAME,
-    entities: [Users_1.Users, Roles_1.Roles, IngredientsUnit_1.IngredientsUnit, Ingredients_1.Ingredients, Orders_1.Orders, OrdersItem_1.OrdersItem, OrdersDetail_1.OrdersDetail, Category_1.Category, Products_1.Products, ProductsUnit_1.ProductsUnit, Tables_1.Tables],
+    entities: [Users_1.Users, Roles_1.Roles, IngredientsUnit_1.IngredientsUnit, Ingredients_1.Ingredients, Orders_1.Orders, OrdersItem_1.OrdersItem, OrdersDetail_1.OrdersDetail, Category_1.Category, Products_1.Products, ProductsUnit_1.ProductsUnit, Tables_1.Tables, Delivery_1.Delivery, Discounts_1.Discounts, Payments_1.Payments, PaymentMethod_1.PaymentMethod, PaymentDetails_1.PaymentDetails],
     synchronize: true,
     logging: false,
     ssl: {

@@ -17,13 +17,26 @@ class ProductsModels {
         this.productsRepository = database_1.AppDataSource.getRepository(Products_1.Products);
     }
     findAll() {
-        return __awaiter(this, void 0, void 0, function* () {
+        return __awaiter(this, arguments, void 0, function* (page = 1, limit = 50) {
             try {
-                return this.productsRepository.createQueryBuilder("products")
-                    .leftJoinAndSelect("products.category", "category")
-                    .leftJoinAndSelect("products.unit", "unit")
-                    .orderBy("products.create_date", "ASC")
-                    .getMany();
+                const skip = (page - 1) * limit;
+                const [data, total] = yield this.productsRepository.findAndCount({
+                    relations: {
+                        category: true,
+                        unit: true
+                    },
+                    order: {
+                        create_date: "ASC"
+                    },
+                    skip: skip,
+                    take: limit
+                });
+                return {
+                    data,
+                    total,
+                    page,
+                    last_page: Math.ceil(total / limit) || 1
+                };
             }
             catch (error) {
                 throw error;

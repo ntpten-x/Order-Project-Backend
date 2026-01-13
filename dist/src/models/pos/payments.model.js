@@ -11,10 +11,10 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PaymentsModels = void 0;
 const database_1 = require("../../database/database");
-const Payment_1 = require("../../entity/pos/Payment");
+const Payments_1 = require("../../entity/pos/Payments");
 class PaymentsModels {
     constructor() {
-        this.paymentsRepository = database_1.AppDataSource.getRepository(Payment_1.Payments);
+        this.paymentsRepository = database_1.AppDataSource.getRepository(Payments_1.Payments);
     }
     findAll() {
         return __awaiter(this, void 0, void 0, function* () {

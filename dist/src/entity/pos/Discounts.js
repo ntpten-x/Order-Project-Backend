@@ -32,7 +32,7 @@ __decorate([
     __metadata("design:type", String)
 ], Discounts.prototype, "display_name", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: "text" }),
+    (0, typeorm_1.Column)({ type: "text", nullable: true }),
     __metadata("design:type", String)
 ], Discounts.prototype, "description", void 0);
 __decorate([

@@ -14,7 +14,7 @@ const typeorm_1 = require("typeorm");
 const Tables_1 = require("./Tables");
 const Delivery_1 = require("./Delivery");
 const OrdersItem_1 = require("./OrdersItem");
-const Payment_1 = require("./Payment");
+const Payments_1 = require("./Payments");
 const Discounts_1 = require("./Discounts");
 const Users_1 = require("../Users");
 var OrderType;
@@ -29,7 +29,11 @@ var OrderStatus;
     OrderStatus["Cooking"] = "Cooking";
     OrderStatus["Served"] = "Served";
     OrderStatus["Paid"] = "Paid";
-    OrderStatus["Cancelled"] = "Cancelled"; // ยกเลิกออเดอร์
+    OrderStatus["Cancelled"] = "Cancelled";
+    // Legacy values for migration
+    OrderStatus["pending"] = "pending";
+    OrderStatus["completed"] = "completed";
+    OrderStatus["cancelled"] = "cancelled";
 })(OrderStatus || (exports.OrderStatus = OrderStatus = {}));
 let Orders = class Orders {
 };
@@ -39,11 +43,11 @@ __decorate([
     __metadata("design:type", String)
 ], Orders.prototype, "id", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: "varchar", unique: true }),
+    (0, typeorm_1.Column)({ type: "varchar", unique: true, nullable: true }),
     __metadata("design:type", String)
 ], Orders.prototype, "order_no", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: "enum", enum: OrderType }),
+    (0, typeorm_1.Column)({ type: "enum", enum: OrderType, nullable: true }),
     __metadata("design:type", String)
 ], Orders.prototype, "order_type", void 0);
 __decorate([
@@ -127,7 +131,7 @@ __decorate([
     __metadata("design:type", Array)
 ], Orders.prototype, "items", void 0);
 __decorate([
-    (0, typeorm_1.OneToMany)(() => Payment_1.Payments, (payment) => payment.order),
+    (0, typeorm_1.OneToMany)(() => Payments_1.Payments, (payment) => payment.order),
     __metadata("design:type", Array)
 ], Orders.prototype, "payments", void 0);
 exports.Orders = Orders = __decorate([
