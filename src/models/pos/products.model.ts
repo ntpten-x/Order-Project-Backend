@@ -7,19 +7,23 @@ export class ProductsModels {
     async findAll(page: number = 1, limit: number = 50): Promise<{ data: Products[], total: number, page: number, last_page: number }> {
         try {
             const skip = (page - 1) * limit;
-            const [data, total] = await this.productsRepository.createQueryBuilder("products")
-                .leftJoinAndSelect("products.category", "category")
-                .leftJoinAndSelect("products.unit", "unit")
-                .orderBy("products.create_date", "ASC")
-                .skip(skip)
-                .take(limit)
-                .getManyAndCount();
+            const [data, total] = await this.productsRepository.findAndCount({
+                relations: {
+                    category: true,
+                    unit: true
+                },
+                order: {
+                    create_date: "ASC"
+                },
+                skip: skip,
+                take: limit
+            });
 
             return {
                 data,
                 total,
                 page,
-                last_page: Math.ceil(total / limit)
+                last_page: Math.ceil(total / limit) || 1
             }
         } catch (error) {
             throw error
