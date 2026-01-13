@@ -22,6 +22,15 @@ export class PaymentMethodController {
         }
     }
 
+    findByName = async (req: Request, res: Response) => {
+        try {
+            const paymentMethod = await this.paymentMethodService.findOneByName(req.params.name)
+            res.status(200).json(paymentMethod)
+        } catch (error: any) {
+            res.status(500).json({ error: error.message })
+        }
+    }
+
     create = async (req: Request, res: Response) => {
         try {
             const paymentMethod = await this.paymentMethodService.create(req.body)

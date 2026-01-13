@@ -10,6 +10,7 @@ const paymentDetailsModel = new paymentDetails_model_1.PaymentDetailsModels();
 const paymentDetailsService = new paymentDetails_service_1.PaymentDetailsService(paymentDetailsModel);
 const paymentDetailsController = new paymentDetails_controller_1.PaymentDetailsController(paymentDetailsService);
 router.use(auth_middleware_1.authenticateToken);
+router.use((0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]));
 router.get("/", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), paymentDetailsController.findAll);
 router.get("/:id", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), paymentDetailsController.findOne);
 router.post("/", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), paymentDetailsController.create);

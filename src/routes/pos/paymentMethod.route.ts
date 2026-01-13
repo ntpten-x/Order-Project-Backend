@@ -17,6 +17,7 @@ router.use(authorizeRole(["Admin", "Manager", "Employee"]))
 
 router.get("/", authorizeRole(["Admin", "Manager", "Employee"]), paymentMethodController.findAll)
 router.get("/:id", authorizeRole(["Admin", "Manager", "Employee"]), paymentMethodController.findOne)
+router.get("/getByName/:name", authorizeRole(["Admin", "Manager", "Employee"]), paymentMethodController.findByName)
 
 router.post("/", authorizeRole(["Admin"]), paymentMethodController.create)
 router.put("/:id", authorizeRole(["Admin"]), paymentMethodController.update)

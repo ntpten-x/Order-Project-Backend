@@ -10,6 +10,7 @@ const discountsModel = new discounts_model_1.DiscountsModels();
 const discountsService = new discounts_service_1.DiscountsService(discountsModel);
 const discountsController = new discounts_controller_1.DiscountsController(discountsService);
 router.use(auth_middleware_1.authenticateToken);
+router.use((0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]));
 // Authorization:
 // Admin/Manager can Manage
 // Employee can Read

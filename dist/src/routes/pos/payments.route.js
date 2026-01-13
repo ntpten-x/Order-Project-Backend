@@ -10,6 +10,7 @@ const paymentsModel = new payments_model_1.PaymentsModels();
 const paymentsService = new payments_service_1.PaymentsService(paymentsModel);
 const paymentsController = new payments_controller_1.PaymentsController(paymentsService);
 router.use(auth_middleware_1.authenticateToken);
+router.use((0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]));
 // Authorization: 
 // Admin/Manager manage, Employee usually creates payments.
 // Allowing Employee to Create/Read/Update (if needed) but maybe restrict Delete to Admin/Manager?

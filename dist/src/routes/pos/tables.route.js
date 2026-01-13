@@ -10,6 +10,7 @@ const tablesModel = new tables_model_1.TablesModels();
 const tablesService = new tables_service_1.TablesService(tablesModel);
 const tablesController = new tables_controller_1.TablesController(tablesService);
 router.use(auth_middleware_1.authenticateToken);
+router.use((0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]));
 // Authorization: Assuming all authenticated users can view/update status, 
 // but creation/deletion might be restricted. 
 // For now, I will follow the pattern in products.route.ts

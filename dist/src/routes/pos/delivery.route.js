@@ -10,6 +10,7 @@ const deliveryModel = new delivery_model_1.DeliveryModels();
 const deliveryService = new delivery_service_1.DeliveryService(deliveryModel);
 const deliveryController = new delivery_controller_1.DeliveryController(deliveryService);
 router.use(auth_middleware_1.authenticateToken);
+router.use((0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]));
 // Authorization: 
 // Admin/Manager can Manage
 // Employee can View

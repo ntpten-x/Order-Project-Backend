@@ -31,6 +31,15 @@ class PaymentMethodController {
                 res.status(500).json({ error: error.message });
             }
         });
+        this.findByName = (req, res) => __awaiter(this, void 0, void 0, function* () {
+            try {
+                const paymentMethod = yield this.paymentMethodService.findOneByName(req.params.name);
+                res.status(200).json(paymentMethod);
+            }
+            catch (error) {
+                res.status(500).json({ error: error.message });
+            }
+        });
         this.create = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {
                 const paymentMethod = yield this.paymentMethodService.create(req.body);

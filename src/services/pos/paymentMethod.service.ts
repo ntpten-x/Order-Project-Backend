@@ -23,6 +23,14 @@ export class PaymentMethodService {
         }
     }
 
+    async findOneByName(payment_method_name: string): Promise<PaymentMethod | null> {
+        try {
+            return this.paymentMethodModel.findOneByName(payment_method_name)
+        } catch (error) {
+            throw error
+        }
+    }
+
     async create(paymentMethod: PaymentMethod): Promise<PaymentMethod> {
         try {
             if (!paymentMethod.payment_method_name) {

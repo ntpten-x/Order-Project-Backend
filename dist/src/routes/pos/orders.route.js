@@ -10,6 +10,7 @@ const ordersModel = new orders_model_1.OrdersModels();
 const ordersService = new orders_service_1.OrdersService(ordersModel);
 const ordersController = new orders_controller_1.OrdersController(ordersService);
 router.use(auth_middleware_1.authenticateToken);
+router.use((0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]));
 router.get("/", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), ordersController.findAll);
 router.get("/:id", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), ordersController.findOne);
 router.post("/", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), ordersController.create);

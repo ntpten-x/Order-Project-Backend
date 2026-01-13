@@ -36,6 +36,16 @@ class PaymentMethodService {
             }
         });
     }
+    findOneByName(payment_method_name) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                return this.paymentMethodModel.findOneByName(payment_method_name);
+            }
+            catch (error) {
+                throw error;
+            }
+        });
+    }
     create(paymentMethod) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
