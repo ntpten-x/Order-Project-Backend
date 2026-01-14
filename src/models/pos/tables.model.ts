@@ -4,13 +4,20 @@ import { Tables } from "../../entity/pos/Tables";
 export class TablesModels {
     private tablesRepository = AppDataSource.getRepository(Tables)
 
-    async findAll(): Promise<Tables[]> {
+    async findAll(): Promise<any[]> {
         try {
-            return this.tablesRepository.find({
-                order: {
-                    create_date: "ASC"
-                }
-            })
+            return this.tablesRepository.createQueryBuilder("tables")
+                .leftJoinAndMapOne("tables.active_order", "Orders", "orders", "orders.table_id = tables.id AND orders.status NOT IN (:...statuses)", { statuses: ['Paid', 'Cancelled', 'completed'] }) // Exclude 'completed' too just in case
+                .orderBy("tables.create_date", "ASC")
+                .getMany()
+                .then(tables => tables.map((t: any) => {
+                    const activeOrder = t.active_order;
+                    return {
+                        ...t,
+                        status: activeOrder ? "Unavailable" : t.status, // Force Unavailable if active order exists
+                        active_order_status: activeOrder?.status || null
+                    };
+                }));
         } catch (error) {
             throw error
         }

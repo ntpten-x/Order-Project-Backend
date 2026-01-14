@@ -28,6 +28,7 @@ import paymentDetailsPosRouter from "./src/routes/pos/paymentDetails.route";
 import ordersPosRouter from "./src/routes/pos/orders.route";
 import ordersItemPosRouter from "./src/routes/pos/ordersItem.route";
 import ordersDetailPosRouter from "./src/routes/pos/ordersDetail.route";
+import posHistoryPosRouter from "./src/routes/pos/posHistory.route";
 
 const app = express();
 const httpServer = createServer(app); // Wrap express with HTTP server
@@ -133,6 +134,7 @@ app.use("/pos/paymentDetails", paymentDetailsPosRouter);
 app.use("/pos/orders", ordersPosRouter);
 app.use("/pos/ordersItem", ordersItemPosRouter);
 app.use("/pos/ordersDetail", ordersDetailPosRouter);
+app.use("/pos/history", posHistoryPosRouter);
 
 connectDatabase().then(() => {
     httpServer.listen(port, () => { // Listen on httpServer

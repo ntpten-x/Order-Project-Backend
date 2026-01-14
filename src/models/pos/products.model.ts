@@ -4,14 +4,19 @@ import { Products } from "../../entity/pos/Products";
 export class ProductsModels {
     private productsRepository = AppDataSource.getRepository(Products)
 
-    async findAll(page: number = 1, limit: number = 50): Promise<{ data: Products[], total: number, page: number, last_page: number }> {
+    async findAll(page: number = 1, limit: number = 50, category_id?: string): Promise<{ data: Products[], total: number, page: number, last_page: number }> {
         try {
             const skip = (page - 1) * limit;
+
+            const where: any = {};
+            if (category_id) where.category_id = category_id;
+
             const [data, total] = await this.productsRepository.findAndCount({
                 relations: {
                     category: true,
                     unit: true
                 },
+                where,
                 order: {
                     create_date: "ASC"
                 },

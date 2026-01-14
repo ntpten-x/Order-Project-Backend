@@ -1,4 +1,3 @@
-
 import { Column, Entity, PrimaryGeneratedColumn, ManyToOne, JoinColumn, OneToMany, Index } from "typeorm";
 import { Tables } from "./Tables";
 import { Delivery } from "./Delivery";
@@ -6,25 +5,7 @@ import { OrdersItem } from "./OrdersItem";
 import { Payments } from "./Payments";
 import { Discounts } from "./Discounts";
 import { Users } from "../Users";
-
-export enum OrderType {
-    DineIn = "DineIn",      // ทานที่ร้าน
-    TakeAway = "TakeAway",  // สั่งกลับบ้าน
-    Delivery = "Delivery"   // เดลิเวอรี่
-}
-
-export enum OrderStatus {
-    Pending = "Pending",    // รอรับออเดอร์
-    Cooking = "Cooking",    // กำลังปรุงอาหาร
-    Served = "Served",      // เสิร์ฟแล้ว
-    Paid = "Paid",          // ชำระเงินแล้ว
-    Cancelled = "Cancelled", // ยกเลิกออเดอร์
-
-    // Legacy values for migration
-    pending = "pending",
-    completed = "completed",
-    cancelled = "cancelled"
-}
+import { OrderType, OrderStatus } from "./OrderEnums";
 
 @Entity()
 @Index(["create_date"]) // Index for sorting/filtering by date

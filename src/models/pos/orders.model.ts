@@ -2,19 +2,22 @@ import { AppDataSource } from "../../database/database";
 import { Orders } from "../../entity/pos/Orders";
 import { OrdersItem } from "../../entity/pos/OrdersItem";
 import { OrdersDetail } from "../../entity/pos/OrdersDetail";
-import { EntityManager } from "typeorm";
+import { EntityManager, In } from "typeorm";
 
 export class OrdersModels {
     private ordersRepository = AppDataSource.getRepository(Orders)
 
-    async findAll(page: number = 1, limit: number = 50): Promise<{ data: Orders[], total: number, page: number, limit: number }> {
+    async findAll(page: number = 1, limit: number = 50, statuses?: string[]): Promise<{ data: Orders[], total: number, page: number, limit: number }> {
         try {
             const skip = (page - 1) * limit;
+            const whereClause = statuses && statuses.length > 0 ? { status: In(statuses) } : {};
+
             const [data, total] = await this.ordersRepository.findAndCount({
+                where: whereClause,
                 order: {
                     create_date: "DESC"
                 },
-                relations: ["table", "delivery", "discount", "created_by"],
+                relations: ["table", "delivery", "discount", "created_by", "items", "items.product", "items.product.category"],
                 take: limit,
                 skip: skip
             })
@@ -30,11 +33,41 @@ export class OrdersModels {
         }
     }
 
+    async findAllItems(status?: any): Promise<OrdersItem[]> {
+        try {
+            // Need simple find with relations
+            const where: any = {};
+            if (status) where.status = status;
+
+            return await AppDataSource.getRepository(OrdersItem).find({
+                where,
+                relations: ["product", "order", "order.table"], // order.table for monitoring
+                order: {
+                    // order by create date? OrdersItem doesn't have create_date, use order's
+                    order: {
+                        create_date: 'ASC'
+                    }
+                }
+            })
+        } catch (error) {
+            throw error
+        }
+    }
+
     async findOne(id: string): Promise<Orders | null> {
         try {
             return this.ordersRepository.findOne({
                 where: { id },
-                relations: ["table", "delivery", "discount", "created_by", "items", "items.product", "items.details", "payments"]
+                relations: [
+                    "table",
+                    "delivery",
+                    "discount",
+                    "created_by",
+                    "items",
+                    "items.product",
+                    "items.details",
+                    "payments"
+                ]
             })
         } catch (error) {
             throw error
@@ -116,5 +149,41 @@ export class OrdersModels {
         } catch (error) {
             throw error
         }
+    }
+
+    async updateItemStatus(itemId: string, status: any): Promise<void> {
+        try {
+            await AppDataSource.getRepository(OrdersItem).update(itemId, { status })
+        } catch (error) {
+            throw error
+        }
+    }
+
+    async findItemsByOrderId(orderId: string): Promise<OrdersItem[]> {
+        return await AppDataSource.getRepository(OrdersItem).find({ where: { order_id: orderId } });
+    }
+
+    async updateStatus(orderId: string, status: any): Promise<void> {
+        await this.ordersRepository.update(orderId, { status });
+    }
+
+    async updateAllItemsStatus(orderId: string, status: any): Promise<void> {
+        await AppDataSource.getRepository(OrdersItem).update({ order_id: orderId }, { status });
+    }
+
+    async createItem(data: OrdersItem): Promise<OrdersItem> {
+        return await AppDataSource.getRepository(OrdersItem).save(data);
+    }
+
+    async updateItem(id: string, data: Partial<OrdersItem>): Promise<void> {
+        await AppDataSource.getRepository(OrdersItem).update(id, data);
+    }
+
+    async deleteItem(id: string): Promise<void> {
+        await AppDataSource.getRepository(OrdersItem).delete(id);
+    }
+
+    async findItemById(id: string): Promise<OrdersItem | null> {
+        return await AppDataSource.getRepository(OrdersItem).findOne({ where: { id }, relations: ["product"] });
     }
 }

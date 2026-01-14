@@ -9,7 +9,8 @@ export class ProductsController {
         try {
             const page = parseInt(req.query.page as string) || 1;
             const limit = parseInt(req.query.limit as string) || 50;
-            const result = await this.productsService.findAll(page, limit)
+            const category_id = req.query.category_id as string;
+            const result = await this.productsService.findAll(page, limit, category_id)
             res.status(200).json(result)
         } catch (error: any) {
             res.status(500).json({ error: error.message })

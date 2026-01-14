@@ -16,6 +16,7 @@ import { Discounts } from "../entity/pos/Discounts"
 import { Payments } from "../entity/pos/Payments"
 import { PaymentMethod } from "../entity/pos/PaymentMethod"
 import { PaymentDetails } from "../entity/pos/PaymentDetails"
+import { PosHistory } from "../entity/pos/PosHistory"
 import * as dotenv from "dotenv"
 dotenv.config()
 export const AppDataSource = new DataSource({
@@ -25,7 +26,7 @@ export const AppDataSource = new DataSource({
     username: process.env.DATABASE_USER,
     password: process.env.DATABASE_PASSWORD,
     database: process.env.DATABASE_NAME,
-    entities: [Users, Roles, IngredientsUnit, Ingredients, Orders, OrdersItem, OrdersDetail, Category, Products, ProductsUnit, Tables, Delivery, Discounts, Payments, PaymentMethod, PaymentDetails],
+    entities: [Users, Roles, IngredientsUnit, Ingredients, Orders, OrdersItem, OrdersDetail, Category, Products, ProductsUnit, Tables, Delivery, Discounts, Payments, PaymentMethod, PaymentDetails, PosHistory],
     synchronize: true,
     logging: false,
     ssl: {

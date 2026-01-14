@@ -1,5 +1,6 @@
 import { Column, Entity, PrimaryGeneratedColumn, ManyToOne, JoinColumn, OneToMany } from "typeorm";
 import { Orders } from "./Orders";
+import { OrderStatus } from "./OrderEnums";
 import { Products } from "./Products";
 import { OrdersDetail } from "./OrdersDetail";
 
@@ -36,6 +37,9 @@ export class OrdersItem {
 
     @Column({ type: "text", nullable: true })
     notes?: string; // หมายเหตุเพิ่มเติม (เช่น ไม่ใส่ผัก, เผ็ดน้อย)
+
+    @Column({ type: "enum", enum: OrderStatus, default: OrderStatus.Pending })
+    status!: OrderStatus; // สถานะของรายการ (Pending, Cooking, Served, Cancelled)
 
     @OneToMany(() => OrdersDetail, (detail) => detail.orders_item)
     details!: OrdersDetail[]; // รายละเอียดเพิ่มเติม (Modifiers) เช่น ท็อปปิ้ง
