@@ -9,7 +9,14 @@ export interface AuthRequest extends Request {
 
 export const authenticateToken = async (req: AuthRequest, res: Response, next: NextFunction) => {
     // 1. Get token from cookies
-    const token = req.cookies?.token;
+    let token = req.cookies?.token;
+
+    if (!token && req.headers.authorization) {
+        const authHeader = req.headers.authorization;
+        if (authHeader.startsWith("Bearer ")) {
+            token = authHeader.substring(7);
+        }
+    }
 
     if (!token) {
         // Allow public access or just fail? Usually middleware blocks.
