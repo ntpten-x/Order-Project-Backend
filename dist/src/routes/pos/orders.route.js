@@ -12,8 +12,14 @@ const ordersController = new orders_controller_1.OrdersController(ordersService)
 router.use(auth_middleware_1.authenticateToken);
 router.use((0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]));
 router.get("/", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), ordersController.findAll);
+router.get("/items", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), ordersController.findAllItems);
 router.get("/:id", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), ordersController.findOne);
 router.post("/", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), ordersController.create);
 router.put("/:id", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), ordersController.update);
 router.delete("/:id", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager"]), ordersController.delete);
+router.patch("/items/:id/status", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), ordersController.updateItemStatus);
+// Item Management Routes
+router.post("/:id/items", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), ordersController.addItem);
+router.put("/items/:itemId", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), ordersController.updateItem);
+router.delete("/items/:itemId", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager"]), ordersController.deleteItem);
 exports.default = router;

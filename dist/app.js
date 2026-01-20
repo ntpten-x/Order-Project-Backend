@@ -33,6 +33,9 @@ const paymentDetails_route_1 = __importDefault(require("./src/routes/pos/payment
 const orders_route_2 = __importDefault(require("./src/routes/pos/orders.route"));
 const ordersItem_route_1 = __importDefault(require("./src/routes/pos/ordersItem.route"));
 const ordersDetail_route_2 = __importDefault(require("./src/routes/pos/ordersDetail.route"));
+const shifts_route_1 = __importDefault(require("./src/routes/pos/shifts.route"));
+const error_middleware_1 = require("./src/middleware/error.middleware");
+const AppError_1 = require("./src/utils/AppError");
 const app = (0, express_1.default)();
 const httpServer = (0, http_1.createServer)(app); // Wrap express with HTTP server
 const port = process.env.PORT || 3000;
@@ -123,6 +126,13 @@ app.use("/pos/paymentDetails", paymentDetails_route_1.default);
 app.use("/pos/orders", orders_route_2.default);
 app.use("/pos/ordersItem", ordersItem_route_1.default);
 app.use("/pos/ordersDetail", ordersDetail_route_2.default);
+app.use("/pos/shifts", shifts_route_1.default);
+// Handle Unhandled Routes
+app.use((req, res, next) => {
+    next(new AppError_1.AppError(`Can't find ${req.originalUrl} on this server!`, 404));
+});
+// Global Error Handler
+app.use(error_middleware_1.globalErrorHandler);
 (0, database_1.connectDatabase)().then(() => {
     httpServer.listen(port, () => {
         console.log(`Server is running on http://localhost:${port}`);

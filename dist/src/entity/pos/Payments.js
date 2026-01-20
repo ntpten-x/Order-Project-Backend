@@ -14,6 +14,7 @@ const typeorm_1 = require("typeorm");
 const Orders_1 = require("./Orders");
 const PaymentMethod_1 = require("./PaymentMethod");
 const PaymentDetails_1 = require("./PaymentDetails");
+const Shifts_1 = require("./Shifts");
 var PaymentStatus;
 (function (PaymentStatus) {
     PaymentStatus["Pending"] = "Pending";
@@ -36,6 +37,15 @@ __decorate([
     (0, typeorm_1.JoinColumn)({ name: "order_id" }),
     __metadata("design:type", Orders_1.Orders)
 ], Payments.prototype, "order", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: "shift_id", type: "uuid", nullable: true }),
+    __metadata("design:type", String)
+], Payments.prototype, "shift_id", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)(() => Shifts_1.Shifts, (shift) => shift.payments),
+    (0, typeorm_1.JoinColumn)({ name: "shift_id" }),
+    __metadata("design:type", Shifts_1.Shifts)
+], Payments.prototype, "shift", void 0);
 __decorate([
     (0, typeorm_1.Column)({ name: "payment_method_id", type: "uuid" }),
     __metadata("design:type", String)

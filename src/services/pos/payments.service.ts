@@ -1,6 +1,8 @@
 import { PaymentsModels } from "../../models/pos/payments.model";
 import { SocketService } from "../socket.service";
 import { Payments } from "../../entity/pos/Payments";
+import { ShiftsService } from "./shifts.service";
+import { AppError } from "../../utils/AppError";
 
 export class PaymentsService {
     private socketService = SocketService.getInstance();
@@ -23,7 +25,9 @@ export class PaymentsService {
         }
     }
 
-    async create(payments: Payments): Promise<Payments> {
+    private shiftsService = new ShiftsService();
+
+    async create(payments: Payments, userId: string): Promise<Payments> {
         try {
             if (!payments.order_id) {
                 throw new Error("กรุณาระบุรหัสออเดอร์")
@@ -34,6 +38,13 @@ export class PaymentsService {
             if (payments.amount <= 0) {
                 throw new Error("ยอดเงินที่ชำระต้องมากกว่า 0")
             }
+
+            // [NEW] Link to Active Shift
+            const activeShift = await this.shiftsService.getCurrentShift(userId);
+            if (!activeShift) {
+                throw new AppError("กรุณาเปิดกะก่อนทำรายการชำระเงิน (Open Shift Required)", 400);
+            }
+            payments.shift_id = activeShift.id;
 
             const createdPayment = await this.paymentsModel.create(payments)
 

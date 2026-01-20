@@ -12,6 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.OrdersItem = void 0;
 const typeorm_1 = require("typeorm");
 const Orders_1 = require("./Orders");
+const OrderEnums_1 = require("./OrderEnums");
 const Products_1 = require("./Products");
 const OrdersDetail_1 = require("./OrdersDetail");
 let OrdersItem = class OrdersItem {
@@ -59,6 +60,10 @@ __decorate([
     (0, typeorm_1.Column)({ type: "text", nullable: true }),
     __metadata("design:type", String)
 ], OrdersItem.prototype, "notes", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: "enum", enum: OrderEnums_1.OrderStatus, default: OrderEnums_1.OrderStatus.Pending }),
+    __metadata("design:type", String)
+], OrdersItem.prototype, "status", void 0);
 __decorate([
     (0, typeorm_1.OneToMany)(() => OrdersDetail_1.OrdersDetail, (detail) => detail.orders_item),
     __metadata("design:type", Array)

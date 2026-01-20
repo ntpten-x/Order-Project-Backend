@@ -14,19 +14,22 @@ const database_1 = require("../../database/database");
 const Orders_1 = require("../../entity/pos/Orders");
 const OrdersItem_1 = require("../../entity/pos/OrdersItem");
 const OrdersDetail_1 = require("../../entity/pos/OrdersDetail");
+const typeorm_1 = require("typeorm");
 class OrdersModels {
     constructor() {
         this.ordersRepository = database_1.AppDataSource.getRepository(Orders_1.Orders);
     }
     findAll() {
-        return __awaiter(this, arguments, void 0, function* (page = 1, limit = 50) {
+        return __awaiter(this, arguments, void 0, function* (page = 1, limit = 50, statuses) {
             try {
                 const skip = (page - 1) * limit;
+                const whereClause = statuses && statuses.length > 0 ? { status: (0, typeorm_1.In)(statuses) } : {};
                 const [data, total] = yield this.ordersRepository.findAndCount({
+                    where: whereClause,
                     order: {
                         create_date: "DESC"
                     },
-                    relations: ["table", "delivery", "discount", "created_by"],
+                    relations: ["table", "delivery", "discount", "created_by", "items", "items.product", "items.product.category"],
                     take: limit,
                     skip: skip
                 });
@@ -42,12 +45,44 @@ class OrdersModels {
             }
         });
     }
+    findAllItems(status) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                // Need simple find with relations
+                const where = {};
+                if (status)
+                    where.status = status;
+                return yield database_1.AppDataSource.getRepository(OrdersItem_1.OrdersItem).find({
+                    where,
+                    relations: ["product", "order", "order.table"], // order.table for monitoring
+                    order: {
+                        // order by create date? OrdersItem doesn't have create_date, use order's
+                        order: {
+                            create_date: 'ASC'
+                        }
+                    }
+                });
+            }
+            catch (error) {
+                throw error;
+            }
+        });
+    }
     findOne(id) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 return this.ordersRepository.findOne({
                     where: { id },
-                    relations: ["table", "delivery", "discount", "created_by", "items", "items.product", "items.details", "payments"]
+                    relations: [
+                        "table",
+                        "delivery",
+                        "discount",
+                        "created_by",
+                        "items",
+                        "items.product",
+                        "items.details",
+                        "payments"
+                    ]
                 });
             }
             catch (error) {
@@ -68,10 +103,11 @@ class OrdersModels {
             }
         });
     }
-    create(data) {
+    create(data, manager) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.ordersRepository.save(data);
+                const repo = manager ? manager.getRepository(Orders_1.Orders) : this.ordersRepository;
+                return repo.save(data);
             }
             catch (error) {
                 throw error;
@@ -111,11 +147,24 @@ class OrdersModels {
             }));
         });
     }
-    update(id, data) {
+    update(id, data, manager) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                yield this.ordersRepository.update(id, data);
-                const updatedOrder = yield this.findOne(id);
+                const repo = manager ? manager.getRepository(Orders_1.Orders) : this.ordersRepository;
+                yield repo.update(id, data);
+                const updatedOrder = yield repo.findOne({
+                    where: { id },
+                    relations: [
+                        "table",
+                        "delivery",
+                        "discount",
+                        "created_by",
+                        "items",
+                        "items.product",
+                        "items.details",
+                        "payments"
+                    ]
+                });
                 if (!updatedOrder) {
                     throw new Error("ไม่พบข้อมูลออเดอร์ที่ต้องการค้นหา");
                 }
@@ -126,14 +175,68 @@ class OrdersModels {
             }
         });
     }
-    delete(id) {
+    delete(id, manager) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                yield this.ordersRepository.delete(id);
+                const repo = manager ? manager.getRepository(Orders_1.Orders) : this.ordersRepository;
+                yield repo.delete(id);
             }
             catch (error) {
                 throw error;
             }
+        });
+    }
+    updateItemStatus(itemId, status, manager) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const repo = manager ? manager.getRepository(OrdersItem_1.OrdersItem) : database_1.AppDataSource.getRepository(OrdersItem_1.OrdersItem);
+                yield repo.update(itemId, { status });
+            }
+            catch (error) {
+                throw error;
+            }
+        });
+    }
+    findItemsByOrderId(orderId, manager) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const repo = manager ? manager.getRepository(OrdersItem_1.OrdersItem) : database_1.AppDataSource.getRepository(OrdersItem_1.OrdersItem);
+            return yield repo.find({ where: { order_id: orderId } });
+        });
+    }
+    updateStatus(orderId, status, manager) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const repo = manager ? manager.getRepository(Orders_1.Orders) : this.ordersRepository;
+            yield repo.update(orderId, { status });
+        });
+    }
+    updateAllItemsStatus(orderId, status, manager) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const repo = manager ? manager.getRepository(OrdersItem_1.OrdersItem) : database_1.AppDataSource.getRepository(OrdersItem_1.OrdersItem);
+            yield repo.update({ order_id: orderId }, { status });
+        });
+    }
+    createItem(data, manager) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const repo = manager ? manager.getRepository(OrdersItem_1.OrdersItem) : database_1.AppDataSource.getRepository(OrdersItem_1.OrdersItem);
+            return yield repo.save(data);
+        });
+    }
+    updateItem(id, data, manager) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const repo = manager ? manager.getRepository(OrdersItem_1.OrdersItem) : database_1.AppDataSource.getRepository(OrdersItem_1.OrdersItem);
+            yield repo.update(id, data);
+        });
+    }
+    deleteItem(id, manager) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const repo = manager ? manager.getRepository(OrdersItem_1.OrdersItem) : database_1.AppDataSource.getRepository(OrdersItem_1.OrdersItem);
+            yield repo.delete(id);
+        });
+    }
+    findItemById(id, manager) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const repo = manager ? manager.getRepository(OrdersItem_1.OrdersItem) : database_1.AppDataSource.getRepository(OrdersItem_1.OrdersItem);
+            return yield repo.findOne({ where: { id }, relations: ["product"] });
         });
     }
 }

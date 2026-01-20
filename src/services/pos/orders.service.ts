@@ -5,6 +5,8 @@ import { AppDataSource } from "../../database/database";
 import { Tables, TableStatus } from "../../entity/pos/Tables";
 import { OrdersItem } from "../../entity/pos/OrdersItem";
 import { OrderStatus } from "../../entity/pos/OrderEnums";
+import { EntityManager } from "typeorm";
+import { PriceCalculatorService } from "./priceCalculator.service";
 
 export class OrdersService {
     private socketService = SocketService.getInstance();
@@ -36,33 +38,53 @@ export class OrdersService {
     }
 
     async create(orders: Orders): Promise<Orders> {
-        try {
-            if (!orders.order_no) {
-                throw new Error("กรุณาระบุเลขที่ออเดอร์")
-            }
-
-            const existingOrder = await this.ordersModel.findOneByOrderNo(orders.order_no)
-            if (existingOrder) {
-                throw new Error("เลขที่ออเดอร์นี้มีอยู่ในระบบแล้ว")
-            }
-
-            const createdOrder = await this.ordersModel.create(orders)
-            this.socketService.emit('orders:create', createdOrder)
-
-            // Update Table Status if DineIn
-            if (createdOrder.table_id) {
-                const tablesRepo = AppDataSource.getRepository(Tables)
-                await tablesRepo.update(createdOrder.table_id, { status: TableStatus.Unavailable })
-                const updatedTable = await tablesRepo.findOneBy({ id: createdOrder.table_id })
-                if (updatedTable) {
-                    this.socketService.emit('tables:update', updatedTable)
+        return await AppDataSource.transaction(async (manager) => {
+            try {
+                if (!orders.order_no) {
+                    throw new Error("กรุณาระบุเลขที่ออเดอร์")
                 }
-            }
 
+                const existingOrder = await this.ordersModel.findOneByOrderNo(orders.order_no)
+                if (existingOrder) {
+                    throw new Error("เลขที่ออเดอร์นี้มีอยู่ในระบบแล้ว")
+                }
+
+                // Pass manager to create which uses it for repository
+                const createdOrder = await this.ordersModel.create(orders, manager)
+
+                // Emitting socket inside transaction is risky if tx fails later, but here it's fine as we are near end.
+                // Ideally, emit AFTER tx commit.
+                // But for now, let's keep logic similar but in tx.
+
+                // Update Table Status if DineIn
+                if (createdOrder.table_id) {
+                    const tablesRepo = manager.getRepository(Tables)
+                    await tablesRepo.update(createdOrder.table_id, { status: TableStatus.Unavailable })
+                    const updatedTable = await tablesRepo.findOneBy({ id: createdOrder.table_id })
+                    /* 
+                       Note: Socket emission is side-effect. If tx causes rollback, UI might have received update.
+                       Correct way is to return data and emit in controller, or use 'afterTransaction' hook.
+                       For this refactor, I will emit AFTER the transaction block returns.
+                    */
+                }
+                return createdOrder;
+            } catch (error) {
+                throw error
+            }
+        }).then((createdOrder) => {
+            // Post-transaction Side Effects
+            this.socketService.emit('orders:create', createdOrder)
+            if (createdOrder.table_id) {
+                // We need to fetch table to emit? Or just trust it updated.
+                // Let's just re-fetch light or emit structure.
+                // Actually, reading from DB here is safe as tx committed.
+                const tablesRepo = AppDataSource.getRepository(Tables)
+                tablesRepo.findOneBy({ id: createdOrder.table_id }).then(t => {
+                    if (t) this.socketService.emit('tables:update', t)
+                })
+            }
             return createdOrder
-        } catch (error) {
-            throw error
-        }
+        })
     }
 
     async createFullOrder(data: any): Promise<Orders> {
@@ -128,131 +150,118 @@ export class OrdersService {
     async updateItemStatus(itemId: string, status: string): Promise<void> {
         try {
             await this.ordersModel.updateItemStatus(itemId, status)
-
-            // Check logic: If Served, check if all are served
-            // REMOVED AUTO UPDATE as per user request (Manual Confirmation only)
-            /*
-            const itemRepo = AppDataSource.getRepository(OrdersItem);
-            const item = await itemRepo.findOne({ where: { id: itemId } });
-
-            if (item && item.order_id) {
-                const orderId = item.order_id;
-                const orderItems = await this.ordersModel.findItemsByOrderId(orderId);
-
-                // Check if all items are Served or Cancelled
-                const allServed = orderItems.every(i => i.status === OrderStatus.Served || i.status === OrderStatus.Cancelled);
-
-                if (allServed) {
-                    // Update Order Status to WaitingForPayment
-                    await this.ordersModel.updateStatus(orderId, OrderStatus.WaitingForPayment);
-                    // Update All Items to WaitingForPayment
-                    await this.ordersModel.updateAllItemsStatus(orderId, OrderStatus.WaitingForPayment);
-
-                    // Emit socket
-                    const updatedOrder = await this.ordersModel.findOne(orderId);
-                    if (updatedOrder) {
-                        this.socketService.emit('orders:update', updatedOrder);
-                    }
-                }
-            }
-            */
-
         } catch (error) {
             throw error
         }
     }
 
     async addItem(orderId: string, itemData: any): Promise<Orders> {
-        try {
-            const item = new OrdersItem();
-            item.order_id = orderId;
-            item.product_id = itemData.product_id;
-            item.quantity = itemData.quantity;
-            item.price = itemData.price;
-            item.discount_amount = itemData.discount_amount || 0;
-            item.total_price = (item.price * item.quantity) - item.discount_amount; // Simple calc
-            item.notes = itemData.notes;
-            item.status = OrderStatus.Pending; // Default new item
+        return await AppDataSource.transaction(async (manager) => {
+            try {
+                const item = new OrdersItem();
+                item.order_id = orderId;
+                item.product_id = itemData.product_id;
+                item.quantity = itemData.quantity;
+                item.price = itemData.price;
+                item.discount_amount = itemData.discount_amount || 0;
+                item.total_price = (item.price * item.quantity) - item.discount_amount;
+                item.notes = itemData.notes;
+                item.status = OrderStatus.Pending;
 
-            await this.ordersModel.createItem(item);
+                await this.ordersModel.createItem(item, manager);
 
-            // Recalculate
-            await this.recalculateOrderTotal(orderId);
+                await this.recalculateOrderTotal(orderId, manager);
 
-            const updatedOrder = await this.ordersModel.findOne(orderId);
+                const updatedOrder = await this.ordersModel.findOne(orderId);
+                return updatedOrder!;
+            } catch (error) {
+                throw error;
+            }
+        }).then((updatedOrder) => {
             if (updatedOrder) this.socketService.emit('orders:update', updatedOrder);
             return updatedOrder!;
-        } catch (error) {
-            throw error;
-        }
+        })
     }
 
     async updateItemDetails(itemId: string, data: { quantity?: number, notes?: string }): Promise<Orders> {
-        try {
-            const item = await this.ordersModel.findItemById(itemId);
-            if (!item) throw new Error("Item not found");
+        return await AppDataSource.transaction(async (manager) => {
+            try {
+                const item = await this.ordersModel.findItemById(itemId, manager);
+                if (!item) throw new Error("Item not found");
 
-            if (data.quantity !== undefined) {
-                item.quantity = data.quantity;
-                item.total_price = (Number(item.price) * item.quantity) - Number(item.discount_amount || 0);
+                if (data.quantity !== undefined) {
+                    item.quantity = data.quantity;
+                    item.total_price = (Number(item.price) * item.quantity) - Number(item.discount_amount || 0);
+                }
+                if (data.notes !== undefined) {
+                    item.notes = data.notes;
+                }
+
+                await this.ordersModel.updateItem(itemId, {
+                    quantity: item.quantity,
+                    total_price: item.total_price,
+                    notes: item.notes
+                }, manager);
+
+                await this.recalculateOrderTotal(item.order_id, manager);
+
+                const updatedOrder = await this.ordersModel.findOne(item.order_id);
+                return updatedOrder!;
+            } catch (error) {
+                throw error;
             }
-            if (data.notes !== undefined) {
-                item.notes = data.notes;
-            }
-
-            await this.ordersModel.updateItem(itemId, {
-                quantity: item.quantity,
-                total_price: item.total_price,
-                notes: item.notes
-            });
-
-            await this.recalculateOrderTotal(item.order_id);
-
-            const updatedOrder = await this.ordersModel.findOne(item.order_id);
+        }).then((updatedOrder) => {
             if (updatedOrder) this.socketService.emit('orders:update', updatedOrder);
             return updatedOrder!;
-        } catch (error) {
-            throw error;
-        }
+        })
     }
 
     async deleteItem(itemId: string): Promise<Orders> {
-        try {
-            const item = await this.ordersModel.findItemById(itemId);
-            if (!item) throw new Error("Item not found");
-            const orderId = item.order_id;
+        return await AppDataSource.transaction(async (manager) => {
+            try {
+                const item = await this.ordersModel.findItemById(itemId, manager);
+                if (!item) throw new Error("Item not found");
+                const orderId = item.order_id;
 
-            await this.ordersModel.deleteItem(itemId);
+                await this.ordersModel.deleteItem(itemId, manager);
 
-            await this.recalculateOrderTotal(orderId);
+                await this.recalculateOrderTotal(orderId, manager);
 
-            const updatedOrder = await this.ordersModel.findOne(orderId);
+                const updatedOrder = await this.ordersModel.findOne(orderId);
+                return updatedOrder!;
+            } catch (error) {
+                throw error;
+            }
+        }).then((updatedOrder) => {
             if (updatedOrder) this.socketService.emit('orders:update', updatedOrder);
             return updatedOrder!;
-        } catch (error) {
-            throw error;
-        }
+        })
     }
 
-    private async recalculateOrderTotal(orderId: string): Promise<void> {
-        const items = await this.ordersModel.findItemsByOrderId(orderId);
-        // exclude cancelled items from total? Yes usually.
-        const validItems = items.filter(i => i.status !== OrderStatus.Cancelled);
+    private async recalculateOrderTotal(orderId: string, manager?: EntityManager): Promise<void> {
+        const repo = manager ? manager.getRepository(Orders) : AppDataSource.getRepository(Orders);
 
-        const subTotal = validItems.reduce((sum, item) => sum + Number(item.total_price), 0);
-        // Assuming VAT is calc from subTotal or fixed logic. For now simple Update.
-        // If discount exists on order, might need complex logic.
+        // Fetch order with discount relation
+        const order = await repo.findOne({
+            where: { id: orderId },
+            relations: ["discount"]
+        });
 
-        const order = await this.ordersModel.findOne(orderId);
         if (!order) return;
 
-        // Simple Update for now
-        // TODO: Full Re-calc with VAT and Order Discount
-        const total = subTotal; // + vat - discount
+        const items = await this.ordersModel.findItemsByOrderId(orderId, manager);
+        // Exclude cancelled items from total
+        const validItems = items.filter(i => i.status !== OrderStatus.Cancelled);
 
+        // Calculate using Service
+        const result = PriceCalculatorService.calculateOrderTotal(validItems, order.discount);
+
+        // Update Order
         await this.ordersModel.update(orderId, {
-            sub_total: subTotal,
-            total_amount: total // Simplification 
-        } as Orders);
+            sub_total: result.subTotal,
+            discount_amount: result.discountAmount,
+            vat: result.vatAmount,
+            total_amount: result.totalAmount
+        } as Orders, manager);
     }
 }

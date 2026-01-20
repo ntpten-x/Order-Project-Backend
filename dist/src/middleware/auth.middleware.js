@@ -19,7 +19,13 @@ const Users_1 = require("../entity/Users");
 const authenticateToken = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
     // 1. Get token from cookies
-    const token = (_a = req.cookies) === null || _a === void 0 ? void 0 : _a.token;
+    let token = (_a = req.cookies) === null || _a === void 0 ? void 0 : _a.token;
+    if (!token && req.headers.authorization) {
+        const authHeader = req.headers.authorization;
+        if (authHeader.startsWith("Bearer ")) {
+            token = authHeader.substring(7);
+        }
+    }
     if (!token) {
         // Allow public access or just fail? Usually middleware blocks.
         return res.status(401).json({ message: "Authentication required" });

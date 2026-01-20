@@ -9,7 +9,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.Orders = exports.OrderStatus = exports.OrderType = void 0;
+exports.Orders = void 0;
 const typeorm_1 = require("typeorm");
 const Tables_1 = require("./Tables");
 const Delivery_1 = require("./Delivery");
@@ -17,24 +17,7 @@ const OrdersItem_1 = require("./OrdersItem");
 const Payments_1 = require("./Payments");
 const Discounts_1 = require("./Discounts");
 const Users_1 = require("../Users");
-var OrderType;
-(function (OrderType) {
-    OrderType["DineIn"] = "DineIn";
-    OrderType["TakeAway"] = "TakeAway";
-    OrderType["Delivery"] = "Delivery"; // เดลิเวอรี่
-})(OrderType || (exports.OrderType = OrderType = {}));
-var OrderStatus;
-(function (OrderStatus) {
-    OrderStatus["Pending"] = "Pending";
-    OrderStatus["Cooking"] = "Cooking";
-    OrderStatus["Served"] = "Served";
-    OrderStatus["Paid"] = "Paid";
-    OrderStatus["Cancelled"] = "Cancelled";
-    // Legacy values for migration
-    OrderStatus["pending"] = "pending";
-    OrderStatus["completed"] = "completed";
-    OrderStatus["cancelled"] = "cancelled";
-})(OrderStatus || (exports.OrderStatus = OrderStatus = {}));
+const OrderEnums_1 = require("./OrderEnums");
 let Orders = class Orders {
 };
 exports.Orders = Orders;
@@ -47,7 +30,7 @@ __decorate([
     __metadata("design:type", String)
 ], Orders.prototype, "order_no", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: "enum", enum: OrderType, nullable: true }),
+    (0, typeorm_1.Column)({ type: "enum", enum: OrderEnums_1.OrderType, nullable: true }),
     __metadata("design:type", String)
 ], Orders.prototype, "order_type", void 0);
 __decorate([
@@ -106,7 +89,7 @@ __decorate([
     __metadata("design:type", Number)
 ], Orders.prototype, "change_amount", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: "enum", enum: OrderStatus, default: OrderStatus.Pending }),
+    (0, typeorm_1.Column)({ type: "enum", enum: OrderEnums_1.OrderStatus, default: OrderEnums_1.OrderStatus.Pending }),
     __metadata("design:type", String)
 ], Orders.prototype, "status", void 0);
 __decorate([

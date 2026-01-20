@@ -2,6 +2,7 @@ import { Column, Entity, PrimaryGeneratedColumn, ManyToOne, JoinColumn, OneToMan
 import { Orders } from "./Orders";
 import { PaymentMethod } from "./PaymentMethod";
 import { PaymentDetails } from "./PaymentDetails";
+import { Shifts } from "./Shifts";
 
 export enum PaymentStatus {
     Pending = "Pending",    // รอชำระ
@@ -21,6 +22,13 @@ export class Payments {
     @ManyToOne(() => Orders, (order) => order.payments)
     @JoinColumn({ name: "order_id" })
     order!: Orders; // ความสัมพันธ์เชื่อมไปยังออเดอร์
+
+    @Column({ name: "shift_id", type: "uuid", nullable: true })
+    shift_id?: string; // รหัสกะ (Optional เพราะบางทีอาจจะยังไม่เริ่มกะหรือระบบเก่า)
+
+    @ManyToOne(() => Shifts, (shift) => shift.payments)
+    @JoinColumn({ name: "shift_id" })
+    shift?: Shifts;
 
     @Column({ name: "payment_method_id", type: "uuid" })
     payment_method_id!: string; // รหัสวิธีการชำระเงิน

@@ -11,10 +11,13 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PaymentsService = void 0;
 const socket_service_1 = require("../socket.service");
+const shifts_service_1 = require("./shifts.service");
+const AppError_1 = require("../../utils/AppError");
 class PaymentsService {
     constructor(paymentsModel) {
         this.paymentsModel = paymentsModel;
         this.socketService = socket_service_1.SocketService.getInstance();
+        this.shiftsService = new shifts_service_1.ShiftsService();
     }
     findAll() {
         return __awaiter(this, void 0, void 0, function* () {
@@ -36,7 +39,7 @@ class PaymentsService {
             }
         });
     }
-    create(payments) {
+    create(payments, userId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 if (!payments.order_id) {
@@ -48,6 +51,12 @@ class PaymentsService {
                 if (payments.amount <= 0) {
                     throw new Error("ยอดเงินที่ชำระต้องมากกว่า 0");
                 }
+                // [NEW] Link to Active Shift
+                const activeShift = yield this.shiftsService.getCurrentShift(userId);
+                if (!activeShift) {
+                    throw new AppError_1.AppError("กรุณาเปิดกะก่อนทำรายการชำระเงิน (Open Shift Required)", 400);
+                }
+                payments.shift_id = activeShift.id;
                 const createdPayment = yield this.paymentsModel.create(payments);
                 // Fetch complete data with relations to return
                 const completePayment = yield this.paymentsModel.findOne(createdPayment.id);

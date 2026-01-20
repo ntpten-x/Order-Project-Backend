@@ -85,9 +85,10 @@ export class OrdersModels {
         }
     }
 
-    async create(data: Orders): Promise<Orders> {
+    async create(data: Orders, manager?: EntityManager): Promise<Orders> {
         try {
-            return this.ordersRepository.save(data)
+            const repo = manager ? manager.getRepository(Orders) : this.ordersRepository;
+            return repo.save(data)
         } catch (error) {
             throw error
         }
@@ -130,10 +131,23 @@ export class OrdersModels {
         });
     }
 
-    async update(id: string, data: Orders): Promise<Orders> {
+    async update(id: string, data: Orders, manager?: EntityManager): Promise<Orders> {
         try {
-            await this.ordersRepository.update(id, data)
-            const updatedOrder = await this.findOne(id)
+            const repo = manager ? manager.getRepository(Orders) : this.ordersRepository;
+            await repo.update(id, data)
+            const updatedOrder = await repo.findOne({
+                where: { id },
+                relations: [
+                    "table",
+                    "delivery",
+                    "discount",
+                    "created_by",
+                    "items",
+                    "items.product",
+                    "items.details",
+                    "payments"
+                ]
+            })
             if (!updatedOrder) {
                 throw new Error("ไม่พบข้อมูลออเดอร์ที่ต้องการค้นหา")
             }
@@ -143,47 +157,56 @@ export class OrdersModels {
         }
     }
 
-    async delete(id: string): Promise<void> {
+    async delete(id: string, manager?: EntityManager): Promise<void> {
         try {
-            await this.ordersRepository.delete(id)
+            const repo = manager ? manager.getRepository(Orders) : this.ordersRepository;
+            await repo.delete(id)
         } catch (error) {
             throw error
         }
     }
 
-    async updateItemStatus(itemId: string, status: any): Promise<void> {
+    async updateItemStatus(itemId: string, status: any, manager?: EntityManager): Promise<void> {
         try {
-            await AppDataSource.getRepository(OrdersItem).update(itemId, { status })
+            const repo = manager ? manager.getRepository(OrdersItem) : AppDataSource.getRepository(OrdersItem);
+            await repo.update(itemId, { status })
         } catch (error) {
             throw error
         }
     }
 
-    async findItemsByOrderId(orderId: string): Promise<OrdersItem[]> {
-        return await AppDataSource.getRepository(OrdersItem).find({ where: { order_id: orderId } });
+    async findItemsByOrderId(orderId: string, manager?: EntityManager): Promise<OrdersItem[]> {
+        const repo = manager ? manager.getRepository(OrdersItem) : AppDataSource.getRepository(OrdersItem);
+        return await repo.find({ where: { order_id: orderId } });
     }
 
-    async updateStatus(orderId: string, status: any): Promise<void> {
-        await this.ordersRepository.update(orderId, { status });
+    async updateStatus(orderId: string, status: any, manager?: EntityManager): Promise<void> {
+        const repo = manager ? manager.getRepository(Orders) : this.ordersRepository;
+        await repo.update(orderId, { status });
     }
 
-    async updateAllItemsStatus(orderId: string, status: any): Promise<void> {
-        await AppDataSource.getRepository(OrdersItem).update({ order_id: orderId }, { status });
+    async updateAllItemsStatus(orderId: string, status: any, manager?: EntityManager): Promise<void> {
+        const repo = manager ? manager.getRepository(OrdersItem) : AppDataSource.getRepository(OrdersItem);
+        await repo.update({ order_id: orderId }, { status });
     }
 
-    async createItem(data: OrdersItem): Promise<OrdersItem> {
-        return await AppDataSource.getRepository(OrdersItem).save(data);
+    async createItem(data: OrdersItem, manager?: EntityManager): Promise<OrdersItem> {
+        const repo = manager ? manager.getRepository(OrdersItem) : AppDataSource.getRepository(OrdersItem);
+        return await repo.save(data);
     }
 
-    async updateItem(id: string, data: Partial<OrdersItem>): Promise<void> {
-        await AppDataSource.getRepository(OrdersItem).update(id, data);
+    async updateItem(id: string, data: Partial<OrdersItem>, manager?: EntityManager): Promise<void> {
+        const repo = manager ? manager.getRepository(OrdersItem) : AppDataSource.getRepository(OrdersItem);
+        await repo.update(id, data);
     }
 
-    async deleteItem(id: string): Promise<void> {
-        await AppDataSource.getRepository(OrdersItem).delete(id);
+    async deleteItem(id: string, manager?: EntityManager): Promise<void> {
+        const repo = manager ? manager.getRepository(OrdersItem) : AppDataSource.getRepository(OrdersItem);
+        await repo.delete(id);
     }
 
-    async findItemById(id: string): Promise<OrdersItem | null> {
-        return await AppDataSource.getRepository(OrdersItem).findOne({ where: { id }, relations: ["product"] });
+    async findItemById(id: string, manager?: EntityManager): Promise<OrdersItem | null> {
+        const repo = manager ? manager.getRepository(OrdersItem) : AppDataSource.getRepository(OrdersItem);
+        return await repo.findOne({ where: { id }, relations: ["product"] });
     }
 }

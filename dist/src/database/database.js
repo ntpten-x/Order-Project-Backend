@@ -61,6 +61,7 @@ const Discounts_1 = require("../entity/pos/Discounts");
 const Payments_1 = require("../entity/pos/Payments");
 const PaymentMethod_1 = require("../entity/pos/PaymentMethod");
 const PaymentDetails_1 = require("../entity/pos/PaymentDetails");
+const Shifts_1 = require("../entity/pos/Shifts");
 const dotenv = __importStar(require("dotenv"));
 dotenv.config();
 exports.AppDataSource = new typeorm_1.DataSource({
@@ -70,7 +71,7 @@ exports.AppDataSource = new typeorm_1.DataSource({
     username: process.env.DATABASE_USER,
     password: process.env.DATABASE_PASSWORD,
     database: process.env.DATABASE_NAME,
-    entities: [Users_1.Users, Roles_1.Roles, IngredientsUnit_1.IngredientsUnit, Ingredients_1.Ingredients, Orders_1.Orders, OrdersItem_1.OrdersItem, OrdersDetail_1.OrdersDetail, Category_1.Category, Products_1.Products, ProductsUnit_1.ProductsUnit, Tables_1.Tables, Delivery_1.Delivery, Discounts_1.Discounts, Payments_1.Payments, PaymentMethod_1.PaymentMethod, PaymentDetails_1.PaymentDetails],
+    entities: [Users_1.Users, Roles_1.Roles, IngredientsUnit_1.IngredientsUnit, Ingredients_1.Ingredients, Orders_1.Orders, OrdersItem_1.OrdersItem, OrdersDetail_1.OrdersDetail, Category_1.Category, Products_1.Products, ProductsUnit_1.ProductsUnit, Tables_1.Tables, Delivery_1.Delivery, Discounts_1.Discounts, Payments_1.Payments, PaymentMethod_1.PaymentMethod, PaymentDetails_1.PaymentDetails, Shifts_1.Shifts],
     synchronize: true,
     logging: false,
     ssl: {

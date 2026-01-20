@@ -1,0 +1,12 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const shifts_controller_1 = require("../../controllers/pos/shifts.controller");
+const shifts_service_1 = require("../../services/pos/shifts.service");
+const shiftsRouter = (0, express_1.Router)();
+const shiftsService = new shifts_service_1.ShiftsService();
+const shiftsController = new shifts_controller_1.ShiftsController(shiftsService);
+shiftsRouter.post("/open", shiftsController.openShift);
+shiftsRouter.post("/close", shiftsController.closeShift);
+shiftsRouter.get("/current", shiftsController.getCurrentShift);
+exports.default = shiftsRouter;

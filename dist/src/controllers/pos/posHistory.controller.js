@@ -9,16 +9,15 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ProductsController = void 0;
-class ProductsController {
-    constructor(productsService) {
-        this.productsService = productsService;
+exports.PosHistoryController = void 0;
+class PosHistoryController {
+    constructor(posHistoryService) {
+        this.posHistoryService = posHistoryService;
         this.findAll = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {
                 const page = parseInt(req.query.page) || 1;
                 const limit = parseInt(req.query.limit) || 50;
-                const category_id = req.query.category_id;
-                const result = yield this.productsService.findAll(page, limit, category_id);
+                const result = yield this.posHistoryService.findAll(page, limit);
                 res.status(200).json(result);
             }
             catch (error) {
@@ -27,17 +26,12 @@ class ProductsController {
         });
         this.findOne = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {
-                const product = yield this.productsService.findOne(req.params.id);
-                res.status(200).json(product);
-            }
-            catch (error) {
-                res.status(500).json({ error: error.message });
-            }
-        });
-        this.findOneByName = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                const product = yield this.productsService.findOneByName(req.params.product_name);
-                res.status(200).json(product);
+                const result = yield this.posHistoryService.findOne(req.params.id);
+                if (!result) {
+                    res.status(404).json({ message: "ไม่พบข้อมูลประวัติ" });
+                    return;
+                }
+                res.status(200).json(result);
             }
             catch (error) {
                 res.status(500).json({ error: error.message });
@@ -45,8 +39,8 @@ class ProductsController {
         });
         this.create = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {
-                const product = yield this.productsService.create(req.body);
-                res.status(201).json(product);
+                const result = yield this.posHistoryService.create(req.body);
+                res.status(201).json(result);
             }
             catch (error) {
                 res.status(500).json({ error: error.message });
@@ -54,8 +48,8 @@ class ProductsController {
         });
         this.update = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {
-                const product = yield this.productsService.update(req.params.id, req.body);
-                res.status(200).json(product);
+                const result = yield this.posHistoryService.update(req.params.id, req.body);
+                res.status(200).json(result);
             }
             catch (error) {
                 res.status(500).json({ error: error.message });
@@ -63,8 +57,8 @@ class ProductsController {
         });
         this.delete = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {
-                yield this.productsService.delete(req.params.id);
-                res.status(200).json({ message: "สินค้าลบสำเร็จ" });
+                yield this.posHistoryService.delete(req.params.id);
+                res.status(200).json({ message: "ลบข้อมูลประวัติสำเร็จ" });
             }
             catch (error) {
                 res.status(500).json({ error: error.message });
@@ -72,4 +66,4 @@ class ProductsController {
         });
     }
 }
-exports.ProductsController = ProductsController;
+exports.PosHistoryController = PosHistoryController;

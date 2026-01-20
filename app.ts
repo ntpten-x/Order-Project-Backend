@@ -28,7 +28,10 @@ import paymentDetailsPosRouter from "./src/routes/pos/paymentDetails.route";
 import ordersPosRouter from "./src/routes/pos/orders.route";
 import ordersItemPosRouter from "./src/routes/pos/ordersItem.route";
 import ordersDetailPosRouter from "./src/routes/pos/ordersDetail.route";
-import posHistoryPosRouter from "./src/routes/pos/posHistory.route";
+
+import shiftsPosRouter from "./src/routes/pos/shifts.route";
+import { globalErrorHandler } from "./src/middleware/error.middleware";
+import { AppError } from "./src/utils/AppError";
 
 const app = express();
 const httpServer = createServer(app); // Wrap express with HTTP server
@@ -134,7 +137,16 @@ app.use("/pos/paymentDetails", paymentDetailsPosRouter);
 app.use("/pos/orders", ordersPosRouter);
 app.use("/pos/ordersItem", ordersItemPosRouter);
 app.use("/pos/ordersDetail", ordersDetailPosRouter);
-app.use("/pos/history", posHistoryPosRouter);
+
+app.use("/pos/shifts", shiftsPosRouter);
+
+// Handle Unhandled Routes
+app.use((req, res, next) => {
+    next(new AppError(`Can't find ${req.originalUrl} on this server!`, 404));
+});
+
+// Global Error Handler
+app.use(globalErrorHandler);
 
 connectDatabase().then(() => {
     httpServer.listen(port, () => { // Listen on httpServer

@@ -10,54 +10,38 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PaymentsController = void 0;
+const catchAsync_1 = require("../../utils/catchAsync");
+const AppError_1 = require("../../utils/AppError");
 class PaymentsController {
     constructor(paymentsService) {
         this.paymentsService = paymentsService;
-        this.findAll = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                const payments = yield this.paymentsService.findAll();
-                res.status(200).json(payments);
+        this.findAll = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            const payments = yield this.paymentsService.findAll();
+            res.status(200).json(payments);
+        }));
+        this.findOne = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            const payment = yield this.paymentsService.findOne(req.params.id);
+            if (!payment)
+                throw new AppError_1.AppError("ไม่พบข้อมูลการชำระเงิน", 404);
+            res.status(200).json(payment);
+        }));
+        this.create = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            // Assume Auth Middleware has populated req.user
+            const user = req.user;
+            if (!user || !user.id) {
+                throw new AppError_1.AppError("Authentication required (User ID missing)", 401);
             }
-            catch (error) {
-                res.status(500).json({ error: error.message });
-            }
-        });
-        this.findOne = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                const payment = yield this.paymentsService.findOne(req.params.id);
-                res.status(200).json(payment);
-            }
-            catch (error) {
-                res.status(500).json({ error: error.message });
-            }
-        });
-        this.create = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                const payment = yield this.paymentsService.create(req.body);
-                res.status(201).json(payment);
-            }
-            catch (error) {
-                res.status(500).json({ error: error.message });
-            }
-        });
-        this.update = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                const payment = yield this.paymentsService.update(req.params.id, req.body);
-                res.status(200).json(payment);
-            }
-            catch (error) {
-                res.status(500).json({ error: error.message });
-            }
-        });
-        this.delete = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                yield this.paymentsService.delete(req.params.id);
-                res.status(200).json({ message: "ลบข้อมูลการชำระเงินสำเร็จ" });
-            }
-            catch (error) {
-                res.status(500).json({ error: error.message });
-            }
-        });
+            const payment = yield this.paymentsService.create(req.body, user.id);
+            res.status(201).json(payment);
+        }));
+        this.update = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            const payment = yield this.paymentsService.update(req.params.id, req.body);
+            res.status(200).json(payment);
+        }));
+        this.delete = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            yield this.paymentsService.delete(req.params.id);
+            res.status(200).json({ message: "ลบข้อมูลการชำระเงินสำเร็จ" });
+        }));
     }
 }
 exports.PaymentsController = PaymentsController;

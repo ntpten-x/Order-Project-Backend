@@ -19,11 +19,14 @@ class TablesModels {
     findAll() {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.tablesRepository.find({
-                    order: {
-                        create_date: "ASC"
-                    }
-                });
+                return this.tablesRepository.createQueryBuilder("tables")
+                    .leftJoinAndMapOne("tables.active_order", "Orders", "orders", "orders.table_id = tables.id AND orders.status NOT IN (:...statuses)", { statuses: ['Paid', 'Cancelled', 'completed'] }) // Exclude 'completed' too just in case
+                    .orderBy("tables.create_date", "ASC")
+                    .getMany()
+                    .then(tables => tables.map((t) => {
+                    const activeOrder = t.active_order;
+                    return Object.assign(Object.assign({}, t), { status: activeOrder ? "Unavailable" : t.status, active_order_status: (activeOrder === null || activeOrder === void 0 ? void 0 : activeOrder.status) || null });
+                }));
             }
             catch (error) {
                 throw error;
