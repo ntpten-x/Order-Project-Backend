@@ -24,12 +24,14 @@ import deliveryPosRouter from "./src/routes/pos/delivery.route";
 import discountsPosRouter from "./src/routes/pos/discounts.route";
 import paymentMethodPosRouter from "./src/routes/pos/paymentMethod.route";
 import paymentsPosRouter from "./src/routes/pos/payments.route";
-import paymentDetailsPosRouter from "./src/routes/pos/paymentDetails.route";
+
 import ordersPosRouter from "./src/routes/pos/orders.route";
-import ordersItemPosRouter from "./src/routes/pos/ordersItem.route";
-import ordersDetailPosRouter from "./src/routes/pos/ordersDetail.route";
+import salesOrderItemPosRouter from "./src/routes/pos/salesOrderItem.route";
+import salesOrderDetailPosRouter from "./src/routes/pos/salesOrderDetail.route";
 
 import shiftsPosRouter from "./src/routes/pos/shifts.route";
+import shopProfilePosRouter from "./src/routes/pos/shopProfile.route";
+import dashboardRouter from "./src/routes/pos/dashboard.route";
 import { globalErrorHandler } from "./src/middleware/error.middleware";
 import { AppError } from "./src/utils/AppError";
 
@@ -133,12 +135,14 @@ app.use("/pos/delivery", deliveryPosRouter);
 app.use("/pos/discounts", discountsPosRouter);
 app.use("/pos/paymentMethod", paymentMethodPosRouter);
 app.use("/pos/payments", paymentsPosRouter);
-app.use("/pos/paymentDetails", paymentDetailsPosRouter);
+
 app.use("/pos/orders", ordersPosRouter);
-app.use("/pos/ordersItem", ordersItemPosRouter);
-app.use("/pos/ordersDetail", ordersDetailPosRouter);
+app.use("/pos/salesOrderItem", salesOrderItemPosRouter);
+app.use("/pos/salesOrderDetail", salesOrderDetailPosRouter);
 
 app.use("/pos/shifts", shiftsPosRouter);
+app.use("/pos/shopProfile", shopProfilePosRouter);
+app.use("/pos/dashboard", dashboardRouter);
 
 // Handle Unhandled Routes
 app.use((req, res, next) => {

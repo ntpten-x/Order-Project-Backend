@@ -1,10 +1,10 @@
 import { Request, Response } from "express";
 import { OrdersDetailService } from "../../services/stock/ordersDetail.service";
 
-import { OrdersDetailModel } from "../../models/stock/ordersDetail.model";
+import { StockOrdersDetailModel } from "../../models/stock/ordersDetail.model";
 
 export class OrdersDetailController {
-    private ordersDetailModel = new OrdersDetailModel();
+    private ordersDetailModel = new StockOrdersDetailModel();
     private ordersDetailService = new OrdersDetailService(this.ordersDetailModel);
 
     updatePurchase = async (req: Request, res: Response) => {

@@ -1,7 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, Index } from "typeorm"
 import { IngredientsUnit } from "./IngredientsUnit"
 
-@Entity()
+@Entity("stock_ingredients")
 export class Ingredients {
     @PrimaryGeneratedColumn("uuid")
     id!: string

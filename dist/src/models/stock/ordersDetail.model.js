@@ -9,14 +9,14 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.OrdersDetailModel = void 0;
+exports.StockOrdersDetailModel = void 0;
 const database_1 = require("../../database/database");
 const OrdersDetail_1 = require("../../entity/stock/OrdersDetail");
 const OrdersItem_1 = require("../../entity/stock/OrdersItem");
-class OrdersDetailModel {
+class StockOrdersDetailModel {
     constructor() {
-        this.ordersDetailRepository = database_1.AppDataSource.getRepository(OrdersDetail_1.OrdersDetail);
-        this.ordersItemRepository = database_1.AppDataSource.getRepository(OrdersItem_1.OrdersItem);
+        this.ordersDetailRepository = database_1.AppDataSource.getRepository(OrdersDetail_1.StockOrdersDetail);
+        this.ordersItemRepository = database_1.AppDataSource.getRepository(OrdersItem_1.StockOrdersItem);
     }
     findByOrderItemId(ordersItemId) {
         return __awaiter(this, void 0, void 0, function* () {
@@ -46,4 +46,4 @@ class OrdersDetailModel {
         });
     }
 }
-exports.OrdersDetailModel = OrdersDetailModel;
+exports.StockOrdersDetailModel = StockOrdersDetailModel;

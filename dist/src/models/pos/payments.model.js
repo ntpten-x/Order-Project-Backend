@@ -23,7 +23,7 @@ class PaymentsModels {
                     order: {
                         payment_date: "DESC"
                     },
-                    relations: ["order", "payment_method", "payment_details"]
+                    relations: ["order", "payment_method"]
                 });
             }
             catch (error) {
@@ -36,7 +36,7 @@ class PaymentsModels {
             try {
                 return this.paymentsRepository.findOne({
                     where: { id },
-                    relations: ["order", "payment_method", "payment_details"]
+                    relations: ["order", "payment_method"]
                 });
             }
             catch (error) {

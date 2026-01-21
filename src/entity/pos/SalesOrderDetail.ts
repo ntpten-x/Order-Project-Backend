@@ -1,17 +1,17 @@
 import { Column, Entity, PrimaryGeneratedColumn, ManyToOne, JoinColumn } from "typeorm";
-import { OrdersItem } from "./OrdersItem";
+import { SalesOrderItem } from "./SalesOrderItem";
 
-@Entity()
-export class OrdersDetail {
+@Entity("sales_order_detail")
+export class SalesOrderDetail {
     @PrimaryGeneratedColumn("uuid")
     id!: string; // รหัสอ้างอิงรายละเอียดเพิ่มเติม
 
     @Column({ name: "orders_item_id", type: "uuid" })
     orders_item_id!: string; // รหัสรายการสินค้าแม่ข่าย
 
-    @ManyToOne(() => OrdersItem, (item) => item.details)
+    @ManyToOne(() => SalesOrderItem, (item) => item.details)
     @JoinColumn({ name: "orders_item_id" })
-    orders_item!: OrdersItem; // ความสัมพันธ์เชื่อมไปยังรายการสินค้า
+    sales_order_item!: SalesOrderItem; // ความสัมพันธ์เชื่อมไปยังรายการสินค้า
 
     @Column({ type: "varchar", length: 255, default: "" })
     detail_name!: string; // ชื่อรายละเอียด (เช่น "หวาน 50%", "เพิ่มชีส")

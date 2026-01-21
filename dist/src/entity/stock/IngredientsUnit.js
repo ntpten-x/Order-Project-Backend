@@ -41,5 +41,5 @@ __decorate([
     __metadata("design:type", Array)
 ], IngredientsUnit.prototype, "ingredients", void 0);
 exports.IngredientsUnit = IngredientsUnit = __decorate([
-    (0, typeorm_1.Entity)()
+    (0, typeorm_1.Entity)("stock_ingredients_unit")
 ], IngredientsUnit);

@@ -1,7 +1,7 @@
 import { Column, Entity, PrimaryGeneratedColumn, ManyToOne, JoinColumn, OneToMany, Index } from "typeorm";
-import { Orders } from "./Orders";
+import { SalesOrder } from "./SalesOrder";
 import { PaymentMethod } from "./PaymentMethod";
-import { PaymentDetails } from "./PaymentDetails";
+
 import { Shifts } from "./Shifts";
 
 export enum PaymentStatus {
@@ -19,9 +19,9 @@ export class Payments {
     @Column({ name: "order_id", type: "uuid" })
     order_id!: string; // รหัสออเดอร์
 
-    @ManyToOne(() => Orders, (order) => order.payments)
+    @ManyToOne(() => SalesOrder, (order) => order.payments)
     @JoinColumn({ name: "order_id" })
-    order!: Orders; // ความสัมพันธ์เชื่อมไปยังออเดอร์
+    order!: SalesOrder; // ความสัมพันธ์เชื่อมไปยังออเดอร์
 
     @Column({ name: "shift_id", type: "uuid", nullable: true })
     shift_id?: string; // รหัสกะ (Optional เพราะบางทีอาจจะยังไม่เริ่มกะหรือระบบเก่า)
@@ -52,6 +52,5 @@ export class Payments {
     @Column({ type: "timestamptz", default: () => "CURRENT_TIMESTAMP" })
     payment_date!: Date; // วันที่และเวลาชำระเงิน
 
-    @OneToMany(() => PaymentDetails, (detail) => detail.payment)
-    payment_details!: PaymentDetails[]; // รายละเอียดเพิ่มเติมการชำระเงิน
+
 }

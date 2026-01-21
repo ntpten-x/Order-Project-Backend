@@ -4,9 +4,15 @@ import { Users } from "../entity/Users"
 import { Roles } from "../entity/Roles"
 import { IngredientsUnit } from "../entity/stock/IngredientsUnit"
 import { Ingredients } from "../entity/stock/Ingredients"
-import { Orders } from "../entity/pos/Orders"
-import { OrdersItem } from "../entity/pos/OrdersItem"
-import { OrdersDetail } from "../entity/pos/OrdersDetail"
+// Stock entities (with alias to avoid conflict)
+// Stock entities
+import { PurchaseOrder } from "../entity/stock/PurchaseOrder"
+import { StockOrdersItem } from "../entity/stock/OrdersItem"
+import { StockOrdersDetail } from "../entity/stock/OrdersDetail"
+// POS entities
+import { SalesOrder } from "../entity/pos/SalesOrder"
+import { SalesOrderItem } from "../entity/pos/SalesOrderItem"
+import { SalesOrderDetail } from "../entity/pos/SalesOrderDetail"
 import { Category } from "../entity/pos/Category"
 import { Products } from "../entity/pos/Products"
 import { ProductsUnit } from "../entity/pos/ProductsUnit"
@@ -15,7 +21,10 @@ import { Delivery } from "../entity/pos/Delivery"
 import { Discounts } from "../entity/pos/Discounts"
 import { Payments } from "../entity/pos/Payments"
 import { PaymentMethod } from "../entity/pos/PaymentMethod"
-import { PaymentDetails } from "../entity/pos/PaymentDetails"
+import { ShopProfile } from "../entity/pos/ShopProfile"
+import { SalesSummaryView } from "../entity/pos/views/SalesSummaryView"
+import { TopSellingItemsView } from "../entity/pos/views/TopSellingItemsView"
+
 import { Shifts } from "../entity/pos/Shifts"
 import * as dotenv from "dotenv"
 dotenv.config()
@@ -26,7 +35,7 @@ export const AppDataSource = new DataSource({
     username: process.env.DATABASE_USER,
     password: process.env.DATABASE_PASSWORD,
     database: process.env.DATABASE_NAME,
-    entities: [Users, Roles, IngredientsUnit, Ingredients, Orders, OrdersItem, OrdersDetail, Category, Products, ProductsUnit, Tables, Delivery, Discounts, Payments, PaymentMethod, PaymentDetails, Shifts],
+    entities: [Users, Roles, IngredientsUnit, Ingredients, PurchaseOrder, StockOrdersItem, StockOrdersDetail, SalesOrder, SalesOrderItem, SalesOrderDetail, Category, Products, ProductsUnit, Tables, Delivery, Discounts, Payments, PaymentMethod, Shifts, ShopProfile, SalesSummaryView, TopSellingItemsView],
     synchronize: true,
     logging: false,
     ssl: {

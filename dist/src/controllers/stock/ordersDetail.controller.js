@@ -14,7 +14,7 @@ const ordersDetail_service_1 = require("../../services/stock/ordersDetail.servic
 const ordersDetail_model_1 = require("../../models/stock/ordersDetail.model");
 class OrdersDetailController {
     constructor() {
-        this.ordersDetailModel = new ordersDetail_model_1.OrdersDetailModel();
+        this.ordersDetailModel = new ordersDetail_model_1.StockOrdersDetailModel();
         this.ordersDetailService = new ordersDetail_service_1.OrdersDetailService(this.ordersDetailModel);
         this.updatePurchase = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {

@@ -1,9 +1,9 @@
 import { Entity, Column, PrimaryGeneratedColumn, OneToOne, JoinColumn, ManyToOne, CreateDateColumn, Index } from "typeorm"
-import { OrdersItem } from "./OrdersItem"
+import { StockOrdersItem } from "./OrdersItem"
 import { Users } from "../Users"
 
-@Entity()
-export class OrdersDetail {
+@Entity("stock_orders_detail")
+export class StockOrdersDetail {
     @PrimaryGeneratedColumn("uuid")
     id!: string
 
@@ -11,9 +11,9 @@ export class OrdersDetail {
     @Column({ name: "orders_item_id", type: "uuid", unique: true })
     orders_item_id!: string
 
-    @OneToOne(() => OrdersItem, (ordersItem) => ordersItem.ordersDetail, { onDelete: 'CASCADE' })
+    @OneToOne(() => StockOrdersItem, (ordersItem) => ordersItem.ordersDetail, { onDelete: 'CASCADE' })
     @JoinColumn({ name: "orders_item_id" })
-    ordersItem!: OrdersItem
+    ordersItem!: StockOrdersItem
 
     @Column({ name: "actual_quantity", type: "int", nullable: true })
     actual_quantity!: number

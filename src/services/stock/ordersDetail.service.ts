@@ -1,10 +1,10 @@
-import { OrdersDetailModel } from "../../models/stock/ordersDetail.model";
+import { StockOrdersDetailModel } from "../../models/stock/ordersDetail.model";
 import { SocketService } from "../socket.service";
 
 export class OrdersDetailService {
     private socketService = SocketService.getInstance();
 
-    constructor(private ordersDetailModel: OrdersDetailModel) { }
+    constructor(private ordersDetailModel: StockOrdersDetailModel) { }
 
     async updatePurchaseDetail(ordersItemId: string, data: { actual_quantity: number; purchased_by_id: string; is_purchased: boolean }) {
         try {

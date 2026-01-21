@@ -1,9 +1,10 @@
 import { OrdersModels } from "../../models/pos/orders.model";
 import { SocketService } from "../socket.service";
-import { Orders } from "../../entity/pos/Orders";
+import { SalesOrder } from "../../entity/pos/SalesOrder";
 import { AppDataSource } from "../../database/database";
 import { Tables, TableStatus } from "../../entity/pos/Tables";
-import { OrdersItem } from "../../entity/pos/OrdersItem";
+import { SalesOrderItem } from "../../entity/pos/SalesOrderItem";
+import { SalesOrderDetail } from "../../entity/pos/SalesOrderDetail";
 import { OrderStatus } from "../../entity/pos/OrderEnums";
 import { EntityManager } from "typeorm";
 import { PriceCalculatorService } from "./priceCalculator.service";
@@ -13,11 +14,26 @@ export class OrdersService {
 
     constructor(private ordersModel: OrdersModels) { }
 
-    async findAll(page: number, limit: number, statuses?: string[]): Promise<{ data: Orders[], total: number, page: number, limit: number }> {
+    async findAll(page: number, limit: number, statuses?: string[]): Promise<{ data: SalesOrder[], total: number, page: number, limit: number }> {
         try {
             return this.ordersModel.findAll(page, limit, statuses)
         } catch (error) {
             throw error
+        }
+    }
+
+    async getStats(): Promise<{ dineIn: number, takeaway: number, delivery: number, total: number }> {
+        try {
+            // Active statuses: Pending, Cooking, Served, WaitingForPayment
+            const activeStatuses = [
+                OrderStatus.Pending,
+                OrderStatus.Cooking,
+                OrderStatus.Served,
+                OrderStatus.WaitingForPayment
+            ];
+            return await this.ordersModel.getStats(activeStatuses);
+        } catch (error) {
+            throw error;
         }
     }
 
@@ -29,7 +45,7 @@ export class OrdersService {
         }
     }
 
-    async findOne(id: string): Promise<Orders | null> {
+    async findOne(id: string): Promise<SalesOrder | null> {
         try {
             return this.ordersModel.findOne(id)
         } catch (error) {
@@ -37,7 +53,7 @@ export class OrdersService {
         }
     }
 
-    async create(orders: Orders): Promise<Orders> {
+    async create(orders: SalesOrder): Promise<SalesOrder> {
         return await AppDataSource.transaction(async (manager) => {
             try {
                 if (!orders.order_no) {
@@ -52,20 +68,10 @@ export class OrdersService {
                 // Pass manager to create which uses it for repository
                 const createdOrder = await this.ordersModel.create(orders, manager)
 
-                // Emitting socket inside transaction is risky if tx fails later, but here it's fine as we are near end.
-                // Ideally, emit AFTER tx commit.
-                // But for now, let's keep logic similar but in tx.
-
                 // Update Table Status if DineIn
                 if (createdOrder.table_id) {
                     const tablesRepo = manager.getRepository(Tables)
                     await tablesRepo.update(createdOrder.table_id, { status: TableStatus.Unavailable })
-                    const updatedTable = await tablesRepo.findOneBy({ id: createdOrder.table_id })
-                    /* 
-                       Note: Socket emission is side-effect. If tx causes rollback, UI might have received update.
-                       Correct way is to return data and emit in controller, or use 'afterTransaction' hook.
-                       For this refactor, I will emit AFTER the transaction block returns.
-                    */
                 }
                 return createdOrder;
             } catch (error) {
@@ -75,9 +81,6 @@ export class OrdersService {
             // Post-transaction Side Effects
             this.socketService.emit('orders:create', createdOrder)
             if (createdOrder.table_id) {
-                // We need to fetch table to emit? Or just trust it updated.
-                // Let's just re-fetch light or emit structure.
-                // Actually, reading from DB here is safe as tx committed.
                 const tablesRepo = AppDataSource.getRepository(Tables)
                 tablesRepo.findOneBy({ id: createdOrder.table_id }).then(t => {
                     if (t) this.socketService.emit('tables:update', t)
@@ -87,7 +90,7 @@ export class OrdersService {
         })
     }
 
-    async createFullOrder(data: any): Promise<Orders> {
+    async createFullOrder(data: any): Promise<SalesOrder> {
         try {
             if (!data.order_no) {
                 throw new Error("กรุณาระบุเลขที่ออเดอร์")
@@ -116,7 +119,7 @@ export class OrdersService {
         }
     }
 
-    async update(id: string, orders: Orders): Promise<Orders> {
+    async update(id: string, orders: SalesOrder): Promise<SalesOrder> {
         try {
             const orderToUpdate = await this.ordersModel.findOne(id)
             if (!orderToUpdate) {
@@ -155,20 +158,32 @@ export class OrdersService {
         }
     }
 
-    async addItem(orderId: string, itemData: any): Promise<Orders> {
+    async addItem(orderId: string, itemData: any): Promise<SalesOrder> {
         return await AppDataSource.transaction(async (manager) => {
             try {
-                const item = new OrdersItem();
+                const item = new SalesOrderItem();
                 item.order_id = orderId;
                 item.product_id = itemData.product_id;
                 item.quantity = itemData.quantity;
                 item.price = itemData.price;
                 item.discount_amount = itemData.discount_amount || 0;
-                item.total_price = (item.price * item.quantity) - item.discount_amount;
+                const detailsTotal = itemData.details ? itemData.details.reduce((sum: number, d: any) => sum + (Number(d.extra_price) || 0), 0) : 0;
+                item.total_price = (Number(item.price) + detailsTotal) * item.quantity - Number(item.discount_amount || 0);
                 item.notes = itemData.notes;
                 item.status = OrderStatus.Pending;
 
-                await this.ordersModel.createItem(item, manager);
+                const savedItem = await this.ordersModel.createItem(item, manager);
+
+                if (itemData.details && itemData.details.length > 0) {
+                    const detailRepo = manager.getRepository(SalesOrderDetail);
+                    for (const d of itemData.details) {
+                        const detail = new SalesOrderDetail();
+                        detail.orders_item_id = savedItem.id;
+                        detail.detail_name = d.detail_name;
+                        detail.extra_price = d.extra_price || 0;
+                        await detailRepo.save(detail);
+                    }
+                }
 
                 await this.recalculateOrderTotal(orderId, manager);
 
@@ -183,7 +198,7 @@ export class OrdersService {
         })
     }
 
-    async updateItemDetails(itemId: string, data: { quantity?: number, notes?: string }): Promise<Orders> {
+    async updateItemDetails(itemId: string, data: { quantity?: number, notes?: string }): Promise<SalesOrder> {
         return await AppDataSource.transaction(async (manager) => {
             try {
                 const item = await this.ordersModel.findItemById(itemId, manager);
@@ -216,7 +231,7 @@ export class OrdersService {
         })
     }
 
-    async deleteItem(itemId: string): Promise<Orders> {
+    async deleteItem(itemId: string): Promise<SalesOrder> {
         return await AppDataSource.transaction(async (manager) => {
             try {
                 const item = await this.ordersModel.findItemById(itemId, manager);
@@ -239,7 +254,7 @@ export class OrdersService {
     }
 
     private async recalculateOrderTotal(orderId: string, manager?: EntityManager): Promise<void> {
-        const repo = manager ? manager.getRepository(Orders) : AppDataSource.getRepository(Orders);
+        const repo = manager ? manager.getRepository(SalesOrder) : AppDataSource.getRepository(SalesOrder);
 
         // Fetch order with discount relation
         const order = await repo.findOne({
@@ -262,6 +277,6 @@ export class OrdersService {
             discount_amount: result.discountAmount,
             vat: result.vatAmount,
             total_amount: result.totalAmount
-        } as Orders, manager);
+        } as SalesOrder, manager);
     }
 }

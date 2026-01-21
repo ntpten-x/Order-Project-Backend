@@ -1,0 +1,12 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const dashboard_controller_1 = require("../../controllers/pos/dashboard.controller");
+const dashboard_service_1 = require("../../services/pos/dashboard.service");
+const auth_middleware_1 = require("../../middleware/auth.middleware");
+const dashboardRouter = (0, express_1.Router)();
+const dashboardService = new dashboard_service_1.DashboardService();
+const dashboardController = new dashboard_controller_1.DashboardController(dashboardService);
+dashboardRouter.get("/sales", auth_middleware_1.authenticateToken, dashboardController.getSalesSummary);
+dashboardRouter.get("/top-items", auth_middleware_1.authenticateToken, dashboardController.getTopSellingItems);
+exports.default = dashboardRouter;

@@ -1,10 +1,10 @@
 import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, JoinColumn, OneToOne, Index } from "typeorm"
 import { Ingredients } from "./Ingredients"
-import { Orders } from "./Orders"
-import { OrdersDetail } from "./OrdersDetail"
+import { PurchaseOrder } from "./PurchaseOrder"
+import { StockOrdersDetail } from "./OrdersDetail"
 
-@Entity()
-export class OrdersItem {
+@Entity("stock_orders_item")
+export class StockOrdersItem {
     @PrimaryGeneratedColumn("uuid")
     id!: string
 
@@ -20,14 +20,14 @@ export class OrdersItem {
     @Column({ name: "orders_id", type: "uuid" })
     orders_id!: string
 
-    @ManyToOne(() => Orders, (orders) => orders.ordersItems, { onDelete: 'CASCADE' })
+    @ManyToOne(() => PurchaseOrder, (orders) => orders.ordersItems, { onDelete: 'CASCADE' })
     @JoinColumn({ name: "orders_id" })
-    orders!: Orders
+    orders!: PurchaseOrder
 
     @Column({ name: "quantity_ordered", type: "int" })
     quantity_ordered!: number
 
-    @OneToOne(() => OrdersDetail, (ordersDetail) => ordersDetail.ordersItem)
-    ordersDetail!: OrdersDetail
+    @OneToOne(() => StockOrdersDetail, (ordersDetail) => ordersDetail.ordersItem)
+    ordersDetail!: StockOrdersDetail
 
 }

@@ -13,7 +13,6 @@ exports.Payments = exports.PaymentStatus = void 0;
 const typeorm_1 = require("typeorm");
 const Orders_1 = require("./Orders");
 const PaymentMethod_1 = require("./PaymentMethod");
-const PaymentDetails_1 = require("./PaymentDetails");
 const Shifts_1 = require("./Shifts");
 var PaymentStatus;
 (function (PaymentStatus) {
@@ -75,10 +74,6 @@ __decorate([
     (0, typeorm_1.Column)({ type: "timestamptz", default: () => "CURRENT_TIMESTAMP" }),
     __metadata("design:type", Date)
 ], Payments.prototype, "payment_date", void 0);
-__decorate([
-    (0, typeorm_1.OneToMany)(() => PaymentDetails_1.PaymentDetails, (detail) => detail.payment),
-    __metadata("design:type", Array)
-], Payments.prototype, "payment_details", void 0);
 exports.Payments = Payments = __decorate([
     (0, typeorm_1.Index)(["payment_date"]),
     (0, typeorm_1.Entity)()

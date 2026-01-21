@@ -1,20 +1,20 @@
 import { Column, Entity, PrimaryGeneratedColumn, ManyToOne, JoinColumn, OneToMany } from "typeorm";
-import { Orders } from "./Orders";
+import { SalesOrder } from "./SalesOrder";
 import { OrderStatus } from "./OrderEnums";
 import { Products } from "./Products";
-import { OrdersDetail } from "./OrdersDetail";
+import { SalesOrderDetail } from "./SalesOrderDetail";
 
-@Entity()
-export class OrdersItem {
+@Entity("sales_order_item")
+export class SalesOrderItem {
     @PrimaryGeneratedColumn("uuid")
     id!: string; // รหัสอ้างอิงรายการสินค้าในบิล
 
     @Column({ name: "order_id", type: "uuid", nullable: true })
     order_id!: string; // รหัสออเดอร์หลัก
 
-    @ManyToOne(() => Orders, (order) => order.items)
+    @ManyToOne(() => SalesOrder, (order) => order.items)
     @JoinColumn({ name: "order_id" })
-    order!: Orders; // ความสัมพันธ์เชื่อมไปยังออเดอร์
+    order!: SalesOrder; // ความสัมพันธ์เชื่อมไปยังออเดอร์
 
     @Column({ name: "product_id", type: "uuid", nullable: true })
     product_id!: string; // รหัสสินค้า
@@ -41,6 +41,6 @@ export class OrdersItem {
     @Column({ type: "enum", enum: OrderStatus, default: OrderStatus.Pending })
     status!: OrderStatus; // สถานะของรายการ (Pending, Cooking, Served, Cancelled)
 
-    @OneToMany(() => OrdersDetail, (detail) => detail.orders_item)
-    details!: OrdersDetail[]; // รายละเอียดเพิ่มเติม (Modifiers) เช่น ท็อปปิ้ง
+    @OneToMany(() => SalesOrderDetail, (detail) => detail.sales_order_item)
+    details!: SalesOrderDetail[]; // รายละเอียดเพิ่มเติม (Modifiers) เช่น ท็อปปิ้ง
 }

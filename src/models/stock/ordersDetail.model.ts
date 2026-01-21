@@ -1,16 +1,16 @@
 import { AppDataSource } from "../../database/database";
-import { OrdersDetail } from "../../entity/stock/OrdersDetail";
-import { OrdersItem } from "../../entity/stock/OrdersItem";
+import { StockOrdersDetail } from "../../entity/stock/OrdersDetail";
+import { StockOrdersItem } from "../../entity/stock/OrdersItem";
 
-export class OrdersDetailModel {
-    private ordersDetailRepository = AppDataSource.getRepository(OrdersDetail);
-    private ordersItemRepository = AppDataSource.getRepository(OrdersItem);
+export class StockOrdersDetailModel {
+    private ordersDetailRepository = AppDataSource.getRepository(StockOrdersDetail);
+    private ordersItemRepository = AppDataSource.getRepository(StockOrdersItem);
 
-    async findByOrderItemId(ordersItemId: string): Promise<OrdersDetail | null> {
+    async findByOrderItemId(ordersItemId: string): Promise<StockOrdersDetail | null> {
         return await this.ordersDetailRepository.findOneBy({ orders_item_id: ordersItemId });
     }
 
-    async createOrUpdate(ordersItemId: string, data: { actual_quantity: number; purchased_by_id: string; is_purchased: boolean }): Promise<OrdersDetail> {
+    async createOrUpdate(ordersItemId: string, data: { actual_quantity: number; purchased_by_id: string; is_purchased: boolean }): Promise<StockOrdersDetail> {
         let detail = await this.ordersDetailRepository.findOneBy({ orders_item_id: ordersItemId });
 
         if (!detail) {
@@ -27,7 +27,7 @@ export class OrdersDetailModel {
         return await this.ordersDetailRepository.save(detail);
     }
 
-    async getOrderItemWithOrder(ordersItemId: string): Promise<OrdersItem | null> {
+    async getOrderItemWithOrder(ordersItemId: string): Promise<StockOrdersItem | null> {
         return await this.ordersItemRepository.findOne({
             where: { id: ordersItemId },
             relations: { orders: true }

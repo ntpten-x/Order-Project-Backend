@@ -29,11 +29,12 @@ const delivery_route_1 = __importDefault(require("./src/routes/pos/delivery.rout
 const discounts_route_1 = __importDefault(require("./src/routes/pos/discounts.route"));
 const paymentMethod_route_1 = __importDefault(require("./src/routes/pos/paymentMethod.route"));
 const payments_route_1 = __importDefault(require("./src/routes/pos/payments.route"));
-const paymentDetails_route_1 = __importDefault(require("./src/routes/pos/paymentDetails.route"));
 const orders_route_2 = __importDefault(require("./src/routes/pos/orders.route"));
 const ordersItem_route_1 = __importDefault(require("./src/routes/pos/ordersItem.route"));
 const ordersDetail_route_2 = __importDefault(require("./src/routes/pos/ordersDetail.route"));
 const shifts_route_1 = __importDefault(require("./src/routes/pos/shifts.route"));
+const shopProfile_route_1 = __importDefault(require("./src/routes/pos/shopProfile.route"));
+const dashboard_route_1 = __importDefault(require("./src/routes/pos/dashboard.route"));
 const error_middleware_1 = require("./src/middleware/error.middleware");
 const AppError_1 = require("./src/utils/AppError");
 const app = (0, express_1.default)();
@@ -122,11 +123,12 @@ app.use("/pos/delivery", delivery_route_1.default);
 app.use("/pos/discounts", discounts_route_1.default);
 app.use("/pos/paymentMethod", paymentMethod_route_1.default);
 app.use("/pos/payments", payments_route_1.default);
-app.use("/pos/paymentDetails", paymentDetails_route_1.default);
 app.use("/pos/orders", orders_route_2.default);
 app.use("/pos/ordersItem", ordersItem_route_1.default);
 app.use("/pos/ordersDetail", ordersDetail_route_2.default);
 app.use("/pos/shifts", shifts_route_1.default);
+app.use("/pos/shopProfile", shopProfile_route_1.default);
+app.use("/pos/dashboard", dashboard_route_1.default);
 // Handle Unhandled Routes
 app.use((req, res, next) => {
     next(new AppError_1.AppError(`Can't find ${req.originalUrl} on this server!`, 404));

@@ -1,12 +1,12 @@
 import { AppDataSource } from "../../database/database";
-import { OrdersItem } from "../../entity/pos/OrdersItem";
+import { SalesOrderItem } from "../../entity/pos/SalesOrderItem";
 
-export class OrdersItemModels {
-    private ordersItemRepository = AppDataSource.getRepository(OrdersItem)
+export class SalesOrderItemModels {
+    private salesOrderItemRepository = AppDataSource.getRepository(SalesOrderItem)
 
-    async findAll(): Promise<OrdersItem[]> {
+    async findAll(): Promise<SalesOrderItem[]> {
         try {
-            return this.ordersItemRepository.find({
+            return this.salesOrderItemRepository.find({
                 order: {
                     id: "ASC"
                 },
@@ -17,9 +17,9 @@ export class OrdersItemModels {
         }
     }
 
-    async findOne(id: string): Promise<OrdersItem | null> {
+    async findOne(id: string): Promise<SalesOrderItem | null> {
         try {
-            return this.ordersItemRepository.findOne({
+            return this.salesOrderItemRepository.findOne({
                 where: { id },
                 relations: ["order", "product", "details"]
             })
@@ -28,17 +28,17 @@ export class OrdersItemModels {
         }
     }
 
-    async create(data: OrdersItem): Promise<OrdersItem> {
+    async create(data: SalesOrderItem): Promise<SalesOrderItem> {
         try {
-            return this.ordersItemRepository.save(data)
+            return this.salesOrderItemRepository.save(data)
         } catch (error) {
             throw error
         }
     }
 
-    async update(id: string, data: OrdersItem): Promise<OrdersItem> {
+    async update(id: string, data: Partial<SalesOrderItem>): Promise<SalesOrderItem> {
         try {
-            await this.ordersItemRepository.update(id, data)
+            await this.salesOrderItemRepository.update(id, data)
             const updatedItem = await this.findOne(id)
             if (!updatedItem) {
                 throw new Error("ไม่พบข้อมูลรายการสินค้าในออเดอร์ที่ต้องการค้นหา")
@@ -51,7 +51,7 @@ export class OrdersItemModels {
 
     async delete(id: string): Promise<void> {
         try {
-            await this.ordersItemRepository.delete(id)
+            await this.salesOrderItemRepository.delete(id)
         } catch (error) {
             throw error
         }

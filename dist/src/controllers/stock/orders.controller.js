@@ -15,7 +15,7 @@ const Orders_1 = require("../../entity/stock/Orders");
 const orders_model_1 = require("../../models/stock/orders.model");
 class OrdersController {
     constructor() {
-        this.ordersModel = new orders_model_1.OrdersModel();
+        this.ordersModel = new orders_model_1.StockOrdersModel();
         this.ordersService = new orders_service_1.OrdersService(this.ordersModel);
         this.createOrder = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {

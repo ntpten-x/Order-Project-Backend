@@ -15,6 +15,11 @@ export class OrdersController {
         res.status(200).json(result)
     })
 
+    getStats = catchAsync(async (req: Request, res: Response) => {
+        const stats = await this.ordersService.getStats();
+        res.status(200).json(stats);
+    })
+
     findAllItems = catchAsync(async (req: Request, res: Response) => {
         const status = req.query.status as string
         const result = await this.ordersService.findAllItems(status)

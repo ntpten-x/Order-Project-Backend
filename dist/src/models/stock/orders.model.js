@@ -9,33 +9,47 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.OrdersModel = void 0;
+exports.StockOrdersModel = void 0;
 const database_1 = require("../../database/database");
 const Orders_1 = require("../../entity/stock/Orders");
 const OrdersItem_1 = require("../../entity/stock/OrdersItem");
 const OrdersDetail_1 = require("../../entity/stock/OrdersDetail");
-class OrdersModel {
+class StockOrdersModel {
     constructor() {
-        this.ordersRepository = database_1.AppDataSource.getRepository(Orders_1.Orders);
+        this.ordersRepository = database_1.AppDataSource.getRepository(Orders_1.StockOrders);
     }
+    // Creates an order and its items in a transaction
     // Creates an order and its items in a transaction
     createOrderWithItems(orderedById, items, remark) {
         return __awaiter(this, void 0, void 0, function* () {
-            return yield database_1.AppDataSource.transaction((transactionalEntityManager) => __awaiter(this, void 0, void 0, function* () {
-                const newOrder = transactionalEntityManager.create(Orders_1.Orders, {
+            const queryRunner = database_1.AppDataSource.createQueryRunner();
+            yield queryRunner.connect();
+            yield queryRunner.startTransaction();
+            try {
+                const newOrder = queryRunner.manager.create(Orders_1.StockOrders, {
                     ordered_by_id: orderedById,
                     status: Orders_1.OrderStatus.PENDING,
                     remark: remark
                 });
-                const savedOrder = yield transactionalEntityManager.save(newOrder);
-                const orderItems = items.map(item => transactionalEntityManager.create(OrdersItem_1.OrdersItem, {
+                const savedOrder = yield queryRunner.manager.save(newOrder);
+                const orderItems = items.map(item => queryRunner.manager.create(OrdersItem_1.StockOrdersItem, {
                     orders_id: savedOrder.id,
                     ingredient_id: item.ingredient_id,
                     quantity_ordered: item.quantity_ordered
                 }));
-                yield transactionalEntityManager.save(orderItems);
-                return this.findByIdInternal(savedOrder.id, transactionalEntityManager);
-            }));
+                yield queryRunner.manager.save(orderItems);
+                yield queryRunner.commitTransaction();
+                // Return the complete order with relations (using the same transaction manager or separate generic find)
+                // It is safe to use queryRunner.manager to fetch before release to ensure consistency
+                return this.findByIdInternal(savedOrder.id, queryRunner.manager);
+            }
+            catch (error) {
+                yield queryRunner.rollbackTransaction();
+                throw error;
+            }
+            finally {
+                yield queryRunner.release();
+            }
         });
     }
     findAll(filters_1) {
@@ -81,7 +95,7 @@ class OrdersModel {
         return __awaiter(this, void 0, void 0, function* () {
             return yield database_1.AppDataSource.transaction((transactionalEntityManager) => __awaiter(this, void 0, void 0, function* () {
                 // 1. Fetch existing items
-                const existingItems = yield transactionalEntityManager.find(OrdersItem_1.OrdersItem, {
+                const existingItems = yield transactionalEntityManager.find(OrdersItem_1.StockOrdersItem, {
                     where: { orders_id: orderId }
                 });
                 // 2. Identify items to delete (in DB but not in newItems)
@@ -102,7 +116,7 @@ class OrdersModel {
                     }
                     else {
                         // Create new
-                        const createdItem = transactionalEntityManager.create(OrdersItem_1.OrdersItem, {
+                        const createdItem = transactionalEntityManager.create(OrdersItem_1.StockOrdersItem, {
                             orders_id: orderId,
                             ingredient_id: newItem.ingredient_id,
                             quantity_ordered: newItem.quantity_ordered
@@ -152,7 +166,7 @@ class OrdersModel {
         return __awaiter(this, void 0, void 0, function* () {
             return yield database_1.AppDataSource.transaction((transactionalEntityManager) => __awaiter(this, void 0, void 0, function* () {
                 // 1. Fetch Order Items
-                const orderItems = yield transactionalEntityManager.find(OrdersItem_1.OrdersItem, {
+                const orderItems = yield transactionalEntityManager.find(OrdersItem_1.StockOrdersItem, {
                     where: { orders_id: orderId },
                     relations: { ordersDetail: true }
                 });
@@ -162,18 +176,18 @@ class OrdersModel {
                     if (orderItem) {
                         let detail = orderItem.ordersDetail;
                         if (!detail) {
-                            detail = transactionalEntityManager.create(OrdersDetail_1.OrdersDetail, {
+                            detail = transactionalEntityManager.create(OrdersDetail_1.StockOrdersDetail, {
                                 orders_item_id: orderItem.id
                             });
                         }
                         detail.actual_quantity = item.actual_quantity;
                         detail.is_purchased = item.is_purchased;
                         detail.purchased_by_id = purchasedById;
-                        yield transactionalEntityManager.save(OrdersDetail_1.OrdersDetail, detail);
+                        yield transactionalEntityManager.save(OrdersDetail_1.StockOrdersDetail, detail);
                     }
                 }
                 // 3. Update Order Status to COMPLETED
-                yield transactionalEntityManager.update(Orders_1.Orders, { id: orderId }, { status: Orders_1.OrderStatus.COMPLETED });
+                yield transactionalEntityManager.update(Orders_1.StockOrders, { id: orderId }, { status: Orders_1.OrderStatus.COMPLETED });
                 // 4. Return updated order
                 return this.findByIdInternal(orderId, transactionalEntityManager);
             }));
@@ -182,7 +196,7 @@ class OrdersModel {
     // internal helper for transaction
     findByIdInternal(id, manager) {
         return __awaiter(this, void 0, void 0, function* () {
-            return yield manager.findOne(Orders_1.Orders, {
+            return yield manager.findOne(Orders_1.StockOrders, {
                 where: { id },
                 relations: {
                     ordered_by: true,
@@ -199,4 +213,4 @@ class OrdersModel {
         });
     }
 }
-exports.OrdersModel = OrdersModel;
+exports.StockOrdersModel = StockOrdersModel;

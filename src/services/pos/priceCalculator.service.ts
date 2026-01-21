@@ -1,5 +1,5 @@
 
-import { OrdersItem } from "../../entity/pos/OrdersItem";
+import { SalesOrderItem } from "../../entity/pos/SalesOrderItem";
 import { Discounts, DiscountType } from "../../entity/pos/Discounts";
 
 export interface PriceCalculationResult {
@@ -28,7 +28,7 @@ export class PriceCalculatorService {
      * @param vatIncluded Whether VAT is included in the price or added on top (Default: Excluded / Added on top)
      */
     static calculateOrderTotal(
-        items: OrdersItem[],
+        items: SalesOrderItem[],
         discount?: Discounts | null,
         vatIncluded: boolean = false
     ): PriceCalculationResult {

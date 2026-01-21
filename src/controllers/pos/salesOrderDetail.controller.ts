@@ -1,12 +1,12 @@
 import { Request, Response } from "express";
-import { OrdersDetailService } from "../../services/pos/ordersDetail.service";
+import { SalesOrderDetailService } from "../../services/pos/salesOrderDetail.service";
 
-export class OrdersDetailController {
-    constructor(private ordersDetailService: OrdersDetailService) { }
+export class SalesOrderDetailController {
+    constructor(private salesOrderDetailService: SalesOrderDetailService) { }
 
     findAll = async (req: Request, res: Response) => {
         try {
-            const details = await this.ordersDetailService.findAll()
+            const details = await this.salesOrderDetailService.findAll()
             res.status(200).json(details)
         } catch (error: any) {
             res.status(500).json({ error: error.message })
@@ -15,7 +15,7 @@ export class OrdersDetailController {
 
     findOne = async (req: Request, res: Response) => {
         try {
-            const detail = await this.ordersDetailService.findOne(req.params.id)
+            const detail = await this.salesOrderDetailService.findOne(req.params.id)
             res.status(200).json(detail)
         } catch (error: any) {
             res.status(500).json({ error: error.message })
@@ -24,7 +24,7 @@ export class OrdersDetailController {
 
     create = async (req: Request, res: Response) => {
         try {
-            const detail = await this.ordersDetailService.create(req.body)
+            const detail = await this.salesOrderDetailService.create(req.body)
             res.status(201).json(detail)
         } catch (error: any) {
             res.status(500).json({ error: error.message })
@@ -33,7 +33,7 @@ export class OrdersDetailController {
 
     update = async (req: Request, res: Response) => {
         try {
-            const detail = await this.ordersDetailService.update(req.params.id, req.body)
+            const detail = await this.salesOrderDetailService.update(req.params.id, req.body)
             res.status(200).json(detail)
         } catch (error: any) {
             res.status(500).json({ error: error.message })
@@ -42,7 +42,7 @@ export class OrdersDetailController {
 
     delete = async (req: Request, res: Response) => {
         try {
-            await this.ordersDetailService.delete(req.params.id)
+            await this.salesOrderDetailService.delete(req.params.id)
             res.status(200).json({ message: "ลบรายละเอียดเพิ่มเติมสำเร็จ" })
         } catch (error: any) {
             res.status(500).json({ error: error.message })

@@ -1,11 +1,11 @@
-import { Orders, OrderStatus } from "../../entity/stock/Orders";
-import { OrdersModel } from "../../models/stock/orders.model";
+import { PurchaseOrder, PurchaseOrderStatus } from "../../entity/stock/PurchaseOrder";
+import { StockOrdersModel } from "../../models/stock/orders.model";
 import { SocketService } from "../socket.service";
 
 export class OrdersService {
     private socketService = SocketService.getInstance();
 
-    constructor(private ordersModel: OrdersModel) { }
+    constructor(private ordersModel: StockOrdersModel) { }
 
     async createOrder(orderedById: string, items: { ingredient_id: string; quantity_ordered: number }[], remark?: string) {
         try {
@@ -17,7 +17,7 @@ export class OrdersService {
         }
     }
 
-    async getAllOrders(filters?: { status?: OrderStatus | OrderStatus[] }, page: number = 1, limit: number = 50) {
+    async getAllOrders(filters?: { status?: PurchaseOrderStatus | PurchaseOrderStatus[] }, page: number = 1, limit: number = 50) {
         try {
             return await this.ordersModel.findAll(filters, page, limit);
         } catch (error) {
@@ -43,7 +43,7 @@ export class OrdersService {
         }
     }
 
-    async updateStatus(id: string, status: OrderStatus) {
+    async updateStatus(id: string, status: PurchaseOrderStatus) {
         try {
             const updatedOrder = await this.ordersModel.updateStatus(id, status);
             if (!updatedOrder) throw new Error("ไม่พบข้อมูลการสั่งซื้อ");

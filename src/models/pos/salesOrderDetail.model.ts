@@ -1,44 +1,44 @@
 import { AppDataSource } from "../../database/database";
-import { OrdersDetail } from "../../entity/pos/OrdersDetail";
+import { SalesOrderDetail } from "../../entity/pos/SalesOrderDetail";
 
-export class OrdersDetailModels {
-    private ordersDetailRepository = AppDataSource.getRepository(OrdersDetail)
+export class SalesOrderDetailModels {
+    private salesOrderDetailRepository = AppDataSource.getRepository(SalesOrderDetail)
 
-    async findAll(): Promise<OrdersDetail[]> {
+    async findAll(): Promise<SalesOrderDetail[]> {
         try {
-            return this.ordersDetailRepository.find({
+            return this.salesOrderDetailRepository.find({
                 order: {
                     create_date: "ASC"
                 },
-                relations: ["orders_item"]
+                relations: ["sales_order_item"]
             })
         } catch (error) {
             throw error
         }
     }
 
-    async findOne(id: string): Promise<OrdersDetail | null> {
+    async findOne(id: string): Promise<SalesOrderDetail | null> {
         try {
-            return this.ordersDetailRepository.findOne({
+            return this.salesOrderDetailRepository.findOne({
                 where: { id },
-                relations: ["orders_item"]
+                relations: ["sales_order_item"]
             })
         } catch (error) {
             throw error
         }
     }
 
-    async create(data: OrdersDetail): Promise<OrdersDetail> {
+    async create(data: SalesOrderDetail): Promise<SalesOrderDetail> {
         try {
-            return this.ordersDetailRepository.save(data)
+            return this.salesOrderDetailRepository.save(data)
         } catch (error) {
             throw error
         }
     }
 
-    async update(id: string, data: OrdersDetail): Promise<OrdersDetail> {
+    async update(id: string, data: SalesOrderDetail): Promise<SalesOrderDetail> {
         try {
-            await this.ordersDetailRepository.update(id, data)
+            await this.salesOrderDetailRepository.update(id, data)
             const updatedDetail = await this.findOne(id)
             if (!updatedDetail) {
                 throw new Error("ไม่พบข้อมูลรายละเอียดเพิ่มเติมของสินค้าที่ต้องการค้นหา")
@@ -51,7 +51,7 @@ export class OrdersDetailModels {
 
     async delete(id: string): Promise<void> {
         try {
-            await this.ordersDetailRepository.delete(id)
+            await this.salesOrderDetailRepository.delete(id)
         } catch (error) {
             throw error
         }

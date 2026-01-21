@@ -26,6 +26,7 @@ const Orders_1 = require("../../entity/pos/Orders");
 const database_1 = require("../../database/database");
 const Tables_1 = require("../../entity/pos/Tables");
 const OrdersItem_1 = require("../../entity/pos/OrdersItem");
+const OrdersDetail_1 = require("../../entity/pos/OrdersDetail");
 const OrderEnums_1 = require("../../entity/pos/OrderEnums");
 const priceCalculator_service_1 = require("./priceCalculator.service");
 class OrdersService {
@@ -191,10 +192,21 @@ class OrdersService {
                     item.quantity = itemData.quantity;
                     item.price = itemData.price;
                     item.discount_amount = itemData.discount_amount || 0;
-                    item.total_price = (item.price * item.quantity) - item.discount_amount;
+                    const detailsTotal = itemData.details ? itemData.details.reduce((sum, d) => sum + (Number(d.extra_price) || 0), 0) : 0;
+                    item.total_price = (Number(item.price) + detailsTotal) * item.quantity - Number(item.discount_amount || 0);
                     item.notes = itemData.notes;
                     item.status = OrderEnums_1.OrderStatus.Pending;
-                    yield this.ordersModel.createItem(item, manager);
+                    const savedItem = yield this.ordersModel.createItem(item, manager);
+                    if (itemData.details && itemData.details.length > 0) {
+                        const detailRepo = manager.getRepository(OrdersDetail_1.OrdersDetail);
+                        for (const d of itemData.details) {
+                            const detail = new OrdersDetail_1.OrdersDetail();
+                            detail.orders_item_id = savedItem.id;
+                            detail.detail_name = d.detail_name;
+                            detail.extra_price = d.extra_price || 0;
+                            yield detailRepo.save(detail);
+                        }
+                    }
                     yield this.recalculateOrderTotal(orderId, manager);
                     const updatedOrder = yield this.ordersModel.findOne(orderId);
                     return updatedOrder;

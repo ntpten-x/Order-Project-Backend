@@ -7,7 +7,7 @@ export class TablesModels {
     async findAll(): Promise<any[]> {
         try {
             return this.tablesRepository.createQueryBuilder("tables")
-                .leftJoinAndMapOne("tables.active_order", "Orders", "orders", "orders.table_id = tables.id AND orders.status NOT IN (:...statuses)", { statuses: ['Paid', 'Cancelled', 'completed'] }) // Exclude 'completed' too just in case
+                .leftJoinAndMapOne("tables.active_order", "SalesOrder", "so", "so.table_id = tables.id AND so.status NOT IN (:...statuses)", { statuses: ['Paid', 'Cancelled', 'completed'] }) // Exclude 'completed' too just in case
                 .orderBy("tables.create_date", "ASC")
                 .getMany()
                 .then(tables => tables.map((t: any) => {

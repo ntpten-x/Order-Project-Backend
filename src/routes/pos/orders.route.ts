@@ -13,6 +13,9 @@ const ordersController = new OrdersController(ordersService)
 router.use(authenticateToken)
 router.use(authorizeRole(["Admin", "Manager", "Employee"]))
 
+// Specific routes must come before dynamic routes like /:id
+router.get("/stats", authorizeRole(["Admin", "Manager", "Employee"]), ordersController.getStats)
+
 router.get("/", authorizeRole(["Admin", "Manager", "Employee"]), ordersController.findAll)
 router.get("/items", authorizeRole(["Admin", "Manager", "Employee"]), ordersController.findAllItems)
 router.get("/:id", authorizeRole(["Admin", "Manager", "Employee"]), ordersController.findOne)

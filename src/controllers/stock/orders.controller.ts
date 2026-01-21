@@ -1,11 +1,11 @@
 import { Request, Response } from "express";
 import { OrdersService } from "../../services/stock/orders.service";
-import { OrderStatus } from "../../entity/stock/Orders";
+import { PurchaseOrderStatus } from "../../entity/stock/PurchaseOrder";
 
-import { OrdersModel } from "../../models/stock/orders.model";
+import { StockOrdersModel } from "../../models/stock/orders.model";
 
 export class OrdersController {
-    private ordersModel = new OrdersModel();
+    private ordersModel = new StockOrdersModel();
     private ordersService = new OrdersService(this.ordersModel);
 
     createOrder = async (req: Request, res: Response) => {
@@ -30,11 +30,11 @@ export class OrdersController {
             const page = parseInt(req.query.page as string) || 1;
             const limit = parseInt(req.query.limit as string) || 50;
 
-            let statusFilter: OrderStatus | OrderStatus[] | undefined;
+            let statusFilter: PurchaseOrderStatus | PurchaseOrderStatus[] | undefined;
 
             if (statusParam) {
-                const statuses = statusParam.split(',') as OrderStatus[];
-                // Optional: Validate statuses against OrderStatus enum
+                const statuses = statusParam.split(',') as PurchaseOrderStatus[];
+                // Optional: Validate statuses against PurchaseOrderStatus enum
                 statusFilter = statuses.length > 1 ? statuses : statuses[0];
             }
 
@@ -82,7 +82,7 @@ export class OrdersController {
             const { id } = req.params;
             const { status } = req.body;
 
-            if (!Object.values(OrderStatus).includes(status)) {
+            if (!Object.values(PurchaseOrderStatus).includes(status)) {
                 return res.status(400).json({ message: "ไม่พบข้อมูลสถานะ" });
             }
 

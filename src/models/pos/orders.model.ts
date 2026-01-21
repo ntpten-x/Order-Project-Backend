@@ -1,13 +1,13 @@
 import { AppDataSource } from "../../database/database";
-import { Orders } from "../../entity/pos/Orders";
-import { OrdersItem } from "../../entity/pos/OrdersItem";
-import { OrdersDetail } from "../../entity/pos/OrdersDetail";
+import { SalesOrder } from "../../entity/pos/SalesOrder";
+import { SalesOrderItem } from "../../entity/pos/SalesOrderItem";
+import { SalesOrderDetail } from "../../entity/pos/SalesOrderDetail";
 import { EntityManager, In } from "typeorm";
 
 export class OrdersModels {
-    private ordersRepository = AppDataSource.getRepository(Orders)
+    private ordersRepository = AppDataSource.getRepository(SalesOrder)
 
-    async findAll(page: number = 1, limit: number = 50, statuses?: string[]): Promise<{ data: Orders[], total: number, page: number, limit: number }> {
+    async findAll(page: number = 1, limit: number = 50, statuses?: string[]): Promise<{ data: SalesOrder[], total: number, page: number, limit: number }> {
         try {
             const skip = (page - 1) * limit;
             const whereClause = statuses && statuses.length > 0 ? { status: In(statuses) } : {};
@@ -33,17 +33,48 @@ export class OrdersModels {
         }
     }
 
-    async findAllItems(status?: any): Promise<OrdersItem[]> {
+    async getStats(statuses: string[]): Promise<{ dineIn: number, takeaway: number, delivery: number, total: number }> {
+        try {
+            const stats = await this.ordersRepository
+                .createQueryBuilder("order")
+                .select("order.order_type", "type")
+                .addSelect("COUNT(order.id)", "count")
+                .where("order.status IN (:...statuses)", { statuses })
+                .groupBy("order.order_type")
+                .getRawMany();
+
+            const result = {
+                dineIn: 0,
+                takeaway: 0,
+                delivery: 0,
+                total: 0
+            };
+
+            stats.forEach(stat => {
+                const count = parseInt(stat.count);
+                if (stat.type === 'DineIn') result.dineIn = count;
+                else if (stat.type === 'TakeAway') result.takeaway = count;
+                else if (stat.type === 'Delivery') result.delivery = count;
+                result.total += count;
+            });
+
+            return result;
+        } catch (error) {
+            throw error;
+        }
+    }
+
+    async findAllItems(status?: any): Promise<SalesOrderItem[]> {
         try {
             // Need simple find with relations
             const where: any = {};
             if (status) where.status = status;
 
-            return await AppDataSource.getRepository(OrdersItem).find({
+            return await AppDataSource.getRepository(SalesOrderItem).find({
                 where,
                 relations: ["product", "order", "order.table"], // order.table for monitoring
                 order: {
-                    // order by create date? OrdersItem doesn't have create_date, use order's
+                    // order by create date? SalesOrderItem doesn't have create_date, use order's
                     order: {
                         create_date: 'ASC'
                     }
@@ -54,7 +85,7 @@ export class OrdersModels {
         }
     }
 
-    async findOne(id: string): Promise<Orders | null> {
+    async findOne(id: string): Promise<SalesOrder | null> {
         try {
             return this.ordersRepository.findOne({
                 where: { id },
@@ -66,7 +97,8 @@ export class OrdersModels {
                     "items",
                     "items.product",
                     "items.details",
-                    "payments"
+                    "payments",
+                    "payments.payment_method"
                 ]
             })
         } catch (error) {
@@ -74,7 +106,7 @@ export class OrdersModels {
         }
     }
 
-    async findOneByOrderNo(order_no: string): Promise<Orders | null> {
+    async findOneByOrderNo(order_no: string): Promise<SalesOrder | null> {
         try {
             return this.ordersRepository.findOne({
                 where: { order_no },
@@ -85,9 +117,9 @@ export class OrdersModels {
         }
     }
 
-    async create(data: Orders, manager?: EntityManager): Promise<Orders> {
+    async create(data: SalesOrder, manager?: EntityManager): Promise<SalesOrder> {
         try {
-            const repo = manager ? manager.getRepository(Orders) : this.ordersRepository;
+            const repo = manager ? manager.getRepository(SalesOrder) : this.ordersRepository;
             return repo.save(data)
         } catch (error) {
             throw error
@@ -95,15 +127,15 @@ export class OrdersModels {
     }
 
     // Transactional Create
-    async createFullOrder(data: Orders, items: any[]): Promise<Orders> {
+    async createFullOrder(data: SalesOrder, items: any[]): Promise<SalesOrder> {
         return await AppDataSource.manager.transaction(async (transactionalEntityManager: EntityManager) => {
             // 1. Save Order Header
-            const savedOrder = await transactionalEntityManager.save(Orders, data);
+            const savedOrder = await transactionalEntityManager.save(SalesOrder, data);
 
             // 2. Save Items and Details
             if (items && items.length > 0) {
                 for (const itemData of items) {
-                    const item = new OrdersItem();
+                    const item = new SalesOrderItem();
                     item.order_id = savedOrder.id;
                     item.product_id = itemData.product_id;
                     item.quantity = itemData.quantity;
@@ -112,16 +144,16 @@ export class OrdersModels {
                     item.total_price = itemData.total_price;
                     item.notes = itemData.notes;
 
-                    const savedItem = await transactionalEntityManager.save(OrdersItem, item);
+                    const savedItem = await transactionalEntityManager.save(SalesOrderItem, item);
 
                     if (itemData.details && itemData.details.length > 0) {
                         for (const detailData of itemData.details) {
-                            const detail = new OrdersDetail();
+                            const detail = new SalesOrderDetail();
                             detail.orders_item_id = savedItem.id;
                             detail.detail_name = detailData.detail_name;
                             detail.extra_price = detailData.extra_price || 0;
 
-                            await transactionalEntityManager.save(OrdersDetail, detail);
+                            await transactionalEntityManager.save(SalesOrderDetail, detail);
                         }
                     }
                 }
@@ -131,9 +163,9 @@ export class OrdersModels {
         });
     }
 
-    async update(id: string, data: Orders, manager?: EntityManager): Promise<Orders> {
+    async update(id: string, data: SalesOrder, manager?: EntityManager): Promise<SalesOrder> {
         try {
-            const repo = manager ? manager.getRepository(Orders) : this.ordersRepository;
+            const repo = manager ? manager.getRepository(SalesOrder) : this.ordersRepository;
             await repo.update(id, data)
             const updatedOrder = await repo.findOne({
                 where: { id },
@@ -159,7 +191,7 @@ export class OrdersModels {
 
     async delete(id: string, manager?: EntityManager): Promise<void> {
         try {
-            const repo = manager ? manager.getRepository(Orders) : this.ordersRepository;
+            const repo = manager ? manager.getRepository(SalesOrder) : this.ordersRepository;
             await repo.delete(id)
         } catch (error) {
             throw error
@@ -168,45 +200,45 @@ export class OrdersModels {
 
     async updateItemStatus(itemId: string, status: any, manager?: EntityManager): Promise<void> {
         try {
-            const repo = manager ? manager.getRepository(OrdersItem) : AppDataSource.getRepository(OrdersItem);
+            const repo = manager ? manager.getRepository(SalesOrderItem) : AppDataSource.getRepository(SalesOrderItem);
             await repo.update(itemId, { status })
         } catch (error) {
             throw error
         }
     }
 
-    async findItemsByOrderId(orderId: string, manager?: EntityManager): Promise<OrdersItem[]> {
-        const repo = manager ? manager.getRepository(OrdersItem) : AppDataSource.getRepository(OrdersItem);
+    async findItemsByOrderId(orderId: string, manager?: EntityManager): Promise<SalesOrderItem[]> {
+        const repo = manager ? manager.getRepository(SalesOrderItem) : AppDataSource.getRepository(SalesOrderItem);
         return await repo.find({ where: { order_id: orderId } });
     }
 
     async updateStatus(orderId: string, status: any, manager?: EntityManager): Promise<void> {
-        const repo = manager ? manager.getRepository(Orders) : this.ordersRepository;
+        const repo = manager ? manager.getRepository(SalesOrder) : this.ordersRepository;
         await repo.update(orderId, { status });
     }
 
     async updateAllItemsStatus(orderId: string, status: any, manager?: EntityManager): Promise<void> {
-        const repo = manager ? manager.getRepository(OrdersItem) : AppDataSource.getRepository(OrdersItem);
+        const repo = manager ? manager.getRepository(SalesOrderItem) : AppDataSource.getRepository(SalesOrderItem);
         await repo.update({ order_id: orderId }, { status });
     }
 
-    async createItem(data: OrdersItem, manager?: EntityManager): Promise<OrdersItem> {
-        const repo = manager ? manager.getRepository(OrdersItem) : AppDataSource.getRepository(OrdersItem);
+    async createItem(data: SalesOrderItem, manager?: EntityManager): Promise<SalesOrderItem> {
+        const repo = manager ? manager.getRepository(SalesOrderItem) : AppDataSource.getRepository(SalesOrderItem);
         return await repo.save(data);
     }
 
-    async updateItem(id: string, data: Partial<OrdersItem>, manager?: EntityManager): Promise<void> {
-        const repo = manager ? manager.getRepository(OrdersItem) : AppDataSource.getRepository(OrdersItem);
+    async updateItem(id: string, data: Partial<SalesOrderItem>, manager?: EntityManager): Promise<void> {
+        const repo = manager ? manager.getRepository(SalesOrderItem) : AppDataSource.getRepository(SalesOrderItem);
         await repo.update(id, data);
     }
 
     async deleteItem(id: string, manager?: EntityManager): Promise<void> {
-        const repo = manager ? manager.getRepository(OrdersItem) : AppDataSource.getRepository(OrdersItem);
+        const repo = manager ? manager.getRepository(SalesOrderItem) : AppDataSource.getRepository(SalesOrderItem);
         await repo.delete(id);
     }
 
-    async findItemById(id: string, manager?: EntityManager): Promise<OrdersItem | null> {
-        const repo = manager ? manager.getRepository(OrdersItem) : AppDataSource.getRepository(OrdersItem);
+    async findItemById(id: string, manager?: EntityManager): Promise<SalesOrderItem | null> {
+        const repo = manager ? manager.getRepository(SalesOrderItem) : AppDataSource.getRepository(SalesOrderItem);
         return await repo.findOne({ where: { id }, relations: ["product"] });
     }
 }

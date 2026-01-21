@@ -81,7 +81,8 @@ class OrdersModels {
                         "items",
                         "items.product",
                         "items.details",
-                        "payments"
+                        "payments",
+                        "payments.payment_method"
                     ]
                 });
             }
