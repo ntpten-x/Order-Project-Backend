@@ -7,21 +7,7 @@ import { Discounts } from "./Discounts";
 import { Users } from "../Users";
 import { OrderType, OrderStatus } from "./OrderEnums";
 
-@Entity("sales_orders") // Updated table name to be specific per user request "Refactor Entity Naming"
-// NOTE: Renaming table name usually implies migration or data loss if not carefully migrated.
-// However, the task is about "Resolving Naming Conflicts". We had "Orders" in stock vs "Orders" in POS.
-// Stock is now "StockOrders" (table: stock_orders).
-// POS Orders should be "SalesOrders" (table: sales_orders) to be clean.
-// If I change @Entity("orders") to @Entity("sales_orders"), TypeORM sync will likely create new table.
-// User said "Existing database table names are preserved by explicitly setting @Entity("table_name") decorators".
-// This implies I should KEEP existing table name if I want to preserve data.
-// Existing table for `Orders` (POS) was `orders` (implied by empty `@Entity()`).
-// So I should stick to `@Entity("orders")` to map to existing data unless migration is planned.
-// User said "Existing database table names are preserved by explicitly setting...".
-// OK, I will keep `@Entity("orders")` but rename class.
-// Wait, I already have `@Entity("orders")` from previous state?
-// In the current file `SalesOrder.ts`, line 10 says `@Entity("orders")`.
-// I will keep it `@Entity("orders")` but rename relations.
+@Entity("sales_orders")
 
 @Index(["create_date"])
 @Index(["status"])

@@ -12,6 +12,7 @@ import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import csurf from "csurf";
 import compression from "compression";
+import { randomBytes } from "crypto";
 import ingredientsUnitStockRouter from "./src/routes/stock/ingredientsUnit.route";
 import ingredientsStockRouter from "./src/routes/stock/ingredients.route";
 import ordersStockRouter from "./src/routes/stock/orders.route";
@@ -38,6 +39,20 @@ import { AppError } from "./src/utils/AppError";
 const app = express();
 const httpServer = createServer(app); // Wrap express with HTTP server
 const port = process.env.PORT || 3000;
+
+// Trust proxy for secure cookies behind proxies (e.g., Render, Nginx)
+app.set("trust proxy", 1);
+
+// Ensure JWT secret exists (no insecure default)
+if (!process.env.JWT_SECRET) {
+    if (process.env.NODE_ENV === "production") {
+        console.error("JWT_SECRET is required in production.");
+        process.exit(1);
+    } else {
+        process.env.JWT_SECRET = randomBytes(32).toString("hex");
+        console.warn("JWT_SECRET not set. Generated a temporary secret for this session.");
+    }
+}
 
 // Security Middlewares
 app.use(helmet());
@@ -102,15 +117,19 @@ const csrfProtection = csurf({
     }
 });
 
-// Apply CSRF protection to all routes except those that don't need it (if any)
-// Typically, we apply it globally, but we might need to exclude the /csrf-token endpoint from check if strictly needed
-// Csurf middleware checks token on mutating requests (POST, PUT, DELETE), not GET.
-// So applying it globally is usually fine as long as we have a way to get the token.
-app.get('/health', (req, res) => {
-    res.status(200).json({ status: 'ok', uptime: process.uptime() });
-});
+// Apply CSRF protection to all routes except explicit public endpoints
+const csrfExcludedPaths = new Set([
+    "/auth/login",
+    "/auth/logout",
+    "/health"
+]);
 
-app.use(csrfProtection);
+app.use((req, res, next) => {
+    if (csrfExcludedPaths.has(req.path)) {
+        return next();
+    }
+    return csrfProtection(req, res, next);
+});
 
 app.get('/csrf-token', (req, res) => {
     res.json({ csrfToken: req.csrfToken() });

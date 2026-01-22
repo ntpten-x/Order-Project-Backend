@@ -28,6 +28,14 @@ import { TopSellingItemsView } from "../entity/pos/views/TopSellingItemsView"
 import { Shifts } from "../entity/pos/Shifts"
 import * as dotenv from "dotenv"
 dotenv.config()
+const isProd = process.env.NODE_ENV === "production"
+const synchronize = process.env.TYPEORM_SYNC
+    ? process.env.TYPEORM_SYNC === "true"
+    : !isProd
+const useSsl = process.env.DATABASE_SSL === "true" || process.env.DATABASE_SSL === "1"
+const sslOptions = useSsl
+    ? { rejectUnauthorized: process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== "false" }
+    : false
 export const AppDataSource = new DataSource({
     type: "postgres",
     host: process.env.DATABASE_HOST,
@@ -36,11 +44,9 @@ export const AppDataSource = new DataSource({
     password: process.env.DATABASE_PASSWORD,
     database: process.env.DATABASE_NAME,
     entities: [Users, Roles, IngredientsUnit, Ingredients, PurchaseOrder, StockOrdersItem, StockOrdersDetail, SalesOrder, SalesOrderItem, SalesOrderDetail, Category, Products, ProductsUnit, Tables, Delivery, Discounts, Payments, PaymentMethod, Shifts, ShopProfile, SalesSummaryView, TopSellingItemsView],
-    synchronize: true,
+    synchronize,
     logging: false,
-    ssl: {
-        rejectUnauthorized: false
-    }
+    ssl: sslOptions
 })
 
 export const connectDatabase = async () => {

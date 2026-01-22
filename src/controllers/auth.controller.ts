@@ -38,7 +38,10 @@ export class AuthController {
             }
 
             // Generate Token
-            const secret = process.env.JWT_SECRET || "default_secret_key";
+            const secret = process.env.JWT_SECRET;
+            if (!secret) {
+                return res.status(500).json({ message: "Server misconfiguration: JWT_SECRET missing" });
+            }
             const token = jwt.sign(
                 { id: user.id, username: user.username, role: user.roles.roles_name },
                 secret,

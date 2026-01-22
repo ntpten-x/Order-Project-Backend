@@ -35,6 +35,10 @@ export class OrdersController {
     })
 
     create = catchAsync(async (req: Request, res: Response) => {
+        const user = (req as any).user;
+        if (user?.id && !req.body.created_by_id) {
+            req.body.created_by_id = user.id;
+        }
         // Check if input has items, if so use createFullOrder
         if (req.body.items && Array.isArray(req.body.items) && req.body.items.length > 0) {
             const order = await this.ordersService.createFullOrder(req.body)

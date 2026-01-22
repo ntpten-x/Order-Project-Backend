@@ -28,7 +28,7 @@ export class UsersService {
         try {
             const findUser = await this.usersModel.findOneByUsername(users.username)
             if (findUser) {
-                throw new Error("ผู้ใช้ชื่อ " + users.username + " ถูกใช้แล้ว")
+                throw new Error("มีชื่อผู้ใช้ " + users.username + " อยู่ในระบบแล้ว")
             }
             users.password = await bcrypt.hash(users.password, 10)
             await this.usersModel.create(users)
@@ -49,10 +49,10 @@ export class UsersService {
             if (users.password) {
                 users.password = await bcrypt.hash(users.password, 10)
             }
-            if (findUser.username !== users.username) {
+            if (users.username && findUser.username !== users.username) {
                 const findUserByUsername = await this.usersModel.findOneByUsername(users.username)
                 if (findUserByUsername) {
-                    throw new Error("ผู้ใช้ชื่อ " + users.username + " ถูกใช้แล้ว")
+                    throw new Error("มีชื่อผู้ใช้ " + users.username + " อยู่ในระบบแล้ว")
                 }
             }
             await this.usersModel.update(id, users)

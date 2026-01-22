@@ -3,6 +3,8 @@ import { OrdersModels } from "../../models/pos/orders.model";
 import { OrdersService } from "../../services/pos/orders.service";
 import { OrdersController } from "../../controllers/pos/orders.controller";
 import { authenticateToken, authorizeRole } from "../../middleware/auth.middleware";
+import { validate } from "../../middleware/validate.middleware";
+import { addOrderItemSchema, createOrderSchema, orderIdParamSchema, orderItemIdParamSchema, updateOrderItemSchema, updateOrderItemStatusSchema, updateOrderSchema } from "../../utils/schemas/posOrders.schema";
 
 const router = Router()
 
@@ -18,16 +20,16 @@ router.get("/stats", authorizeRole(["Admin", "Manager", "Employee"]), ordersCont
 
 router.get("/", authorizeRole(["Admin", "Manager", "Employee"]), ordersController.findAll)
 router.get("/items", authorizeRole(["Admin", "Manager", "Employee"]), ordersController.findAllItems)
-router.get("/:id", authorizeRole(["Admin", "Manager", "Employee"]), ordersController.findOne)
+router.get("/:id", authorizeRole(["Admin", "Manager", "Employee"]), validate(orderIdParamSchema), ordersController.findOne)
 
-router.post("/", authorizeRole(["Admin", "Manager", "Employee"]), ordersController.create)
-router.put("/:id", authorizeRole(["Admin", "Manager", "Employee"]), ordersController.update)
-router.delete("/:id", authorizeRole(["Admin", "Manager"]), ordersController.delete)
-router.patch("/items/:id/status", authorizeRole(["Admin", "Manager", "Employee"]), ordersController.updateItemStatus)
+router.post("/", authorizeRole(["Admin", "Manager", "Employee"]), validate(createOrderSchema), ordersController.create)
+router.put("/:id", authorizeRole(["Admin", "Manager", "Employee"]), validate(updateOrderSchema), ordersController.update)
+router.delete("/:id", authorizeRole(["Admin", "Manager"]), validate(orderIdParamSchema), ordersController.delete)
+router.patch("/items/:id/status", authorizeRole(["Admin", "Manager", "Employee"]), validate(updateOrderItemStatusSchema), ordersController.updateItemStatus)
 
 // Item Management Routes
-router.post("/:id/items", authorizeRole(["Admin", "Manager", "Employee"]), ordersController.addItem)
-router.put("/items/:itemId", authorizeRole(["Admin", "Manager", "Employee"]), ordersController.updateItem)
-router.delete("/items/:itemId", authorizeRole(["Admin", "Manager"]), ordersController.deleteItem)
+router.post("/:id/items", authorizeRole(["Admin", "Manager", "Employee"]), validate(addOrderItemSchema), ordersController.addItem)
+router.put("/items/:itemId", authorizeRole(["Admin", "Manager", "Employee"]), validate(updateOrderItemSchema), ordersController.updateItem)
+router.delete("/items/:itemId", authorizeRole(["Admin", "Manager"]), validate(orderItemIdParamSchema), ordersController.deleteItem)
 
 export default router

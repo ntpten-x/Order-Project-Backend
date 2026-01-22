@@ -52,7 +52,10 @@ export class SocketService {
                     return next(new Error("Authentication error: No token"));
                 }
 
-                const secret = process.env.JWT_SECRET || "default_secret_key";
+                const secret = process.env.JWT_SECRET;
+                if (!secret) {
+                    return next(new Error("Server misconfiguration: JWT_SECRET missing"));
+                }
                 const decoded: any = jwt.verify(token, secret);
 
                 // Fetch user to check is_use

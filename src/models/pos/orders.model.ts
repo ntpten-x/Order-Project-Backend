@@ -2,6 +2,7 @@ import { AppDataSource } from "../../database/database";
 import { SalesOrder } from "../../entity/pos/SalesOrder";
 import { SalesOrderItem } from "../../entity/pos/SalesOrderItem";
 import { SalesOrderDetail } from "../../entity/pos/SalesOrderDetail";
+import { Products } from "../../entity/pos/Products";
 import { EntityManager, In } from "typeorm";
 
 export class OrdersModels {
@@ -140,9 +141,21 @@ export class OrdersModels {
                     item.order_id = savedOrder.id;
                     item.product_id = itemData.product_id;
                     item.quantity = itemData.quantity;
-                    item.price = itemData.price;
+
+                    const product = await transactionalEntityManager.findOne(Products, {
+                        where: { id: itemData.product_id }
+                    });
+                    if (!product) {
+                        throw new Error("ไม่พบสินค้า");
+                    }
+
+                    const detailsTotal = itemData.details
+                        ? itemData.details.reduce((sum: number, d: any) => sum + (Number(d.extra_price) || 0), 0)
+                        : 0;
+
+                    item.price = Number(product.price);
                     item.discount_amount = itemData.discount_amount || 0;
-                    item.total_price = itemData.total_price;
+                    item.total_price = Math.max(0, (item.price + detailsTotal) * item.quantity - Number(item.discount_amount || 0));
                     item.notes = itemData.notes;
 
                     const savedItem = await transactionalEntityManager.save(SalesOrderItem, item);
@@ -240,6 +253,6 @@ export class OrdersModels {
 
     async findItemById(id: string, manager?: EntityManager): Promise<SalesOrderItem | null> {
         const repo = manager ? manager.getRepository(SalesOrderItem) : AppDataSource.getRepository(SalesOrderItem);
-        return await repo.findOne({ where: { id }, relations: ["product"] });
+        return await repo.findOne({ where: { id }, relations: ["product", "details"] });
     }
 }

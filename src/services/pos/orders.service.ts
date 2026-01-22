@@ -6,13 +6,89 @@ import { Tables, TableStatus } from "../../entity/pos/Tables";
 import { SalesOrderItem } from "../../entity/pos/SalesOrderItem";
 import { SalesOrderDetail } from "../../entity/pos/SalesOrderDetail";
 import { OrderStatus } from "../../entity/pos/OrderEnums";
+import { Products } from "../../entity/pos/Products";
 import { EntityManager } from "typeorm";
-import { PriceCalculatorService } from "./priceCalculator.service";
+import { recalculateOrderTotal } from "./orderTotals.service";
+import { AppError } from "../../utils/AppError";
 
 export class OrdersService {
     private socketService = SocketService.getInstance();
 
     constructor(private ordersModel: OrdersModels) { }
+
+    private async ensureOrderNo(orderNo?: string): Promise<string> {
+        if (orderNo) return orderNo;
+        for (let i = 0; i < 5; i++) {
+            const now = new Date();
+            const datePart = now.toISOString().slice(0, 10).replace(/-/g, "");
+            const timePart = now.toTimeString().slice(0, 8).replace(/:/g, "");
+            const rand = Math.floor(1000 + Math.random() * 9000);
+            const candidate = `ORD-${datePart}-${timePart}-${rand}`;
+            const existing = await this.ordersModel.findOneByOrderNo(candidate);
+            if (!existing) return candidate;
+        }
+        throw new AppError("Unable to generate order number", 500);
+    }
+
+    private async prepareItems(items: any[], manager: EntityManager): Promise<Array<{ item: SalesOrderItem; details: SalesOrderDetail[] }>> {
+        const productRepo = manager.getRepository(Products);
+        const prepared: Array<{ item: SalesOrderItem; details: SalesOrderDetail[] }> = [];
+
+        for (const itemData of items) {
+            if (!itemData?.product_id) {
+                throw new AppError("Missing product_id", 400);
+            }
+            const product = await productRepo.findOne({
+                where: { id: itemData.product_id, is_active: true }
+            });
+            if (!product) {
+                throw new AppError("Product not found or inactive", 404);
+            }
+
+            const quantity = Number(itemData.quantity);
+            if (!Number.isFinite(quantity) || quantity <= 0) {
+                throw new AppError("Invalid quantity", 400);
+            }
+
+            const discount = Number(itemData.discount_amount || 0);
+            if (discount < 0) {
+                throw new AppError("Invalid discount amount", 400);
+            }
+
+            const detailsData = Array.isArray(itemData.details) ? itemData.details : [];
+            const detailsTotal = detailsData.reduce((sum: number, d: any) => sum + (Number(d?.extra_price) || 0), 0);
+
+            const unitPrice = Number(product.price);
+            const lineTotal = (unitPrice + detailsTotal) * quantity - discount;
+
+            const item = new SalesOrderItem();
+            item.product_id = product.id;
+            item.quantity = quantity;
+            item.price = unitPrice;
+            item.discount_amount = discount;
+            item.total_price = Math.max(0, Number(lineTotal));
+            item.notes = itemData.notes;
+            item.status = OrderStatus.Pending;
+
+            const details: SalesOrderDetail[] = detailsData.map((d: any) => {
+                const detail = new SalesOrderDetail();
+                detail.detail_name = d?.detail_name ?? "";
+                detail.extra_price = Number(d?.extra_price || 0);
+                return detail;
+            });
+
+            prepared.push({ item, details });
+        }
+
+        return prepared;
+    }
+
+    private ensureValidStatus(status: string): OrderStatus {
+        if (!Object.values(OrderStatus).includes(status as OrderStatus)) {
+            throw new AppError("Invalid status", 400);
+        }
+        return status as OrderStatus;
+    }
 
     async findAll(page: number, limit: number, statuses?: string[]): Promise<{ data: SalesOrder[], total: number, page: number, limit: number }> {
         try {
@@ -56,13 +132,13 @@ export class OrdersService {
     async create(orders: SalesOrder): Promise<SalesOrder> {
         return await AppDataSource.transaction(async (manager) => {
             try {
-                if (!orders.order_no) {
-                    throw new Error("กรุณาระบุเลขที่ออเดอร์")
-                }
-
-                const existingOrder = await this.ordersModel.findOneByOrderNo(orders.order_no)
-                if (existingOrder) {
-                    throw new Error("เลขที่ออเดอร์นี้มีอยู่ในระบบแล้ว")
+                if (orders.order_no) {
+                    const existingOrder = await this.ordersModel.findOneByOrderNo(orders.order_no)
+                    if (existingOrder) {
+                        throw new Error("เลขที่ออเดอร์นี้มีอยู่ในระบบแล้ว")
+                    }
+                } else {
+                    orders.order_no = await this.ensureOrderNo();
                 }
 
                 // Pass manager to create which uses it for repository
@@ -91,32 +167,66 @@ export class OrdersService {
     }
 
     async createFullOrder(data: any): Promise<SalesOrder> {
-        try {
-            if (!data.order_no) {
-                throw new Error("กรุณาระบุเลขที่ออเดอร์")
-            }
-
-            const existingOrder = await this.ordersModel.findOneByOrderNo(data.order_no)
-            if (existingOrder) {
-                throw new Error("เลขที่ออเดอร์นี้มีอยู่ในระบบแล้ว")
-            }
-
-            // Separate items from order data
+        return await AppDataSource.transaction(async (manager) => {
             const { items, ...orderData } = data;
 
-            const createdOrder = await this.ordersModel.createFullOrder(orderData, items);
+            if (!items || !Array.isArray(items) || items.length === 0) {
+                throw new AppError("กรุณาระบุรายการสินค้า", 400);
+            }
 
-            // Fetch full data to emit
-            const fullOrder = await this.ordersModel.findOne(createdOrder.id);
+            if (orderData.order_no) {
+                const existingOrder = await this.ordersModel.findOneByOrderNo(orderData.order_no)
+                if (existingOrder) {
+                    throw new Error("เลขที่ออเดอร์นี้มีอยู่ในระบบแล้ว")
+                }
+            } else {
+                orderData.order_no = await this.ensureOrderNo();
+            }
+
+            if (!orderData.status) {
+                orderData.status = OrderStatus.Pending;
+            }
+
+            const preparedItems = await this.prepareItems(items, manager);
+
+            const orderRepo = manager.getRepository(SalesOrder);
+            const itemRepo = manager.getRepository(SalesOrderItem);
+            const detailRepo = manager.getRepository(SalesOrderDetail);
+
+            const savedOrder = await orderRepo.save(orderData);
+
+            if (savedOrder.table_id) {
+                const tablesRepo = manager.getRepository(Tables)
+                await tablesRepo.update(savedOrder.table_id, { status: TableStatus.Unavailable })
+            }
+
+            for (const prepared of preparedItems) {
+                prepared.item.order_id = savedOrder.id;
+                const savedItem = await itemRepo.save(prepared.item);
+
+                if (prepared.details.length > 0) {
+                    for (const detail of prepared.details) {
+                        detail.orders_item_id = savedItem.id;
+                        await detailRepo.save(detail);
+                    }
+                }
+            }
+
+            await recalculateOrderTotal(savedOrder.id, manager);
+            return savedOrder;
+        }).then(async (savedOrder) => {
+            const fullOrder = await this.ordersModel.findOne(savedOrder.id);
             if (fullOrder) {
                 this.socketService.emit('orders:create', fullOrder);
+                if (fullOrder.table_id) {
+                    const tablesRepo = AppDataSource.getRepository(Tables)
+                    const t = await tablesRepo.findOneBy({ id: fullOrder.table_id })
+                    if (t) this.socketService.emit('tables:update', t)
+                }
                 return fullOrder;
             }
-            return createdOrder;
-
-        } catch (error) {
-            throw error;
-        }
+            return savedOrder;
+        })
     }
 
     async update(id: string, orders: SalesOrder): Promise<SalesOrder> {
@@ -133,9 +243,34 @@ export class OrdersService {
                 }
             }
 
+            if (orders.status) {
+                this.ensureValidStatus(String(orders.status));
+            }
+
             const updatedOrder = await this.ordersModel.update(id, orders)
-            this.socketService.emit('orders:update', updatedOrder)
-            return updatedOrder
+
+            if (orders.status) {
+                const normalizedStatus = this.ensureValidStatus(String(orders.status));
+                if (normalizedStatus === OrderStatus.Cancelled) {
+                    await this.ordersModel.updateAllItemsStatus(id, OrderStatus.Cancelled);
+                }
+            }
+
+            await recalculateOrderTotal(id);
+
+            const refreshedOrder = await this.ordersModel.findOne(id);
+            const result = refreshedOrder ?? updatedOrder;
+
+            const finalStatus = (orders.status as OrderStatus) ?? result.status;
+            if ((finalStatus === OrderStatus.Paid || finalStatus === OrderStatus.Cancelled) && result.table_id) {
+                const tablesRepo = AppDataSource.getRepository(Tables);
+                await tablesRepo.update(result.table_id, { status: TableStatus.Available });
+                const t = await tablesRepo.findOneBy({ id: result.table_id });
+                if (t) this.socketService.emit('tables:update', t);
+            }
+
+            this.socketService.emit('orders:update', result)
+            return result
         } catch (error) {
             throw error
         }
@@ -143,6 +278,13 @@ export class OrdersService {
 
     async delete(id: string): Promise<void> {
         try {
+            const order = await this.ordersModel.findOne(id);
+            if (order?.table_id) {
+                const tablesRepo = AppDataSource.getRepository(Tables);
+                await tablesRepo.update(order.table_id, { status: TableStatus.Available });
+                const t = await tablesRepo.findOneBy({ id: order.table_id });
+                if (t) this.socketService.emit('tables:update', t);
+            }
             await this.ordersModel.delete(id)
             this.socketService.emit('orders:delete', { id })
         } catch (error) {
@@ -152,7 +294,15 @@ export class OrdersService {
 
     async updateItemStatus(itemId: string, status: string): Promise<void> {
         try {
-            await this.ordersModel.updateItemStatus(itemId, status)
+            const normalized = this.ensureValidStatus(status);
+            const item = await this.ordersModel.findItemById(itemId);
+            if (!item) throw new AppError("Item not found", 404);
+
+            await this.ordersModel.updateItemStatus(itemId, normalized)
+            await recalculateOrderTotal(item.order_id);
+
+            const updatedOrder = await this.ordersModel.findOne(item.order_id);
+            if (updatedOrder) this.socketService.emit('orders:update', updatedOrder);
         } catch (error) {
             throw error
         }
@@ -161,31 +311,25 @@ export class OrdersService {
     async addItem(orderId: string, itemData: any): Promise<SalesOrder> {
         return await AppDataSource.transaction(async (manager) => {
             try {
-                const item = new SalesOrderItem();
+                const orderRepo = manager.getRepository(SalesOrder);
+                const order = await orderRepo.findOneBy({ id: orderId });
+                if (!order) throw new AppError("Order not found", 404);
+
+                const prepared = await this.prepareItems([itemData], manager);
+                const { item, details } = prepared[0];
                 item.order_id = orderId;
-                item.product_id = itemData.product_id;
-                item.quantity = itemData.quantity;
-                item.price = itemData.price;
-                item.discount_amount = itemData.discount_amount || 0;
-                const detailsTotal = itemData.details ? itemData.details.reduce((sum: number, d: any) => sum + (Number(d.extra_price) || 0), 0) : 0;
-                item.total_price = (Number(item.price) + detailsTotal) * item.quantity - Number(item.discount_amount || 0);
-                item.notes = itemData.notes;
-                item.status = OrderStatus.Pending;
 
                 const savedItem = await this.ordersModel.createItem(item, manager);
 
-                if (itemData.details && itemData.details.length > 0) {
+                if (details.length > 0) {
                     const detailRepo = manager.getRepository(SalesOrderDetail);
-                    for (const d of itemData.details) {
-                        const detail = new SalesOrderDetail();
+                    for (const detail of details) {
                         detail.orders_item_id = savedItem.id;
-                        detail.detail_name = d.detail_name;
-                        detail.extra_price = d.extra_price || 0;
                         await detailRepo.save(detail);
                     }
                 }
 
-                await this.recalculateOrderTotal(orderId, manager);
+                await recalculateOrderTotal(orderId, manager);
 
                 const updatedOrder = await this.ordersModel.findOne(orderId);
                 return updatedOrder!;
@@ -205,12 +349,18 @@ export class OrdersService {
                 if (!item) throw new Error("Item not found");
 
                 if (data.quantity !== undefined) {
-                    item.quantity = data.quantity;
-                    item.total_price = (Number(item.price) * item.quantity) - Number(item.discount_amount || 0);
+                    const qty = Number(data.quantity);
+                    if (!Number.isFinite(qty) || qty <= 0) {
+                        throw new AppError("Invalid quantity", 400);
+                    }
+                    item.quantity = qty;
                 }
                 if (data.notes !== undefined) {
                     item.notes = data.notes;
                 }
+
+                const detailsTotal = item.details ? item.details.reduce((sum: number, d: any) => sum + (Number(d.extra_price) || 0), 0) : 0;
+                item.total_price = Math.max(0, (Number(item.price) + detailsTotal) * item.quantity - Number(item.discount_amount || 0));
 
                 await this.ordersModel.updateItem(itemId, {
                     quantity: item.quantity,
@@ -218,7 +368,7 @@ export class OrdersService {
                     notes: item.notes
                 }, manager);
 
-                await this.recalculateOrderTotal(item.order_id, manager);
+                await recalculateOrderTotal(item.order_id, manager);
 
                 const updatedOrder = await this.ordersModel.findOne(item.order_id);
                 return updatedOrder!;
@@ -240,7 +390,7 @@ export class OrdersService {
 
                 await this.ordersModel.deleteItem(itemId, manager);
 
-                await this.recalculateOrderTotal(orderId, manager);
+                await recalculateOrderTotal(orderId, manager);
 
                 const updatedOrder = await this.ordersModel.findOne(orderId);
                 return updatedOrder!;
@@ -251,32 +401,5 @@ export class OrdersService {
             if (updatedOrder) this.socketService.emit('orders:update', updatedOrder);
             return updatedOrder!;
         })
-    }
-
-    private async recalculateOrderTotal(orderId: string, manager?: EntityManager): Promise<void> {
-        const repo = manager ? manager.getRepository(SalesOrder) : AppDataSource.getRepository(SalesOrder);
-
-        // Fetch order with discount relation
-        const order = await repo.findOne({
-            where: { id: orderId },
-            relations: ["discount"]
-        });
-
-        if (!order) return;
-
-        const items = await this.ordersModel.findItemsByOrderId(orderId, manager);
-        // Exclude cancelled items from total
-        const validItems = items.filter(i => i.status !== OrderStatus.Cancelled);
-
-        // Calculate using Service
-        const result = PriceCalculatorService.calculateOrderTotal(validItems, order.discount);
-
-        // Update Order
-        await this.ordersModel.update(orderId, {
-            sub_total: result.subTotal,
-            discount_amount: result.discountAmount,
-            vat: result.vatAmount,
-            total_amount: result.totalAmount
-        } as SalesOrder, manager);
     }
 }
