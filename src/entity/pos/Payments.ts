@@ -16,6 +16,7 @@ export class Payments {
     @PrimaryGeneratedColumn("uuid")
     id!: string; // รหัสอ้างอิงการชำระเงิน
 
+    @Index()
     @Column({ name: "order_id", type: "uuid" })
     order_id!: string; // รหัสออเดอร์
 
@@ -23,6 +24,7 @@ export class Payments {
     @JoinColumn({ name: "order_id" })
     order!: SalesOrder; // ความสัมพันธ์เชื่อมไปยังออเดอร์
 
+    @Index()
     @Column({ name: "shift_id", type: "uuid", nullable: true })
     shift_id?: string; // รหัสกะ (Optional เพราะบางทีอาจจะยังไม่เริ่มกะหรือระบบเก่า)
 

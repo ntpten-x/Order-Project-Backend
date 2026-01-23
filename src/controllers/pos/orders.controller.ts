@@ -21,9 +21,13 @@ export class OrdersController {
     })
 
     findAllItems = catchAsync(async (req: Request, res: Response) => {
-        const status = req.query.status as string
-        const result = await this.ordersService.findAllItems(status)
-        res.status(200).json(result)
+        const status = req.query.status as string;
+        const page = Math.max(parseInt(req.query.page as string) || 1, 1);
+        const limitRaw = parseInt(req.query.limit as string) || 100;
+        const limit = Math.min(Math.max(limitRaw, 1), 200); // cap to prevent huge payloads
+
+        const result = await this.ordersService.findAllItems(status, page, limit);
+        res.status(200).json(result);
     })
 
     findOne = catchAsync(async (req: Request, res: Response) => {

@@ -1,4 +1,4 @@
-import { Column, Entity, PrimaryGeneratedColumn, ManyToOne, JoinColumn, OneToMany } from "typeorm";
+import { Column, Entity, PrimaryGeneratedColumn, ManyToOne, JoinColumn, OneToMany, Index } from "typeorm";
 import { SalesOrder } from "./SalesOrder";
 import { OrderStatus } from "./OrderEnums";
 import { Products } from "./Products";
@@ -9,6 +9,7 @@ export class SalesOrderItem {
     @PrimaryGeneratedColumn("uuid")
     id!: string; // รหัสอ้างอิงรายการสินค้าในบิล
 
+    @Index()
     @Column({ name: "order_id", type: "uuid", nullable: true })
     order_id!: string; // รหัสออเดอร์หลัก
 

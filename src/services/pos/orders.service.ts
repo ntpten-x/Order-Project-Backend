@@ -7,7 +7,7 @@ import { SalesOrderItem } from "../../entity/pos/SalesOrderItem";
 import { SalesOrderDetail } from "../../entity/pos/SalesOrderDetail";
 import { OrderStatus } from "../../entity/pos/OrderEnums";
 import { Products } from "../../entity/pos/Products";
-import { EntityManager } from "typeorm";
+import { EntityManager, In } from "typeorm";
 import { recalculateOrderTotal } from "./orderTotals.service";
 import { AppError } from "../../utils/AppError";
 
@@ -32,17 +32,38 @@ export class OrdersService {
 
     private async prepareItems(items: any[], manager: EntityManager): Promise<Array<{ item: SalesOrderItem; details: SalesOrderDetail[] }>> {
         const productRepo = manager.getRepository(Products);
+
+        // 1. Collect all product IDs
+        const productIds = items
+            .map(i => i.product_id)
+            .filter((id): id is string => !!id);
+
+        if (productIds.length === 0) {
+            throw new AppError("ไม่มีรายการสินค้าในคำสั่งซื้อ", 400);
+        }
+
+        // 2. Optimization: Batch Fetch Products (Single Query)
+        // Instead of querying N times inside the loop
+        const products = await productRepo.findBy({
+            id: In(productIds),
+            is_active: true
+        });
+
+        // 3. Create Map for O(1) Lookup
+        const productMap = new Map(products.map(p => [p.id, p]));
+
         const prepared: Array<{ item: SalesOrderItem; details: SalesOrderDetail[] }> = [];
 
         for (const itemData of items) {
             if (!itemData?.product_id) {
                 throw new AppError("Missing product_id", 400);
             }
-            const product = await productRepo.findOne({
-                where: { id: itemData.product_id, is_active: true }
-            });
+
+            // Lookup from memory instead of DB
+            const product = productMap.get(itemData.product_id);
+
             if (!product) {
-                throw new AppError("Product not found or inactive", 404);
+                throw new AppError(`Product not found or inactive`, 404);
             }
 
             const quantity = Number(itemData.quantity);
@@ -113,9 +134,9 @@ export class OrdersService {
         }
     }
 
-    async findAllItems(status?: string): Promise<any[]> {
+    async findAllItems(status?: string, page: number = 1, limit: number = 100): Promise<any[]> {
         try {
-            return this.ordersModel.findAllItems(status)
+            return this.ordersModel.findAllItems(status, page, limit)
         } catch (error) {
             throw error
         }

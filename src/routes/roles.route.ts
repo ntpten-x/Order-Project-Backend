@@ -3,6 +3,8 @@ import { RolesService } from "../services/roles.service"
 import { RolesModels } from "../models/roles.model"
 import { Router } from "express"
 import { authenticateToken, authorizeRole } from "../middleware/auth.middleware"
+import { validate } from "../middleware/validate.middleware"
+import { createRoleSchema, roleIdParamSchema, updateRoleSchema } from "../utils/schemas/roles.schema"
 
 const router = Router()
 
@@ -15,9 +17,9 @@ router.use(authenticateToken)
 router.use(authorizeRole(["Admin"]))
 
 router.get("/", rolesController.findAll)
-router.get("/:id", rolesController.findOne)
-router.post("/", rolesController.create)
-router.put("/:id", rolesController.update)
-router.delete("/:id", rolesController.delete)
+router.get("/:id", validate(roleIdParamSchema), rolesController.findOne)
+router.post("/", validate(createRoleSchema), rolesController.create)
+router.put("/:id", validate(updateRoleSchema), rolesController.update)
+router.delete("/:id", validate(roleIdParamSchema), rolesController.delete)
 
 export default router

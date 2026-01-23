@@ -1,4 +1,4 @@
-import { Column, Entity, PrimaryGeneratedColumn } from "typeorm";
+import { Column, Entity, PrimaryGeneratedColumn, Index } from "typeorm";
 
 export enum TableStatus {
     Available = "Available",    // ว่าง
@@ -13,6 +13,7 @@ export class Tables {
     @Column({ type: 'varchar', length: 255, unique: true })
     table_name!: string; // ชื่อโต๊ะ (เช่น T1, A10)
 
+    @Index()
     @Column({ type: "enum", enum: TableStatus, default: TableStatus.Available })
     status!: TableStatus; // สถานะโต๊ะ
 

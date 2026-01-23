@@ -1,5 +1,6 @@
 import { AppDataSource } from "../../database/database";
 import { Payments } from "../../entity/pos/Payments";
+import { EntityManager } from "typeorm";
 
 export class PaymentsModels {
     private paymentsRepository = AppDataSource.getRepository(Payments)
@@ -28,18 +29,27 @@ export class PaymentsModels {
         }
     }
 
-    async create(data: Payments): Promise<Payments> {
+    async create(data: Payments, manager?: EntityManager): Promise<Payments> {
         try {
-            return this.paymentsRepository.save(data)
+            const repo = manager ? manager.getRepository(Payments) : this.paymentsRepository;
+            return repo.save(data)
         } catch (error) {
             throw error
         }
     }
 
-    async update(id: string, data: Payments): Promise<Payments> {
+    async update(id: string, data: Payments, manager?: EntityManager): Promise<Payments> {
         try {
-            await this.paymentsRepository.update(id, data)
-            const updatedPayment = await this.findOne(id)
+            const repo = manager ? manager.getRepository(Payments) : this.paymentsRepository;
+            await repo.update(id, data)
+            // Note: findOne typically relies on default repo. In transaction, we might want to query using manager.
+            // But reuse findOne here is okay if we are careful or if strict read consistency isn't violated.
+            // To be safe inside transaction, create locally:
+            const updatedPayment = await repo.findOne({
+                where: { id },
+                relations: ["order", "payment_method"]
+            })
+
             if (!updatedPayment) {
                 throw new Error("ไม่พบข้อมูลการชำระเงินที่ต้องการค้นหา")
             }
@@ -49,9 +59,10 @@ export class PaymentsModels {
         }
     }
 
-    async delete(id: string): Promise<void> {
+    async delete(id: string, manager?: EntityManager): Promise<void> {
         try {
-            await this.paymentsRepository.delete(id)
+            const repo = manager ? manager.getRepository(Payments) : this.paymentsRepository;
+            await repo.delete(id)
         } catch (error) {
             throw error
         }

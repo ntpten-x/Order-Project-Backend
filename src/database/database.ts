@@ -1,5 +1,6 @@
 import "reflect-metadata"
 import { DataSource } from "typeorm"
+import path from "path"
 import { Users } from "../entity/Users"
 import { Roles } from "../entity/Roles"
 import { IngredientsUnit } from "../entity/stock/IngredientsUnit"
@@ -36,6 +37,11 @@ const useSsl = process.env.DATABASE_SSL === "true" || process.env.DATABASE_SSL =
 const sslOptions = useSsl
     ? { rejectUnauthorized: process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== "false" }
     : false
+
+const poolSize = Number(process.env.DATABASE_POOL_MAX || 10)
+const connectionTimeoutMillis = Number(process.env.DATABASE_CONNECTION_TIMEOUT_MS || 5000)
+const statementTimeout = Number(process.env.STATEMENT_TIMEOUT_MS || 30000)
+const migrationsDir = path.join(__dirname, "../migrations/*.{ts,js}")
 export const AppDataSource = new DataSource({
     type: "postgres",
     host: process.env.DATABASE_HOST,
@@ -46,7 +52,15 @@ export const AppDataSource = new DataSource({
     entities: [Users, Roles, IngredientsUnit, Ingredients, PurchaseOrder, StockOrdersItem, StockOrdersDetail, SalesOrder, SalesOrderItem, SalesOrderDetail, Category, Products, ProductsUnit, Tables, Delivery, Discounts, Payments, PaymentMethod, Shifts, ShopProfile, SalesSummaryView, TopSellingItemsView],
     synchronize,
     logging: false,
-    ssl: sslOptions
+    ssl: sslOptions,
+    migrations: [migrationsDir],
+    poolSize,
+    extra: {
+        max: poolSize,
+        connectionTimeoutMillis,
+        statement_timeout: statementTimeout,
+        application_name: "order-project-backend"
+    }
 })
 
 export const connectDatabase = async () => {

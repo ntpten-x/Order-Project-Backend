@@ -65,22 +65,25 @@ export class OrdersModels {
         }
     }
 
-    async findAllItems(status?: any): Promise<SalesOrderItem[]> {
+    async findAllItems(status?: any, page: number = 1, limit: number = 100): Promise<SalesOrderItem[]> {
         try {
             // Need simple find with relations
             const where: any = {};
             if (status) where.status = status;
 
-            return await AppDataSource.getRepository(SalesOrderItem).find({
+            const repo = AppDataSource.getRepository(SalesOrderItem);
+            const [items] = await repo.findAndCount({
                 where,
                 relations: ["product", "product.category", "order", "order.table"], // order.table for monitoring
                 order: {
-                    // order by create date? SalesOrderItem doesn't have create_date, use order's
                     order: {
                         create_date: 'ASC'
                     }
-                }
-            })
+                },
+                take: limit,
+                skip: (page - 1) * limit
+            });
+            return items
         } catch (error) {
             throw error
         }

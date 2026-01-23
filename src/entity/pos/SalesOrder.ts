@@ -21,6 +21,7 @@ export class SalesOrder {
     @Column({ type: "enum", enum: OrderType, nullable: true })
     order_type!: OrderType; // ประเภทของออเดอร์ (ทานร้าน/กลับบ้าน/ส่ง)
 
+    @Index()
     @Column({ name: "table_id", type: "uuid", nullable: true })
     table_id?: string | null; // รหัสโต๊ะ (กรณีทานที่ร้าน)
 

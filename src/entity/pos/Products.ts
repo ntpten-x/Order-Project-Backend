@@ -7,6 +7,7 @@ export class Products {
     @PrimaryGeneratedColumn("uuid")
     id!: string // รหัสสินค้า
 
+    @Index()
     @Column({ type: "varchar", length: 100 })
     product_name!: string // ชื่อสินค้า (ระบบ)
 

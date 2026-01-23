@@ -1,5 +1,5 @@
 
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToMany, JoinColumn, ManyToOne } from "typeorm";
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToMany, JoinColumn, ManyToOne, Index } from "typeorm";
 import { Users } from "../Users"; // Assuming Users entity is in src/entity/Users.ts or similar. I'll check Users location first actually.
 import { Payments } from "./Payments";
 
@@ -13,6 +13,7 @@ export class Shifts {
     @PrimaryGeneratedColumn("uuid")
     id!: string;
 
+    @Index()
     @Column({ name: "user_id", type: "uuid" })
     user_id!: string;
 
@@ -33,6 +34,7 @@ export class Shifts {
     @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
     diff_amount?: number; // ผลต่าง (End - Expected)
 
+    @Index()
     @Column({ type: "enum", enum: ShiftStatus, default: ShiftStatus.OPEN })
     status!: ShiftStatus;
 

@@ -39,9 +39,12 @@ import { AppError } from "./src/utils/AppError";
 const app = express();
 const httpServer = createServer(app); // Wrap express with HTTP server
 const port = process.env.PORT || 3000;
+const bodyLimitMb = Number(process.env.REQUEST_BODY_LIMIT_MB || 5);
 
 // Trust proxy for secure cookies behind proxies (e.g., Render, Nginx)
 app.set("trust proxy", 1);
+// Reduce information leakage
+app.disable("x-powered-by");
 
 // Ensure JWT secret exists (no insecure default)
 if (!process.env.JWT_SECRET) {
@@ -63,13 +66,23 @@ app.use(compression());
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
     max: 1000, // limit each IP to 1000 requests per windowMs
+    standardHeaders: true,
+    legacyHeaders: false,
     message: "Too many requests from this IP, please try again after 15 minutes"
 });
+const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 20, // tighter limit for auth brute-force
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: "Too many login attempts, please try again shortly"
+});
 app.use(limiter);
+app.use("/auth/login", loginLimiter);
 
 // CORS
-// Update origin to match your frontend URL. 
-// For dev, we might assume localhost:3000 or 3001. 
+// Update origin to match your frontend URL.
+// For dev, we might assume localhost:3000 or 3001.
 // If frontend is on same port or served by back, internal usage is fine.
 const allowedOrigins = [
     "http://localhost:3000",
@@ -84,8 +97,8 @@ app.use(cors({
     credentials: true
 }));
 
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
+app.use(express.json({ limit: `${bodyLimitMb}mb` }));
+app.use(express.urlencoded({ limit: `${bodyLimitMb}mb`, extended: true }));
 
 // Initialize Socket.IO
 const io = new Server(httpServer, {
@@ -117,7 +130,7 @@ const csrfProtection = csurf({
     }
 });
 
-// Apply CSRF protection to all routes except explicit public endpoints
+// Apply CSRF protection to cookie-authenticated requests except explicit public endpoints
 const csrfExcludedPaths = new Set([
     "/auth/login",
     "/auth/logout",
@@ -125,7 +138,11 @@ const csrfExcludedPaths = new Set([
 ]);
 
 app.use((req, res, next) => {
-    if (csrfExcludedPaths.has(req.path)) {
+    // Skip CSRF when using pure Bearer header (non-cookie flows) or explicitly excluded paths.
+    const usesCookieAuth = Boolean(req.cookies?.token);
+    const bearerOnly = req.headers.authorization && !usesCookieAuth;
+
+    if (csrfExcludedPaths.has(req.path) || bearerOnly) {
         return next();
     }
     return csrfProtection(req, res, next);
