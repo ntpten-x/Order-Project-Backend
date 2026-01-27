@@ -6,11 +6,12 @@ export enum OrderType {
 }
 
 export enum OrderStatus {
-    Pending = "Pending",    // รอรับออเดอร์
+    Pending = "Pending",    // กำลังดำเนินการ (สร้างออเดอร์แล้ว/กำลังทาน) -> Default
     Cooking = "Cooking",    // กำลังปรุงอาหาร
     Served = "Served",      // เสิร์ฟแล้ว
     WaitingForPayment = "WaitingForPayment", // รอชำระเงิน
-    Paid = "Paid",          // ชำระเงินแล้ว
+    Paid = "Paid",          // ชำระเงินแล้ว (สำหรับรายการสินค้า)
+    Completed = "Completed", // ออเดอร์สำเร็จ (สำหรับออเดอร์)
     Cancelled = "Cancelled", // ยกเลิกออเดอร์
 
     // Legacy values for migration

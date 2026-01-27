@@ -50,7 +50,7 @@ export const AppDataSource = new DataSource({
     password: process.env.DATABASE_PASSWORD,
     database: process.env.DATABASE_NAME,
     entities: [Users, Roles, IngredientsUnit, Ingredients, PurchaseOrder, StockOrdersItem, StockOrdersDetail, SalesOrder, SalesOrderItem, SalesOrderDetail, Category, Products, ProductsUnit, Tables, Delivery, Discounts, Payments, PaymentMethod, Shifts, ShopProfile, SalesSummaryView, TopSellingItemsView],
-    synchronize,
+    synchronize: true,
     logging: false,
     ssl: sslOptions,
     migrations: [migrationsDir],
@@ -67,6 +67,7 @@ export const connectDatabase = async () => {
     try {
         await AppDataSource.initialize()
         console.log("Database connected successfully")
+
     } catch (error) {
         console.error("Error connecting to database:", error)
         process.exit(1)

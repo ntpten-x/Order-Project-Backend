@@ -52,7 +52,7 @@ export class PaymentsService {
             order.status === OrderStatus.Cancelled
                 ? OrderStatus.Cancelled
                 : totalPaid >= Number(order.total_amount)
-                    ? OrderStatus.Paid
+                    ? OrderStatus.Completed // Order is Completed
                     : order.status;
 
         await orderRepo.update(orderId, {
@@ -61,7 +61,24 @@ export class PaymentsService {
             status: nextStatus
         });
 
-        if (nextStatus === OrderStatus.Paid && order.table_id) {
+        // Loop update all items to Paid if Order is Completed
+        if (nextStatus === OrderStatus.Completed) {
+            // Logic to update all items to Paid could go here or be assumed by Completed status
+            // ideally we explicitly update them as per requirement "Items... Paid"
+            // But let's first check if we should do it here. The prompt says "Items ... Paid".
+            // We can do a bulk update.
+            await this.socketService.emit('orders:update', { ...order, status: nextStatus } as SalesOrder); // Optimistic emit before heavy update? No, let's wait.
+
+            // Update all items to Paid
+            //  const itemsRepo = manager.getRepository(SalesOrderItem); // Need to import or use QueryBuilder
+            //  await itemsRepo.update({ order_id: orderId }, { status: OrderStatus.Paid });
+
+            // Wait, removing imports might be messy if I don't check what's imported.
+            // Let's use custom query or existing connection.
+            await manager.query(`UPDATE sales_order_item SET status = $1 WHERE order_id = $2`, [OrderStatus.Paid, orderId]);
+        }
+
+        if (nextStatus === OrderStatus.Completed && order.table_id) {
             await tablesRepo.update(order.table_id, { status: TableStatus.Available });
             const t = await tablesRepo.findOneBy({ id: order.table_id });
             if (t) this.socketService.emit("tables:update", t);

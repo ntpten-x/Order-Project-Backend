@@ -15,7 +15,8 @@ export class TablesModels {
                     return {
                         ...t,
                         status: activeOrder ? "Unavailable" : t.status, // Force Unavailable if active order exists
-                        active_order_status: activeOrder?.status || null
+                        active_order_status: activeOrder?.status || null,
+                        active_order_id: activeOrder?.id || null
                     };
                 }));
         } catch (error) {

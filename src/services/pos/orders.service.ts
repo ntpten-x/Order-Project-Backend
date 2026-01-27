@@ -89,7 +89,7 @@ export class OrdersService {
             item.discount_amount = discount;
             item.total_price = Math.max(0, Number(lineTotal));
             item.notes = itemData.notes;
-            item.status = OrderStatus.Pending;
+            item.status = itemData.status || OrderStatus.Pending;
 
             const details: SalesOrderDetail[] = detailsData.map((d: any) => {
                 const detail = new SalesOrderDetail();
@@ -121,7 +121,6 @@ export class OrdersService {
 
     async getStats(): Promise<{ dineIn: number, takeaway: number, delivery: number, total: number }> {
         try {
-            // Active statuses: Pending, Cooking, Served, WaitingForPayment
             const activeStatuses = [
                 OrderStatus.Pending,
                 OrderStatus.Cooking,
@@ -283,7 +282,8 @@ export class OrdersService {
             const result = refreshedOrder ?? updatedOrder;
 
             const finalStatus = (orders.status as OrderStatus) ?? result.status;
-            if ((finalStatus === OrderStatus.Paid || finalStatus === OrderStatus.Cancelled) && result.table_id) {
+            // Release table if Order is Completed or Cancelled
+            if ((finalStatus === OrderStatus.Completed || finalStatus === OrderStatus.Cancelled) && result.table_id) {
                 const tablesRepo = AppDataSource.getRepository(Tables);
                 await tablesRepo.update(result.table_id, { status: TableStatus.Available });
                 const t = await tablesRepo.findOneBy({ id: result.table_id });
@@ -363,11 +363,30 @@ export class OrdersService {
         })
     }
 
-    async updateItemDetails(itemId: string, data: { quantity?: number, notes?: string }): Promise<SalesOrder> {
+    async updateItemDetails(itemId: string, data: { quantity?: number, notes?: string, details?: any[] }): Promise<SalesOrder> {
         return await AppDataSource.transaction(async (manager) => {
             try {
                 const item = await this.ordersModel.findItemById(itemId, manager);
                 if (!item) throw new Error("Item not found");
+
+                const detailRepo = manager.getRepository(SalesOrderDetail);
+
+                if (data.details !== undefined) {
+                    // 1. Delete existing details
+                    await detailRepo.delete({ orders_item_id: itemId });
+
+                    // 2. Add new details
+                    if (Array.isArray(data.details) && data.details.length > 0) {
+                        for (const d of data.details) {
+                            if (!d.detail_name && !d.extra_price) continue;
+                            const detail = new SalesOrderDetail();
+                            detail.orders_item_id = itemId;
+                            detail.detail_name = d.detail_name || "";
+                            detail.extra_price = Number(d.extra_price || 0);
+                            await detailRepo.save(detail);
+                        }
+                    }
+                }
 
                 if (data.quantity !== undefined) {
                     const qty = Number(data.quantity);
@@ -376,22 +395,27 @@ export class OrdersService {
                     }
                     item.quantity = qty;
                 }
+
                 if (data.notes !== undefined) {
                     item.notes = data.notes;
                 }
 
-                const detailsTotal = item.details ? item.details.reduce((sum: number, d: any) => sum + (Number(d.extra_price) || 0), 0) : 0;
-                item.total_price = Math.max(0, (Number(item.price) + detailsTotal) * item.quantity - Number(item.discount_amount || 0));
+                // Refetch item with new details to get total price right
+                const updatedItemWithDetails = await this.ordersModel.findItemById(itemId, manager);
+                if (!updatedItemWithDetails) throw new Error("Item not found after detail update");
+
+                const detailsTotal = updatedItemWithDetails.details ? updatedItemWithDetails.details.reduce((sum: number, d: any) => sum + (Number(d.extra_price) || 0), 0) : 0;
+                updatedItemWithDetails.total_price = Math.max(0, (Number(updatedItemWithDetails.price) + detailsTotal) * updatedItemWithDetails.quantity - Number(updatedItemWithDetails.discount_amount || 0));
 
                 await this.ordersModel.updateItem(itemId, {
-                    quantity: item.quantity,
-                    total_price: item.total_price,
-                    notes: item.notes
+                    quantity: updatedItemWithDetails.quantity,
+                    total_price: updatedItemWithDetails.total_price,
+                    notes: updatedItemWithDetails.notes
                 }, manager);
 
-                await recalculateOrderTotal(item.order_id, manager);
+                await recalculateOrderTotal(updatedItemWithDetails.order_id, manager);
 
-                const updatedOrder = await this.ordersModel.findOne(item.order_id);
+                const updatedOrder = await this.ordersModel.findOne(updatedItemWithDetails.order_id);
                 return updatedOrder!;
             } catch (error) {
                 throw error;

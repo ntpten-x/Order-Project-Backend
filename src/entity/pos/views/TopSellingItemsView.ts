@@ -16,7 +16,7 @@ import { Products } from "../Products";
             .from(SalesOrderItem, "oi")
             .innerJoin(SalesOrder, "o", "oi.order_id = o.id")
             .leftJoin(Products, "p", "oi.product_id = p.id")
-            .where("o.status = 'Paid'")
+            .where("o.status IN ('Paid', 'Completed')")
             .groupBy("oi.product_id")
             .addGroupBy("p.display_name")
             .addGroupBy("p.img_url")
