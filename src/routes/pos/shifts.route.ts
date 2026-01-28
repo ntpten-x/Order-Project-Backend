@@ -12,5 +12,7 @@ const shiftsController = new ShiftsController(shiftsService);
 shiftsRouter.post("/open", authenticateToken, shiftsController.openShift);
 shiftsRouter.post("/close", authenticateToken, shiftsController.closeShift);
 shiftsRouter.get("/current", authenticateToken, shiftsController.getCurrentShift);
+shiftsRouter.get("/current/summary", authenticateToken, shiftsController.getCurrentSummary);
+shiftsRouter.get("/summary/:id", authenticateToken, shiftsController.getSummary);
 
 export default shiftsRouter;

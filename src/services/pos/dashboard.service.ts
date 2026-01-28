@@ -3,11 +3,9 @@ import { SalesSummaryView } from "../../entity/pos/views/SalesSummaryView";
 import { TopSellingItemsView } from "../../entity/pos/views/TopSellingItemsView";
 
 export class DashboardService {
-    private salesRepository = AppDataSource.getRepository(SalesSummaryView);
-    private topItemsRepository = AppDataSource.getRepository(TopSellingItemsView);
-
     async getSalesSummary(startDate?: string, endDate?: string): Promise<SalesSummaryView[]> {
-        const query = this.salesRepository.createQueryBuilder("sales");
+        const salesRepository = AppDataSource.getRepository(SalesSummaryView);
+        const query = salesRepository.createQueryBuilder("sales");
 
         if (startDate && endDate) {
             query.where("sales.date BETWEEN :startDate AND :endDate", { startDate, endDate });
@@ -19,7 +17,8 @@ export class DashboardService {
     }
 
     async getTopSellingItems(limit: number = 10): Promise<TopSellingItemsView[]> {
-        return await this.topItemsRepository.find({
+        const topItemsRepository = AppDataSource.getRepository(TopSellingItemsView);
+        return await topItemsRepository.find({
             order: {
                 total_quantity: "DESC"
             },

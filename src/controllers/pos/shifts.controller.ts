@@ -52,4 +52,21 @@ export class ShiftsController {
         const shift = await this.shiftsService.getCurrentShift(userId);
         res.status(200).json(shift);
     });
+
+    getSummary = catchAsync(async (req: Request, res: Response) => {
+        const { id } = req.params;
+        const summary = await this.shiftsService.getShiftSummary(id);
+        res.status(200).json(summary);
+    });
+
+    getCurrentSummary = catchAsync(async (req: Request, res: Response) => {
+        const userId = (req as any).user?.id;
+        if (!userId) throw new AppError("Unauthorized", 401);
+
+        const currentShift = await this.shiftsService.getCurrentShift(userId);
+        if (!currentShift) throw new AppError("No active shift found", 404);
+
+        const summary = await this.shiftsService.getShiftSummary(currentShift.id);
+        res.status(200).json(summary);
+    });
 }

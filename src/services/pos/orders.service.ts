@@ -10,11 +10,20 @@ import { Products } from "../../entity/pos/Products";
 import { EntityManager, In } from "typeorm";
 import { recalculateOrderTotal } from "./orderTotals.service";
 import { AppError } from "../../utils/AppError";
+import { ShiftsService } from "./shifts.service";
 
 export class OrdersService {
     private socketService = SocketService.getInstance();
+    private shiftsService = new ShiftsService();
 
     constructor(private ordersModel: OrdersModels) { }
+
+    private async ensureActiveShift(userId: string): Promise<void> {
+        const activeShift = await this.shiftsService.getCurrentShift(userId);
+        if (!activeShift) {
+            throw new AppError("กรุณาเปิดกะก่อนทำรายการ (Active Shift Required)", 400);
+        }
+    }
 
     private async ensureOrderNo(orderNo?: string): Promise<string> {
         if (orderNo) return orderNo;
@@ -150,6 +159,9 @@ export class OrdersService {
     }
 
     async create(orders: SalesOrder): Promise<SalesOrder> {
+        if (orders.created_by_id) {
+            await this.ensureActiveShift(orders.created_by_id);
+        }
         return await AppDataSource.transaction(async (manager) => {
             try {
                 if (orders.order_no) {
@@ -187,8 +199,11 @@ export class OrdersService {
     }
 
     async createFullOrder(data: any): Promise<SalesOrder> {
+        const { items, ...orderData } = data;
+        if (orderData.created_by_id) {
+            await this.ensureActiveShift(orderData.created_by_id);
+        }
         return await AppDataSource.transaction(async (manager) => {
-            const { items, ...orderData } = data;
 
             if (!items || !Array.isArray(items) || items.length === 0) {
                 throw new AppError("กรุณาระบุรายการสินค้า", 400);
