@@ -10,8 +10,9 @@ export class OrdersController {
         const page = parseInt(req.query.page as string) || 1;
         const limit = parseInt(req.query.limit as string) || 50;
         const statuses = req.query.status ? (req.query.status as string).split(',') : undefined;
+        const type = req.query.type as string;
 
-        const result = await this.ordersService.findAll(page, limit, statuses)
+        const result = await this.ordersService.findAll(page, limit, statuses, type)
         res.status(200).json(result)
     })
 

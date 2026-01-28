@@ -8,20 +8,30 @@ import { EntityManager, In } from "typeorm";
 export class OrdersModels {
     private ordersRepository = AppDataSource.getRepository(SalesOrder)
 
-    async findAll(page: number = 1, limit: number = 50, statuses?: string[]): Promise<{ data: SalesOrder[], total: number, page: number, limit: number }> {
+    async findAll(page: number = 1, limit: number = 50, statuses?: string[], orderType?: string): Promise<{ data: SalesOrder[], total: number, page: number, limit: number }> {
         try {
             const skip = (page - 1) * limit;
-            const whereClause = statuses && statuses.length > 0 ? { status: In(statuses) } : {};
+            const query = this.ordersRepository.createQueryBuilder("order")
+                .leftJoinAndSelect("order.table", "table")
+                .leftJoinAndSelect("order.delivery", "delivery")
+                .leftJoinAndSelect("order.discount", "discount")
+                .leftJoinAndSelect("order.created_by", "created_by")
+                .leftJoinAndSelect("order.items", "items")
+                .leftJoinAndSelect("items.product", "product")
+                .leftJoinAndSelect("product.category", "category")
+                .orderBy("order.create_date", "DESC")
+                .skip(skip)
+                .take(limit);
 
-            const [data, total] = await this.ordersRepository.findAndCount({
-                where: whereClause,
-                order: {
-                    create_date: "DESC"
-                },
-                relations: ["table", "delivery", "discount", "created_by", "items", "items.product", "items.product.category"],
-                take: limit,
-                skip: skip
-            })
+            if (statuses && statuses.length > 0) {
+                query.andWhere("order.status IN (:...statuses)", { statuses });
+            }
+
+            if (orderType) {
+                query.andWhere("order.order_type = :orderType", { orderType });
+            }
+
+            const [data, total] = await query.getManyAndCount();
 
             return {
                 data,

@@ -120,9 +120,9 @@ export class OrdersService {
         return status as OrderStatus;
     }
 
-    async findAll(page: number, limit: number, statuses?: string[]): Promise<{ data: SalesOrder[], total: number, page: number, limit: number }> {
+    async findAll(page: number, limit: number, statuses?: string[], type?: string): Promise<{ data: SalesOrder[], total: number, page: number, limit: number }> {
         try {
-            return this.ordersModel.findAll(page, limit, statuses)
+            return this.ordersModel.findAll(page, limit, statuses, type)
         } catch (error) {
             throw error
         }
