@@ -32,6 +32,7 @@ import salesOrderDetailPosRouter from "./src/routes/pos/salesOrderDetail.route";
 
 import shiftsPosRouter from "./src/routes/pos/shifts.route";
 import shopProfilePosRouter from "./src/routes/pos/shopProfile.route";
+import paymentAccountPosRouter from "./src/routes/pos/paymentAccount.routes";
 import dashboardRouter from "./src/routes/pos/dashboard.route";
 import { globalErrorHandler } from "./src/middleware/error.middleware";
 import { AppError } from "./src/utils/AppError";
@@ -142,6 +143,12 @@ app.use((req, res, next) => {
     const usesCookieAuth = Boolean(req.cookies?.token);
     const bearerOnly = req.headers.authorization && !usesCookieAuth;
 
+    if (req.path.startsWith("/pos/payment-accounts")) {
+        console.log(`[DEBUG Backend] CSRF Check for ${req.method} ${req.path}`);
+        console.log(`- Cookie: ${req.headers.cookie ? 'Present' : 'Missing'}`);
+        console.log(`- Token: ${req.headers['x-csrf-token'] ? 'Present' : 'Missing'}`);
+    }
+
     if (csrfExcludedPaths.has(req.path) || bearerOnly) {
         return next();
     }
@@ -178,6 +185,7 @@ app.use("/pos/salesOrderDetail", salesOrderDetailPosRouter);
 
 app.use("/pos/shifts", shiftsPosRouter);
 app.use("/pos/shopProfile", shopProfilePosRouter);
+app.use("/pos/payment-accounts", paymentAccountPosRouter);
 app.use("/pos/dashboard", dashboardRouter);
 
 // Handle Unhandled Routes

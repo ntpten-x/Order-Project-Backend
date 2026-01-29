@@ -8,6 +8,9 @@ export class Delivery {
     @Column({ type: 'varchar', length: 255 })
     delivery_name!: string; // ชื่อบริการส่ง (เช่น Grab, Lineman)
 
+    @Column({ type: 'varchar', length: 50, nullable: true })
+    delivery_prefix?: string; // รหัสย่อ (เช่น GF, LM)
+
     @Column({ type: 'text', nullable: true })
     logo?: string; // โลโก้บริการส่ง (URL)
 

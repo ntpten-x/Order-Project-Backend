@@ -21,6 +21,12 @@ export class ShopProfile {
     @Column({ type: "varchar", length: 200, nullable: true })
     promptpay_name!: string // ชื่อบัญชีพร้อมเพย์
 
+    @Column({ type: "varchar", length: 100, nullable: true })
+    bank_name?: string
+
+    @Column({ type: "varchar", length: 20, default: "PromptPay" })
+    account_type!: string
+
     @Column({ type: "timestamptz", default: () => "CURRENT_TIMESTAMP" })
     update_date!: Date
 }

@@ -24,7 +24,8 @@ import { PaymentMethod } from "../PaymentMethod";
             .leftJoin(Payments, "p", "p.order_id = o.id AND p.status = 'Success'")
             .leftJoin(PaymentMethod, "pm", "p.payment_method_id = pm.id")
             .where("o.status IN ('Paid', 'Completed')")
-            .groupBy("DATE(o.create_date)")
+            .groupBy("DATE(o.create_date)"),
+    synchronize: false
 })
 export class SalesSummaryView {
     @ViewColumn()

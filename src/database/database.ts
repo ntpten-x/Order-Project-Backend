@@ -23,6 +23,7 @@ import { Discounts } from "../entity/pos/Discounts"
 import { Payments } from "../entity/pos/Payments"
 import { PaymentMethod } from "../entity/pos/PaymentMethod"
 import { ShopProfile } from "../entity/pos/ShopProfile"
+import { ShopPaymentAccount } from "../entity/pos/ShopPaymentAccount"
 import { SalesSummaryView } from "../entity/pos/views/SalesSummaryView"
 import { TopSellingItemsView } from "../entity/pos/views/TopSellingItemsView"
 
@@ -49,9 +50,9 @@ export const AppDataSource = new DataSource({
     username: process.env.DATABASE_USER,
     password: process.env.DATABASE_PASSWORD,
     database: process.env.DATABASE_NAME,
-    entities: [Users, Roles, IngredientsUnit, Ingredients, PurchaseOrder, StockOrdersItem, StockOrdersDetail, SalesOrder, SalesOrderItem, SalesOrderDetail, Category, Products, ProductsUnit, Tables, Delivery, Discounts, Payments, PaymentMethod, Shifts, ShopProfile, SalesSummaryView, TopSellingItemsView],
+    entities: [Users, Roles, IngredientsUnit, Ingredients, PurchaseOrder, StockOrdersItem, StockOrdersDetail, SalesOrder, SalesOrderItem, SalesOrderDetail, Category, Products, ProductsUnit, Tables, Delivery, Discounts, Payments, PaymentMethod, Shifts, ShopProfile, ShopPaymentAccount, SalesSummaryView, TopSellingItemsView],
     synchronize: synchronize as boolean,
-    logging: false,
+    logging: true,
     ssl: sslOptions,
     migrations: [migrationsDir],
     poolSize,

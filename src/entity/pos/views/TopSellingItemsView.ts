@@ -20,7 +20,8 @@ import { Products } from "../Products";
             .groupBy("oi.product_id")
             .addGroupBy("p.display_name")
             .addGroupBy("p.img_url")
-            .addGroupBy("p.category_id")
+            .addGroupBy("p.category_id"),
+    synchronize: false
 })
 export class TopSellingItemsView {
     @ViewColumn()
