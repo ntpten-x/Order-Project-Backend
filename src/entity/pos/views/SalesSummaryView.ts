@@ -17,6 +17,9 @@ import { PaymentMethod } from "../PaymentMethod";
             .addSelect(`SUM(CASE 
                 WHEN pm.payment_method_name ILIKE '%qr%' OR pm.payment_method_name ILIKE '%prompt%' THEN p.amount 
                 ELSE 0 END)`, "qr_sales")
+            .addSelect(`SUM(CASE WHEN o.order_type = 'DineIn' THEN p.amount ELSE 0 END)`, "dine_in_sales")
+            .addSelect(`SUM(CASE WHEN o.order_type = 'TakeAway' THEN p.amount ELSE 0 END)`, "takeaway_sales")
+            .addSelect(`SUM(CASE WHEN o.order_type = 'Delivery' THEN p.amount ELSE 0 END)`, "delivery_sales")
             .from(SalesOrder, "o")
             .leftJoin(Payments, "p", "p.order_id = o.id AND p.status = 'Success'")
             .leftJoin(PaymentMethod, "pm", "p.payment_method_id = pm.id")
@@ -41,4 +44,13 @@ export class SalesSummaryView {
 
     @ViewColumn()
     qr_sales!: number;
+
+    @ViewColumn()
+    dine_in_sales!: number;
+
+    @ViewColumn()
+    takeaway_sales!: number;
+
+    @ViewColumn()
+    delivery_sales!: number;
 }

@@ -114,6 +114,11 @@ export class ShiftsService {
             "เงินสด": 0,
             "พร้อมเพย์": 0
         };
+        const orderTypeSales: Record<string, number> = {
+            "DineIn": 0,
+            "TakeAway": 0,
+            "Delivery": 0
+        };
 
         // Track seen orders to avoid double counting items
         const seenOrderIds = new Set<string>();
@@ -122,6 +127,11 @@ export class ShiftsService {
             // Calculate sales by payment method
             const methodName = payment.payment_method?.display_name || "อื่นๆ";
             paymentMethodSales[methodName] = Math.round(((paymentMethodSales[methodName] || 0) + Number(payment.amount)) * 100) / 100;
+
+            if (payment.order) {
+                const type = payment.order.order_type;
+                orderTypeSales[type] = Math.round(((orderTypeSales[type] || 0) + Number(payment.amount)) * 100) / 100;
+            }
 
             if (!payment.order || seenOrderIds.has(payment.order.id)) return;
             seenOrderIds.add(payment.order.id);
@@ -182,7 +192,8 @@ export class ShiftsService {
                 total_cost: totalCost,
                 net_profit: netProfit,
                 gross_profit_margin: totalSales > 0 ? Math.round(((netProfit / totalSales) * 100) * 100) / 100 : 0,
-                payment_methods: paymentMethodSales
+                payment_methods: paymentMethodSales,
+                order_types: orderTypeSales
             },
             categories: categoryCounts,
             top_products: topProducts
