@@ -14,6 +14,7 @@ var OrderStatus;
     OrderStatus["Served"] = "Served";
     OrderStatus["WaitingForPayment"] = "WaitingForPayment";
     OrderStatus["Paid"] = "Paid";
+    OrderStatus["Completed"] = "Completed";
     OrderStatus["Cancelled"] = "Cancelled";
     // Legacy values for migration
     OrderStatus["pending"] = "pending";

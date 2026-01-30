@@ -15,7 +15,8 @@ class DiscountsController {
         this.discountsService = discountsService;
         this.findAll = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {
-                const discounts = yield this.discountsService.findAll();
+                const q = req.query.q || undefined;
+                const discounts = yield this.discountsService.findAll(q);
                 res.status(200).json(discounts);
             }
             catch (error) {

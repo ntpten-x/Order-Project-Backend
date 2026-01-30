@@ -16,14 +16,15 @@ class DiscountsModels {
     constructor() {
         this.discountsRepository = database_1.AppDataSource.getRepository(Discounts_1.Discounts);
     }
-    findAll() {
+    findAll(q) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.discountsRepository.find({
-                    order: {
-                        create_date: "ASC"
-                    }
-                });
+                const query = this.discountsRepository.createQueryBuilder("discounts")
+                    .orderBy("discounts.create_date", "ASC");
+                if (q && q.trim()) {
+                    query.where("(discounts.discount_name ILIKE :q OR discounts.display_name ILIKE :q OR discounts.description ILIKE :q)", { q: `%${q.trim()}%` });
+                }
+                return query.getMany();
             }
             catch (error) {
                 throw error;

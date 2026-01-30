@@ -44,7 +44,10 @@ class AuthController {
                     return res.status(401).json({ message: "ไม่พบข้อมูลผู้ใช้" });
                 }
                 // Generate Token
-                const secret = process.env.JWT_SECRET || "default_secret_key";
+                const secret = process.env.JWT_SECRET;
+                if (!secret) {
+                    return res.status(500).json({ message: "Server misconfiguration: JWT_SECRET missing" });
+                }
                 const token = jsonwebtoken_1.default.sign({ id: user.id, username: user.username, role: user.roles.roles_name }, secret, { expiresIn: "10h" } // Token valid for 10 hours
                 );
                 // Set Cookie

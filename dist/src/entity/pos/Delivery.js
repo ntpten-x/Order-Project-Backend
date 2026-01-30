@@ -23,6 +23,10 @@ __decorate([
     __metadata("design:type", String)
 ], Delivery.prototype, "delivery_name", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ type: 'varchar', length: 50, nullable: true }),
+    __metadata("design:type", String)
+], Delivery.prototype, "delivery_prefix", void 0);
+__decorate([
     (0, typeorm_1.Column)({ type: 'text', nullable: true }),
     __metadata("design:type", String)
 ], Delivery.prototype, "logo", void 0);

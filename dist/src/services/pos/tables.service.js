@@ -16,10 +16,10 @@ class TablesService {
         this.tablesModel = tablesModel;
         this.socketService = socket_service_1.SocketService.getInstance();
     }
-    findAll() {
+    findAll(page, limit, q) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.tablesModel.findAll();
+                return this.tablesModel.findAll(page, limit, q);
             }
             catch (error) {
                 throw error;

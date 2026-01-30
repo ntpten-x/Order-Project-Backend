@@ -32,7 +32,10 @@ const authenticateToken = (req, res, next) => __awaiter(void 0, void 0, void 0, 
     }
     try {
         // 2. Verify token
-        const secret = process.env.JWT_SECRET || "default_secret_key";
+        const secret = process.env.JWT_SECRET;
+        if (!secret) {
+            return res.status(500).json({ message: "Server misconfiguration: JWT_SECRET missing" });
+        }
         const decoded = jsonwebtoken_1.default.verify(token, secret);
         // 3. Attach user to request
         const userRepository = database_1.AppDataSource.getRepository(Users_1.Users);
@@ -42,6 +45,9 @@ const authenticateToken = (req, res, next) => __awaiter(void 0, void 0, void 0, 
         });
         if (!user) {
             return res.status(401).json({ message: "User not found" });
+        }
+        if (!user.is_use) {
+            return res.status(403).json({ message: "Account disabled" });
         }
         req.user = user;
         next();

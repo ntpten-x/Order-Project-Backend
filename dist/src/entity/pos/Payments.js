@@ -11,7 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Payments = exports.PaymentStatus = void 0;
 const typeorm_1 = require("typeorm");
-const Orders_1 = require("./Orders");
+const SalesOrder_1 = require("./SalesOrder");
 const PaymentMethod_1 = require("./PaymentMethod");
 const Shifts_1 = require("./Shifts");
 var PaymentStatus;
@@ -28,15 +28,17 @@ __decorate([
     __metadata("design:type", String)
 ], Payments.prototype, "id", void 0);
 __decorate([
+    (0, typeorm_1.Index)(),
     (0, typeorm_1.Column)({ name: "order_id", type: "uuid" }),
     __metadata("design:type", String)
 ], Payments.prototype, "order_id", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)(() => Orders_1.Orders, (order) => order.payments),
+    (0, typeorm_1.ManyToOne)(() => SalesOrder_1.SalesOrder, (order) => order.payments),
     (0, typeorm_1.JoinColumn)({ name: "order_id" }),
-    __metadata("design:type", Orders_1.Orders)
+    __metadata("design:type", SalesOrder_1.SalesOrder)
 ], Payments.prototype, "order", void 0);
 __decorate([
+    (0, typeorm_1.Index)(),
     (0, typeorm_1.Column)({ name: "shift_id", type: "uuid", nullable: true }),
     __metadata("design:type", String)
 ], Payments.prototype, "shift_id", void 0);

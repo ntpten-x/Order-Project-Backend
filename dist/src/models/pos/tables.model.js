@@ -17,16 +17,26 @@ class TablesModels {
         this.tablesRepository = database_1.AppDataSource.getRepository(Tables_1.Tables);
     }
     findAll() {
-        return __awaiter(this, void 0, void 0, function* () {
+        return __awaiter(this, arguments, void 0, function* (page = 1, limit = 50, q) {
             try {
-                return this.tablesRepository.createQueryBuilder("tables")
-                    .leftJoinAndMapOne("tables.active_order", "Orders", "orders", "orders.table_id = tables.id AND orders.status NOT IN (:...statuses)", { statuses: ['Paid', 'Cancelled', 'completed'] }) // Exclude 'completed' too just in case
-                    .orderBy("tables.create_date", "ASC")
-                    .getMany()
-                    .then(tables => tables.map((t) => {
+                const skip = (page - 1) * limit;
+                const query = this.tablesRepository.createQueryBuilder("tables")
+                    .leftJoinAndMapOne("tables.active_order", "SalesOrder", "so", "so.table_id = tables.id AND so.status NOT IN (:...statuses)", { statuses: ['Paid', 'Cancelled', 'completed'] })
+                    .orderBy("tables.create_date", "ASC");
+                if (q && q.trim()) {
+                    query.andWhere("tables.table_name ILIKE :q", { q: `%${q.trim()}%` });
+                }
+                const [rows, total] = yield query.skip(skip).take(limit).getManyAndCount();
+                const data = rows.map((t) => {
                     const activeOrder = t.active_order;
-                    return Object.assign(Object.assign({}, t), { status: activeOrder ? "Unavailable" : t.status, active_order_status: (activeOrder === null || activeOrder === void 0 ? void 0 : activeOrder.status) || null });
-                }));
+                    return Object.assign(Object.assign({}, t), { status: activeOrder ? "Unavailable" : t.status, active_order_status: (activeOrder === null || activeOrder === void 0 ? void 0 : activeOrder.status) || null, active_order_id: (activeOrder === null || activeOrder === void 0 ? void 0 : activeOrder.id) || null });
+                });
+                return {
+                    data,
+                    total,
+                    page,
+                    last_page: Math.max(1, Math.ceil(total / limit))
+                };
             }
             catch (error) {
                 throw error;

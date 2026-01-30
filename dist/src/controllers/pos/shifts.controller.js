@@ -53,6 +53,22 @@ class ShiftsController {
             const shift = yield this.shiftsService.getCurrentShift(userId);
             res.status(200).json(shift);
         }));
+        this.getSummary = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            const { id } = req.params;
+            const summary = yield this.shiftsService.getShiftSummary(id);
+            res.status(200).json(summary);
+        }));
+        this.getCurrentSummary = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            var _a;
+            const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
+            if (!userId)
+                throw new AppError_1.AppError("Unauthorized", 401);
+            const currentShift = yield this.shiftsService.getCurrentShift(userId);
+            if (!currentShift)
+                throw new AppError_1.AppError("No active shift found", 404);
+            const summary = yield this.shiftsService.getShiftSummary(currentShift.id);
+            res.status(200).json(summary);
+        }));
     }
 }
 exports.ShiftsController = ShiftsController;

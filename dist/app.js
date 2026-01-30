@@ -17,6 +17,7 @@ const helmet_1 = __importDefault(require("helmet"));
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const csurf_1 = __importDefault(require("csurf"));
 const compression_1 = __importDefault(require("compression"));
+const crypto_1 = require("crypto");
 const ingredientsUnit_route_1 = __importDefault(require("./src/routes/stock/ingredientsUnit.route"));
 const ingredients_route_1 = __importDefault(require("./src/routes/stock/ingredients.route"));
 const orders_route_1 = __importDefault(require("./src/routes/stock/orders.route"));
@@ -30,16 +31,49 @@ const discounts_route_1 = __importDefault(require("./src/routes/pos/discounts.ro
 const paymentMethod_route_1 = __importDefault(require("./src/routes/pos/paymentMethod.route"));
 const payments_route_1 = __importDefault(require("./src/routes/pos/payments.route"));
 const orders_route_2 = __importDefault(require("./src/routes/pos/orders.route"));
-const ordersItem_route_1 = __importDefault(require("./src/routes/pos/ordersItem.route"));
-const ordersDetail_route_2 = __importDefault(require("./src/routes/pos/ordersDetail.route"));
+const salesOrderItem_route_1 = __importDefault(require("./src/routes/pos/salesOrderItem.route"));
+const salesOrderDetail_route_1 = __importDefault(require("./src/routes/pos/salesOrderDetail.route"));
 const shifts_route_1 = __importDefault(require("./src/routes/pos/shifts.route"));
 const shopProfile_route_1 = __importDefault(require("./src/routes/pos/shopProfile.route"));
+const paymentAccount_routes_1 = __importDefault(require("./src/routes/pos/paymentAccount.routes"));
 const dashboard_route_1 = __importDefault(require("./src/routes/pos/dashboard.route"));
 const error_middleware_1 = require("./src/middleware/error.middleware");
 const AppError_1 = require("./src/utils/AppError");
 const app = (0, express_1.default)();
 const httpServer = (0, http_1.createServer)(app); // Wrap express with HTTP server
 const port = process.env.PORT || 3000;
+const bodyLimitMb = Number(process.env.REQUEST_BODY_LIMIT_MB || 5);
+const enablePerfLogs = process.env.ENABLE_PERF_LOG === "true" || process.env.NODE_ENV !== "production";
+// Trust proxy for secure cookies behind proxies (e.g., Render, Nginx)
+app.set("trust proxy", 1);
+// Reduce information leakage
+app.disable("x-powered-by");
+// Basic performance logging (disabled in prod unless ENABLE_PERF_LOG=true)
+if (enablePerfLogs) {
+    app.use((req, res, next) => {
+        const start = process.hrtime.bigint();
+        res.on("finish", () => {
+            const end = process.hrtime.bigint();
+            const ms = Number(end - start) / 1000000;
+            const status = res.statusCode;
+            const method = req.method;
+            const path = req.originalUrl;
+            console.log(`[PERF] ${method} ${path} ${status} - ${ms.toFixed(1)}ms`);
+        });
+        next();
+    });
+}
+// Ensure JWT secret exists (no insecure default)
+if (!process.env.JWT_SECRET) {
+    if (process.env.NODE_ENV === "production") {
+        console.error("JWT_SECRET is required in production.");
+        process.exit(1);
+    }
+    else {
+        process.env.JWT_SECRET = (0, crypto_1.randomBytes)(32).toString("hex");
+        console.warn("JWT_SECRET not set. Generated a temporary secret for this session.");
+    }
+}
 // Security Middlewares
 app.use((0, helmet_1.default)());
 app.use((0, cookie_parser_1.default)());
@@ -48,12 +82,22 @@ app.use((0, compression_1.default)());
 const limiter = (0, express_rate_limit_1.default)({
     windowMs: 15 * 60 * 1000, // 15 minutes
     max: 1000, // limit each IP to 1000 requests per windowMs
+    standardHeaders: true,
+    legacyHeaders: false,
     message: "Too many requests from this IP, please try again after 15 minutes"
 });
+const loginLimiter = (0, express_rate_limit_1.default)({
+    windowMs: 15 * 60 * 1000,
+    max: 20, // tighter limit for auth brute-force
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: "Too many login attempts, please try again shortly"
+});
 app.use(limiter);
+app.use("/auth/login", loginLimiter);
 // CORS
-// Update origin to match your frontend URL. 
-// For dev, we might assume localhost:3000 or 3001. 
+// Update origin to match your frontend URL.
+// For dev, we might assume localhost:3000 or 3001.
 // If frontend is on same port or served by back, internal usage is fine.
 const allowedOrigins = [
     "http://localhost:3000",
@@ -66,8 +110,8 @@ app.use((0, cors_1.default)({
     origin: allowedOrigins,
     credentials: true
 }));
-app.use(express_1.default.json({ limit: '50mb' }));
-app.use(express_1.default.urlencoded({ limit: '50mb', extended: true }));
+app.use(express_1.default.json({ limit: `${bodyLimitMb}mb` }));
+app.use(express_1.default.urlencoded({ limit: `${bodyLimitMb}mb`, extended: true }));
 // Initialize Socket.IO
 const io = new socket_io_1.Server(httpServer, {
     cors: {
@@ -94,14 +138,27 @@ const csrfProtection = (0, csurf_1.default)({
         sameSite: process.env.NODE_ENV === "production" ? "none" : "lax"
     }
 });
-// Apply CSRF protection to all routes except those that don't need it (if any)
-// Typically, we apply it globally, but we might need to exclude the /csrf-token endpoint from check if strictly needed
-// Csurf middleware checks token on mutating requests (POST, PUT, DELETE), not GET.
-// So applying it globally is usually fine as long as we have a way to get the token.
-app.get('/health', (req, res) => {
-    res.status(200).json({ status: 'ok', uptime: process.uptime() });
+// Apply CSRF protection to cookie-authenticated requests except explicit public endpoints
+const csrfExcludedPaths = new Set([
+    "/auth/login",
+    "/auth/logout",
+    "/health"
+]);
+app.use((req, res, next) => {
+    var _a;
+    // Skip CSRF when using pure Bearer header (non-cookie flows) or explicitly excluded paths.
+    const usesCookieAuth = Boolean((_a = req.cookies) === null || _a === void 0 ? void 0 : _a.token);
+    const bearerOnly = req.headers.authorization && !usesCookieAuth;
+    if (req.path.startsWith("/pos/payment-accounts")) {
+        console.log(`[DEBUG Backend] CSRF Check for ${req.method} ${req.path}`);
+        console.log(`- Cookie: ${req.headers.cookie ? 'Present' : 'Missing'}`);
+        console.log(`- Token: ${req.headers['x-csrf-token'] ? 'Present' : 'Missing'}`);
+    }
+    if (csrfExcludedPaths.has(req.path) || bearerOnly) {
+        return next();
+    }
+    return csrfProtection(req, res, next);
 });
-app.use(csrfProtection);
 app.get('/csrf-token', (req, res) => {
     res.json({ csrfToken: req.csrfToken() });
 });
@@ -124,10 +181,11 @@ app.use("/pos/discounts", discounts_route_1.default);
 app.use("/pos/paymentMethod", paymentMethod_route_1.default);
 app.use("/pos/payments", payments_route_1.default);
 app.use("/pos/orders", orders_route_2.default);
-app.use("/pos/ordersItem", ordersItem_route_1.default);
-app.use("/pos/ordersDetail", ordersDetail_route_2.default);
+app.use("/pos/salesOrderItem", salesOrderItem_route_1.default);
+app.use("/pos/salesOrderDetail", salesOrderDetail_route_1.default);
 app.use("/pos/shifts", shifts_route_1.default);
 app.use("/pos/shopProfile", shopProfile_route_1.default);
+app.use("/pos/payment-accounts", paymentAccount_routes_1.default);
 app.use("/pos/dashboard", dashboard_route_1.default);
 // Handle Unhandled Routes
 app.use((req, res, next) => {

@@ -16,10 +16,10 @@ class DiscountsService {
         this.discountsModel = discountsModel;
         this.socketService = socket_service_1.SocketService.getInstance();
     }
-    findAll() {
+    findAll(q) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.discountsModel.findAll();
+                return this.discountsModel.findAll(q);
             }
             catch (error) {
                 throw error;

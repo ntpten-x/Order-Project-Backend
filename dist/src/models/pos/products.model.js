@@ -17,24 +17,20 @@ class ProductsModels {
         this.productsRepository = database_1.AppDataSource.getRepository(Products_1.Products);
     }
     findAll() {
-        return __awaiter(this, arguments, void 0, function* (page = 1, limit = 50, category_id) {
+        return __awaiter(this, arguments, void 0, function* (page = 1, limit = 50, category_id, q) {
             try {
                 const skip = (page - 1) * limit;
-                const where = {};
-                if (category_id)
-                    where.category_id = category_id;
-                const [data, total] = yield this.productsRepository.findAndCount({
-                    relations: {
-                        category: true,
-                        unit: true
-                    },
-                    where,
-                    order: {
-                        create_date: "ASC"
-                    },
-                    skip: skip,
-                    take: limit
-                });
+                const query = this.productsRepository.createQueryBuilder("products")
+                    .leftJoinAndSelect("products.category", "category")
+                    .leftJoinAndSelect("products.unit", "unit")
+                    .orderBy("products.create_date", "ASC");
+                if (category_id) {
+                    query.andWhere("products.category_id = :category_id", { category_id });
+                }
+                if (q && q.trim()) {
+                    query.andWhere("(products.product_name ILIKE :q OR products.display_name ILIKE :q OR products.description ILIKE :q)", { q: `%${q.trim()}%` });
+                }
+                const [data, total] = yield query.skip(skip).take(limit).getManyAndCount();
                 return {
                     data,
                     total,

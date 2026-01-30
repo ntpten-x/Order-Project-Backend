@@ -11,8 +11,8 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TopSellingItemsView = void 0;
 const typeorm_1 = require("typeorm");
-const OrdersItem_1 = require("../OrdersItem");
-const Orders_1 = require("../Orders");
+const SalesOrderItem_1 = require("../SalesOrderItem");
+const SalesOrder_1 = require("../SalesOrder");
 const Products_1 = require("../Products");
 let TopSellingItemsView = class TopSellingItemsView {
 };
@@ -51,13 +51,14 @@ exports.TopSellingItemsView = TopSellingItemsView = __decorate([
             .addSelect("p.category_id", "category_id")
             .addSelect("SUM(oi.quantity)", "total_quantity")
             .addSelect("SUM(oi.total_price)", "total_revenue")
-            .from(OrdersItem_1.OrdersItem, "oi")
-            .innerJoin(Orders_1.Orders, "o", "oi.order_id = o.id")
+            .from(SalesOrderItem_1.SalesOrderItem, "oi")
+            .innerJoin(SalesOrder_1.SalesOrder, "o", "oi.order_id = o.id")
             .leftJoin(Products_1.Products, "p", "oi.product_id = p.id")
-            .where("o.status = 'Paid'")
+            .where("o.status IN ('Paid', 'Completed')")
             .groupBy("oi.product_id")
             .addGroupBy("p.display_name")
             .addGroupBy("p.img_url")
-            .addGroupBy("p.category_id")
+            .addGroupBy("p.category_id"),
+        synchronize: false
     })
 ], TopSellingItemsView);

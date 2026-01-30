@@ -11,28 +11,40 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.OrdersModels = void 0;
 const database_1 = require("../../database/database");
-const Orders_1 = require("../../entity/pos/Orders");
-const OrdersItem_1 = require("../../entity/pos/OrdersItem");
-const OrdersDetail_1 = require("../../entity/pos/OrdersDetail");
-const typeorm_1 = require("typeorm");
+const SalesOrder_1 = require("../../entity/pos/SalesOrder");
+const SalesOrderItem_1 = require("../../entity/pos/SalesOrderItem");
+const SalesOrderDetail_1 = require("../../entity/pos/SalesOrderDetail");
+const Products_1 = require("../../entity/pos/Products");
 class OrdersModels {
     constructor() {
-        this.ordersRepository = database_1.AppDataSource.getRepository(Orders_1.Orders);
+        this.ordersRepository = database_1.AppDataSource.getRepository(SalesOrder_1.SalesOrder);
     }
     findAll() {
-        return __awaiter(this, arguments, void 0, function* (page = 1, limit = 50, statuses) {
+        return __awaiter(this, arguments, void 0, function* (page = 1, limit = 50, statuses, orderType, searchTerm) {
             try {
                 const skip = (page - 1) * limit;
-                const whereClause = statuses && statuses.length > 0 ? { status: (0, typeorm_1.In)(statuses) } : {};
-                const [data, total] = yield this.ordersRepository.findAndCount({
-                    where: whereClause,
-                    order: {
-                        create_date: "DESC"
-                    },
-                    relations: ["table", "delivery", "discount", "created_by", "items", "items.product", "items.product.category"],
-                    take: limit,
-                    skip: skip
-                });
+                const qb = this.ordersRepository.createQueryBuilder("order")
+                    .leftJoinAndSelect("order.table", "table")
+                    .leftJoinAndSelect("order.delivery", "delivery")
+                    .leftJoinAndSelect("order.discount", "discount")
+                    .leftJoinAndSelect("order.created_by", "created_by")
+                    .leftJoinAndSelect("order.items", "items")
+                    .leftJoinAndSelect("items.product", "product")
+                    .leftJoinAndSelect("product.category", "category")
+                    .orderBy("order.create_date", "DESC")
+                    .skip(skip)
+                    .take(limit);
+                if (statuses && statuses.length > 0) {
+                    qb.andWhere("order.status IN (:...statuses)", { statuses });
+                }
+                if (orderType) {
+                    qb.andWhere("order.order_type = :orderType", { orderType });
+                }
+                if (searchTerm) {
+                    const search = `${searchTerm}%`;
+                    qb.andWhere("(order.order_no ILIKE :search OR order.delivery_code ILIKE :search OR table.table_name ILIKE :search OR delivery.delivery_name ILIKE :search)", { search });
+                }
+                const [data, total] = yield qb.getManyAndCount();
                 return {
                     data,
                     total,
@@ -45,23 +57,165 @@ class OrdersModels {
             }
         });
     }
-    findAllItems(status) {
+    findAllSummary() {
+        return __awaiter(this, arguments, void 0, function* (page = 1, limit = 50, statuses, orderType, query) {
+            var _a, _b;
+            try {
+                const whereClauses = [];
+                const params = [];
+                if (statuses && statuses.length > 0) {
+                    params.push(statuses);
+                    whereClauses.push(`o.status::text = ANY($${params.length})`);
+                }
+                if (orderType) {
+                    params.push(orderType);
+                    whereClauses.push(`o.order_type::text = $${params.length}`);
+                }
+                if (query) {
+                    params.push(`${query}%`);
+                    const qIndex = params.length;
+                    whereClauses.push(`(
+                    o.order_no ILIKE $${qIndex}
+                    OR o.delivery_code ILIKE $${qIndex}
+                    OR t.table_name ILIKE $${qIndex}
+                    OR d.delivery_name ILIKE $${qIndex}
+                )`);
+                }
+                const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
+                const countQuery = `
+                SELECT COUNT(*)::int AS total
+                FROM sales_orders o
+                ${whereSql}
+            `;
+                const countResult = yield database_1.AppDataSource.query(countQuery, params);
+                const total = (_b = (_a = countResult === null || countResult === void 0 ? void 0 : countResult[0]) === null || _a === void 0 ? void 0 : _a.total) !== null && _b !== void 0 ? _b : 0;
+                const dataParams = [...params, limit, (page - 1) * limit];
+                const limitIndex = params.length + 1;
+                const offsetIndex = params.length + 2;
+                const dataQuery = `
+                SELECT
+                    o.id,
+                    o.order_no,
+                    o.order_type,
+                    o.status,
+                    o.create_date,
+                    o.total_amount,
+                    o.delivery_code,
+                    o.table_id,
+                    o.delivery_id,
+                    t.table_name AS table_name,
+                    d.delivery_name AS delivery_name,
+                    COALESCE(item_summary.items_summary, '{}'::jsonb) AS items_summary,
+                    COALESCE(item_summary.items_count, 0) AS items_count
+                FROM sales_orders o
+                LEFT JOIN tables t ON t.id = o.table_id
+                LEFT JOIN delivery d ON d.id = o.delivery_id
+                LEFT JOIN (
+                    SELECT
+                        s.order_id,
+                        jsonb_object_agg(s.category_name, s.qty) FILTER (WHERE s.category_name IS NOT NULL) AS items_summary,
+                        SUM(s.qty) AS items_count
+                    FROM (
+                        SELECT
+                            i.order_id,
+                            c.display_name AS category_name,
+                            SUM(i.quantity)::int AS qty
+                        FROM sales_order_item i
+                        LEFT JOIN products p ON p.id = i.product_id
+                        LEFT JOIN category c ON c.id = p.category_id
+                        WHERE i.status <> 'Cancelled'
+                        GROUP BY i.order_id, c.display_name
+                    ) s
+                    GROUP BY s.order_id
+                ) item_summary ON item_summary.order_id = o.id
+                ${whereSql}
+                ORDER BY o.create_date DESC
+                LIMIT $${limitIndex} OFFSET $${offsetIndex}
+            `;
+                const rows = yield database_1.AppDataSource.query(dataQuery, dataParams);
+                const data = rows.map((row) => {
+                    var _a;
+                    return ({
+                        id: row.id,
+                        order_no: row.order_no,
+                        order_type: row.order_type,
+                        status: row.status,
+                        create_date: row.create_date,
+                        total_amount: Number(row.total_amount),
+                        delivery_code: row.delivery_code,
+                        table_id: row.table_id,
+                        delivery_id: row.delivery_id,
+                        table: row.table_name ? { table_name: row.table_name } : null,
+                        delivery: row.delivery_name ? { delivery_name: row.delivery_name } : null,
+                        items_summary: (_a = row.items_summary) !== null && _a !== void 0 ? _a : {},
+                        items_count: Number(row.items_count || 0),
+                    });
+                });
+                return {
+                    data,
+                    total,
+                    page,
+                    limit,
+                };
+            }
+            catch (error) {
+                throw error;
+            }
+        });
+    }
+    getStats(statuses) {
         return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const stats = yield this.ordersRepository
+                    .createQueryBuilder("order")
+                    .select("order.order_type", "type")
+                    .addSelect("COUNT(order.id)", "count")
+                    .where("order.status IN (:...statuses)", { statuses })
+                    .groupBy("order.order_type")
+                    .getRawMany();
+                const result = {
+                    dineIn: 0,
+                    takeaway: 0,
+                    delivery: 0,
+                    total: 0
+                };
+                stats.forEach(stat => {
+                    const count = parseInt(stat.count);
+                    if (stat.type === 'DineIn')
+                        result.dineIn = count;
+                    else if (stat.type === 'TakeAway')
+                        result.takeaway = count;
+                    else if (stat.type === 'Delivery')
+                        result.delivery = count;
+                    result.total += count;
+                });
+                return result;
+            }
+            catch (error) {
+                throw error;
+            }
+        });
+    }
+    findAllItems(status_1) {
+        return __awaiter(this, arguments, void 0, function* (status, page = 1, limit = 100) {
             try {
                 // Need simple find with relations
                 const where = {};
                 if (status)
                     where.status = status;
-                return yield database_1.AppDataSource.getRepository(OrdersItem_1.OrdersItem).find({
+                const repo = database_1.AppDataSource.getRepository(SalesOrderItem_1.SalesOrderItem);
+                const [items] = yield repo.findAndCount({
                     where,
-                    relations: ["product", "order", "order.table"], // order.table for monitoring
+                    relations: ["product", "product.category", "order", "order.table"], // order.table for monitoring
                     order: {
-                        // order by create date? OrdersItem doesn't have create_date, use order's
                         order: {
                             create_date: 'ASC'
                         }
-                    }
+                    },
+                    take: limit,
+                    skip: (page - 1) * limit
                 });
+                return items;
             }
             catch (error) {
                 throw error;
@@ -80,6 +234,7 @@ class OrdersModels {
                         "created_by",
                         "items",
                         "items.product",
+                        "items.product.category",
                         "items.details",
                         "payments",
                         "payments.payment_method"
@@ -107,7 +262,7 @@ class OrdersModels {
     create(data, manager) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const repo = manager ? manager.getRepository(Orders_1.Orders) : this.ordersRepository;
+                const repo = manager ? manager.getRepository(SalesOrder_1.SalesOrder) : this.ordersRepository;
                 return repo.save(data);
             }
             catch (error) {
@@ -120,26 +275,35 @@ class OrdersModels {
         return __awaiter(this, void 0, void 0, function* () {
             return yield database_1.AppDataSource.manager.transaction((transactionalEntityManager) => __awaiter(this, void 0, void 0, function* () {
                 // 1. Save Order Header
-                const savedOrder = yield transactionalEntityManager.save(Orders_1.Orders, data);
+                const savedOrder = yield transactionalEntityManager.save(SalesOrder_1.SalesOrder, data);
                 // 2. Save Items and Details
                 if (items && items.length > 0) {
                     for (const itemData of items) {
-                        const item = new OrdersItem_1.OrdersItem();
+                        const item = new SalesOrderItem_1.SalesOrderItem();
                         item.order_id = savedOrder.id;
                         item.product_id = itemData.product_id;
                         item.quantity = itemData.quantity;
-                        item.price = itemData.price;
+                        const product = yield transactionalEntityManager.findOne(Products_1.Products, {
+                            where: { id: itemData.product_id }
+                        });
+                        if (!product) {
+                            throw new Error("ไม่พบสินค้า");
+                        }
+                        const detailsTotal = itemData.details
+                            ? itemData.details.reduce((sum, d) => sum + (Number(d.extra_price) || 0), 0)
+                            : 0;
+                        item.price = Number(product.price);
                         item.discount_amount = itemData.discount_amount || 0;
-                        item.total_price = itemData.total_price;
+                        item.total_price = Math.max(0, (item.price + detailsTotal) * item.quantity - Number(item.discount_amount || 0));
                         item.notes = itemData.notes;
-                        const savedItem = yield transactionalEntityManager.save(OrdersItem_1.OrdersItem, item);
+                        const savedItem = yield transactionalEntityManager.save(SalesOrderItem_1.SalesOrderItem, item);
                         if (itemData.details && itemData.details.length > 0) {
                             for (const detailData of itemData.details) {
-                                const detail = new OrdersDetail_1.OrdersDetail();
+                                const detail = new SalesOrderDetail_1.SalesOrderDetail();
                                 detail.orders_item_id = savedItem.id;
                                 detail.detail_name = detailData.detail_name;
                                 detail.extra_price = detailData.extra_price || 0;
-                                yield transactionalEntityManager.save(OrdersDetail_1.OrdersDetail, detail);
+                                yield transactionalEntityManager.save(SalesOrderDetail_1.SalesOrderDetail, detail);
                             }
                         }
                     }
@@ -151,7 +315,7 @@ class OrdersModels {
     update(id, data, manager) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const repo = manager ? manager.getRepository(Orders_1.Orders) : this.ordersRepository;
+                const repo = manager ? manager.getRepository(SalesOrder_1.SalesOrder) : this.ordersRepository;
                 yield repo.update(id, data);
                 const updatedOrder = yield repo.findOne({
                     where: { id },
@@ -179,7 +343,7 @@ class OrdersModels {
     delete(id, manager) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const repo = manager ? manager.getRepository(Orders_1.Orders) : this.ordersRepository;
+                const repo = manager ? manager.getRepository(SalesOrder_1.SalesOrder) : this.ordersRepository;
                 yield repo.delete(id);
             }
             catch (error) {
@@ -190,7 +354,7 @@ class OrdersModels {
     updateItemStatus(itemId, status, manager) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const repo = manager ? manager.getRepository(OrdersItem_1.OrdersItem) : database_1.AppDataSource.getRepository(OrdersItem_1.OrdersItem);
+                const repo = manager ? manager.getRepository(SalesOrderItem_1.SalesOrderItem) : database_1.AppDataSource.getRepository(SalesOrderItem_1.SalesOrderItem);
                 yield repo.update(itemId, { status });
             }
             catch (error) {
@@ -200,44 +364,44 @@ class OrdersModels {
     }
     findItemsByOrderId(orderId, manager) {
         return __awaiter(this, void 0, void 0, function* () {
-            const repo = manager ? manager.getRepository(OrdersItem_1.OrdersItem) : database_1.AppDataSource.getRepository(OrdersItem_1.OrdersItem);
+            const repo = manager ? manager.getRepository(SalesOrderItem_1.SalesOrderItem) : database_1.AppDataSource.getRepository(SalesOrderItem_1.SalesOrderItem);
             return yield repo.find({ where: { order_id: orderId } });
         });
     }
     updateStatus(orderId, status, manager) {
         return __awaiter(this, void 0, void 0, function* () {
-            const repo = manager ? manager.getRepository(Orders_1.Orders) : this.ordersRepository;
+            const repo = manager ? manager.getRepository(SalesOrder_1.SalesOrder) : this.ordersRepository;
             yield repo.update(orderId, { status });
         });
     }
     updateAllItemsStatus(orderId, status, manager) {
         return __awaiter(this, void 0, void 0, function* () {
-            const repo = manager ? manager.getRepository(OrdersItem_1.OrdersItem) : database_1.AppDataSource.getRepository(OrdersItem_1.OrdersItem);
+            const repo = manager ? manager.getRepository(SalesOrderItem_1.SalesOrderItem) : database_1.AppDataSource.getRepository(SalesOrderItem_1.SalesOrderItem);
             yield repo.update({ order_id: orderId }, { status });
         });
     }
     createItem(data, manager) {
         return __awaiter(this, void 0, void 0, function* () {
-            const repo = manager ? manager.getRepository(OrdersItem_1.OrdersItem) : database_1.AppDataSource.getRepository(OrdersItem_1.OrdersItem);
+            const repo = manager ? manager.getRepository(SalesOrderItem_1.SalesOrderItem) : database_1.AppDataSource.getRepository(SalesOrderItem_1.SalesOrderItem);
             return yield repo.save(data);
         });
     }
     updateItem(id, data, manager) {
         return __awaiter(this, void 0, void 0, function* () {
-            const repo = manager ? manager.getRepository(OrdersItem_1.OrdersItem) : database_1.AppDataSource.getRepository(OrdersItem_1.OrdersItem);
+            const repo = manager ? manager.getRepository(SalesOrderItem_1.SalesOrderItem) : database_1.AppDataSource.getRepository(SalesOrderItem_1.SalesOrderItem);
             yield repo.update(id, data);
         });
     }
     deleteItem(id, manager) {
         return __awaiter(this, void 0, void 0, function* () {
-            const repo = manager ? manager.getRepository(OrdersItem_1.OrdersItem) : database_1.AppDataSource.getRepository(OrdersItem_1.OrdersItem);
+            const repo = manager ? manager.getRepository(SalesOrderItem_1.SalesOrderItem) : database_1.AppDataSource.getRepository(SalesOrderItem_1.SalesOrderItem);
             yield repo.delete(id);
         });
     }
     findItemById(id, manager) {
         return __awaiter(this, void 0, void 0, function* () {
-            const repo = manager ? manager.getRepository(OrdersItem_1.OrdersItem) : database_1.AppDataSource.getRepository(OrdersItem_1.OrdersItem);
-            return yield repo.findOne({ where: { id }, relations: ["product"] });
+            const repo = manager ? manager.getRepository(SalesOrderItem_1.SalesOrderItem) : database_1.AppDataSource.getRepository(SalesOrderItem_1.SalesOrderItem);
+            return yield repo.findOne({ where: { id }, relations: ["product", "details"] });
         });
     }
 }

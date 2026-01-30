@@ -17,13 +17,21 @@ class PaymentMethodModels {
         this.paymentMethodRepository = database_1.AppDataSource.getRepository(PaymentMethod_1.PaymentMethod);
     }
     findAll() {
-        return __awaiter(this, void 0, void 0, function* () {
+        return __awaiter(this, arguments, void 0, function* (page = 1, limit = 50, q) {
             try {
-                return this.paymentMethodRepository.find({
-                    order: {
-                        create_date: "ASC"
-                    }
-                });
+                const skip = (page - 1) * limit;
+                const query = this.paymentMethodRepository.createQueryBuilder("paymentMethod")
+                    .orderBy("paymentMethod.create_date", "ASC");
+                if (q && q.trim()) {
+                    query.where("(paymentMethod.payment_method_name ILIKE :q OR paymentMethod.display_name ILIKE :q)", { q: `%${q.trim()}%` });
+                }
+                const [data, total] = yield query.skip(skip).take(limit).getManyAndCount();
+                return {
+                    data,
+                    total,
+                    page,
+                    last_page: Math.max(1, Math.ceil(total / limit))
+                };
             }
             catch (error) {
                 throw error;

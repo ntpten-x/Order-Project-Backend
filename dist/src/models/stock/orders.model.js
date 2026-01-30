@@ -11,12 +11,12 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.StockOrdersModel = void 0;
 const database_1 = require("../../database/database");
-const Orders_1 = require("../../entity/stock/Orders");
+const PurchaseOrder_1 = require("../../entity/stock/PurchaseOrder");
 const OrdersItem_1 = require("../../entity/stock/OrdersItem");
 const OrdersDetail_1 = require("../../entity/stock/OrdersDetail");
 class StockOrdersModel {
     constructor() {
-        this.ordersRepository = database_1.AppDataSource.getRepository(Orders_1.StockOrders);
+        this.ordersRepository = database_1.AppDataSource.getRepository(PurchaseOrder_1.PurchaseOrder);
     }
     // Creates an order and its items in a transaction
     // Creates an order and its items in a transaction
@@ -26,9 +26,9 @@ class StockOrdersModel {
             yield queryRunner.connect();
             yield queryRunner.startTransaction();
             try {
-                const newOrder = queryRunner.manager.create(Orders_1.StockOrders, {
+                const newOrder = queryRunner.manager.create(PurchaseOrder_1.PurchaseOrder, {
                     ordered_by_id: orderedById,
-                    status: Orders_1.OrderStatus.PENDING,
+                    status: PurchaseOrder_1.PurchaseOrderStatus.PENDING,
                     remark: remark
                 });
                 const savedOrder = yield queryRunner.manager.save(newOrder);
@@ -41,7 +41,7 @@ class StockOrdersModel {
                 yield queryRunner.commitTransaction();
                 // Return the complete order with relations (using the same transaction manager or separate generic find)
                 // It is safe to use queryRunner.manager to fetch before release to ensure consistency
-                return this.findByIdInternal(savedOrder.id, queryRunner.manager);
+                return yield this.findByIdInternal(savedOrder.id, queryRunner.manager);
             }
             catch (error) {
                 yield queryRunner.rollbackTransaction();
@@ -187,7 +187,7 @@ class StockOrdersModel {
                     }
                 }
                 // 3. Update Order Status to COMPLETED
-                yield transactionalEntityManager.update(Orders_1.StockOrders, { id: orderId }, { status: Orders_1.OrderStatus.COMPLETED });
+                yield transactionalEntityManager.update(PurchaseOrder_1.PurchaseOrder, { id: orderId }, { status: PurchaseOrder_1.PurchaseOrderStatus.COMPLETED });
                 // 4. Return updated order
                 return this.findByIdInternal(orderId, transactionalEntityManager);
             }));
@@ -196,7 +196,7 @@ class StockOrdersModel {
     // internal helper for transaction
     findByIdInternal(id, manager) {
         return __awaiter(this, void 0, void 0, function* () {
-            return yield manager.findOne(Orders_1.StockOrders, {
+            return yield manager.findOne(PurchaseOrder_1.PurchaseOrder, {
                 where: { id },
                 relations: {
                     ordered_by: true,

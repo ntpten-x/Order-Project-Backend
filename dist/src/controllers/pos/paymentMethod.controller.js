@@ -15,7 +15,11 @@ class PaymentMethodController {
         this.paymentMethodService = paymentMethodService;
         this.findAll = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {
-                const paymentMethods = yield this.paymentMethodService.findAll();
+                const page = parseInt(req.query.page) || 1;
+                const rawLimit = parseInt(req.query.limit);
+                const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
+                const q = req.query.q || undefined;
+                const paymentMethods = yield this.paymentMethodService.findAll(page, limit, q);
                 res.status(200).json(paymentMethods);
             }
             catch (error) {

@@ -75,7 +75,7 @@ class UsersService {
             try {
                 const findUser = yield this.usersModel.findOneByUsername(users.username);
                 if (findUser) {
-                    throw new Error("ผู้ใช้ชื่อ " + users.username + " ถูกใช้แล้ว");
+                    throw new Error("มีชื่อผู้ใช้ " + users.username + " อยู่ในระบบแล้ว");
                 }
                 users.password = yield bcrypt.hash(users.password, 10);
                 yield this.usersModel.create(users);
@@ -98,10 +98,10 @@ class UsersService {
                 if (users.password) {
                     users.password = yield bcrypt.hash(users.password, 10);
                 }
-                if (findUser.username !== users.username) {
+                if (users.username && findUser.username !== users.username) {
                     const findUserByUsername = yield this.usersModel.findOneByUsername(users.username);
                     if (findUserByUsername) {
-                        throw new Error("ผู้ใช้ชื่อ " + users.username + " ถูกใช้แล้ว");
+                        throw new Error("มีชื่อผู้ใช้ " + users.username + " อยู่ในระบบแล้ว");
                     }
                 }
                 yield this.usersModel.update(id, users);

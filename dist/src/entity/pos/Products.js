@@ -21,6 +21,7 @@ __decorate([
     __metadata("design:type", String)
 ], Products.prototype, "id", void 0);
 __decorate([
+    (0, typeorm_1.Index)(),
     (0, typeorm_1.Column)({ type: "varchar", length: 100 }),
     __metadata("design:type", String)
 ], Products.prototype, "product_name", void 0);
@@ -36,6 +37,10 @@ __decorate([
     (0, typeorm_1.Column)({ type: "decimal", precision: 12, scale: 2, default: 0 }),
     __metadata("design:type", Number)
 ], Products.prototype, "price", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: "decimal", precision: 12, scale: 2, default: 0 }),
+    __metadata("design:type", Number)
+], Products.prototype, "cost", void 0);
 __decorate([
     (0, typeorm_1.Index)(),
     (0, typeorm_1.Column)({ name: "category_id", type: "uuid" }),

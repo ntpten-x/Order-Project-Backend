@@ -16,15 +16,35 @@ class OrdersController {
     constructor(ordersService) {
         this.ordersService = ordersService;
         this.findAll = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
-            const page = parseInt(req.query.page) || 1;
-            const limit = parseInt(req.query.limit) || 50;
+            const page = Math.max(parseInt(req.query.page) || 1, 1);
+            const limitRaw = parseInt(req.query.limit) || 50;
+            const limit = Math.min(Math.max(limitRaw, 1), 200); // cap to prevent huge payloads
             const statuses = req.query.status ? req.query.status.split(',') : undefined;
-            const result = yield this.ordersService.findAll(page, limit, statuses);
+            const type = req.query.type;
+            const query = req.query.q;
+            const result = yield this.ordersService.findAll(page, limit, statuses, type, query);
             res.status(200).json(result);
+        }));
+        this.findSummary = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            const page = Math.max(parseInt(req.query.page) || 1, 1);
+            const limitRaw = parseInt(req.query.limit) || 50;
+            const limit = Math.min(Math.max(limitRaw, 1), 200);
+            const statuses = req.query.status ? req.query.status.split(',') : undefined;
+            const type = req.query.type;
+            const query = req.query.q;
+            const result = yield this.ordersService.findAllSummary(page, limit, statuses, type, query);
+            res.status(200).json(result);
+        }));
+        this.getStats = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            const stats = yield this.ordersService.getStats();
+            res.status(200).json(stats);
         }));
         this.findAllItems = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
             const status = req.query.status;
-            const result = yield this.ordersService.findAllItems(status);
+            const page = Math.max(parseInt(req.query.page) || 1, 1);
+            const limitRaw = parseInt(req.query.limit) || 100;
+            const limit = Math.min(Math.max(limitRaw, 1), 200); // cap to prevent huge payloads
+            const result = yield this.ordersService.findAllItems(status, page, limit);
             res.status(200).json(result);
         }));
         this.findOne = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
@@ -35,6 +55,10 @@ class OrdersController {
             res.status(200).json(order);
         }));
         this.create = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            const user = req.user;
+            if ((user === null || user === void 0 ? void 0 : user.id) && !req.body.created_by_id) {
+                req.body.created_by_id = user.id;
+            }
             // Check if input has items, if so use createFullOrder
             if (req.body.items && Array.isArray(req.body.items) && req.body.items.length > 0) {
                 const order = yield this.ordersService.createFullOrder(req.body);

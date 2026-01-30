@@ -1,0 +1,12 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const PaymentAccount_controller_1 = require("../../controllers/pos/PaymentAccount.controller");
+const router = (0, express_1.Router)();
+const controller = new PaymentAccount_controller_1.PaymentAccountController();
+router.get("/accounts", (req, res) => controller.getAccounts(req, res));
+router.post("/accounts", (req, res) => controller.createAccount(req, res));
+router.put("/accounts/:id", (req, res) => controller.updateAccount(req, res));
+router.patch("/accounts/:id/activate", (req, res) => controller.activateAccount(req, res));
+router.delete("/accounts/:id", (req, res) => controller.deleteAccount(req, res));
+exports.default = router;

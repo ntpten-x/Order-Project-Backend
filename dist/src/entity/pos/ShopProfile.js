@@ -39,6 +39,14 @@ __decorate([
     __metadata("design:type", String)
 ], ShopProfile.prototype, "promptpay_name", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ type: "varchar", length: 100, nullable: true }),
+    __metadata("design:type", String)
+], ShopProfile.prototype, "bank_name", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: "varchar", length: 20, default: "PromptPay" }),
+    __metadata("design:type", String)
+], ShopProfile.prototype, "account_type", void 0);
+__decorate([
     (0, typeorm_1.Column)({ type: "timestamptz", default: () => "CURRENT_TIMESTAMP" }),
     __metadata("design:type", Date)
 ], ShopProfile.prototype, "update_date", void 0);

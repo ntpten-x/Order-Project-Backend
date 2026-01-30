@@ -44,21 +44,29 @@ class PaymentsModels {
             }
         });
     }
-    create(data) {
+    create(data, manager) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.paymentsRepository.save(data);
+                const repo = manager ? manager.getRepository(Payments_1.Payments) : this.paymentsRepository;
+                return repo.save(data);
             }
             catch (error) {
                 throw error;
             }
         });
     }
-    update(id, data) {
+    update(id, data, manager) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                yield this.paymentsRepository.update(id, data);
-                const updatedPayment = yield this.findOne(id);
+                const repo = manager ? manager.getRepository(Payments_1.Payments) : this.paymentsRepository;
+                yield repo.update(id, data);
+                // Note: findOne typically relies on default repo. In transaction, we might want to query using manager.
+                // But reuse findOne here is okay if we are careful or if strict read consistency isn't violated.
+                // To be safe inside transaction, create locally:
+                const updatedPayment = yield repo.findOne({
+                    where: { id },
+                    relations: ["order", "payment_method"]
+                });
                 if (!updatedPayment) {
                     throw new Error("ไม่พบข้อมูลการชำระเงินที่ต้องการค้นหา");
                 }
@@ -69,10 +77,11 @@ class PaymentsModels {
             }
         });
     }
-    delete(id) {
+    delete(id, manager) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                yield this.paymentsRepository.delete(id);
+                const repo = manager ? manager.getRepository(Payments_1.Payments) : this.paymentsRepository;
+                yield repo.delete(id);
             }
             catch (error) {
                 throw error;

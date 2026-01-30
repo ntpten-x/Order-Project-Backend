@@ -16,9 +16,11 @@ class ProductsController {
         this.findAll = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {
                 const page = parseInt(req.query.page) || 1;
-                const limit = parseInt(req.query.limit) || 50;
+                const rawLimit = parseInt(req.query.limit);
+                const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
                 const category_id = req.query.category_id;
-                const result = yield this.productsService.findAll(page, limit, category_id);
+                const q = req.query.q || undefined;
+                const result = yield this.productsService.findAll(page, limit, category_id, q);
                 res.status(200).json(result);
             }
             catch (error) {

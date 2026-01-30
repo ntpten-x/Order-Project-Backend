@@ -57,7 +57,10 @@ class SocketService {
                 if (!token) {
                     return next(new Error("Authentication error: No token"));
                 }
-                const secret = process.env.JWT_SECRET || "default_secret_key";
+                const secret = process.env.JWT_SECRET;
+                if (!secret) {
+                    return next(new Error("Server misconfiguration: JWT_SECRET missing"));
+                }
                 const decoded = jsonwebtoken_1.default.verify(token, secret);
                 // Fetch user to check is_use
                 const userRepository = database_1.AppDataSource.getRepository(Users_1.Users);

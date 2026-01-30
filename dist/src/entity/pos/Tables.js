@@ -28,6 +28,7 @@ __decorate([
     __metadata("design:type", String)
 ], Tables.prototype, "table_name", void 0);
 __decorate([
+    (0, typeorm_1.Index)(),
     (0, typeorm_1.Column)({ type: "enum", enum: TableStatus, default: TableStatus.Available }),
     __metadata("design:type", String)
 ], Tables.prototype, "status", void 0);

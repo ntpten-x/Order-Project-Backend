@@ -11,7 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SalesSummaryView = void 0;
 const typeorm_1 = require("typeorm");
-const Orders_1 = require("../Orders");
+const SalesOrder_1 = require("../SalesOrder");
 const Payments_1 = require("../Payments");
 const PaymentMethod_1 = require("../PaymentMethod");
 let SalesSummaryView = class SalesSummaryView {
@@ -41,6 +41,18 @@ __decorate([
     (0, typeorm_1.ViewColumn)(),
     __metadata("design:type", Number)
 ], SalesSummaryView.prototype, "qr_sales", void 0);
+__decorate([
+    (0, typeorm_1.ViewColumn)(),
+    __metadata("design:type", Number)
+], SalesSummaryView.prototype, "dine_in_sales", void 0);
+__decorate([
+    (0, typeorm_1.ViewColumn)(),
+    __metadata("design:type", Number)
+], SalesSummaryView.prototype, "takeaway_sales", void 0);
+__decorate([
+    (0, typeorm_1.ViewColumn)(),
+    __metadata("design:type", Number)
+], SalesSummaryView.prototype, "delivery_sales", void 0);
 exports.SalesSummaryView = SalesSummaryView = __decorate([
     (0, typeorm_1.ViewEntity)({
         expression: (dataSource) => dataSource
@@ -55,10 +67,14 @@ exports.SalesSummaryView = SalesSummaryView = __decorate([
             .addSelect(`SUM(CASE 
                 WHEN pm.payment_method_name ILIKE '%qr%' OR pm.payment_method_name ILIKE '%prompt%' THEN p.amount 
                 ELSE 0 END)`, "qr_sales")
-            .from(Orders_1.Orders, "o")
+            .addSelect(`SUM(CASE WHEN o.order_type = 'DineIn' THEN p.amount ELSE 0 END)`, "dine_in_sales")
+            .addSelect(`SUM(CASE WHEN o.order_type = 'TakeAway' THEN p.amount ELSE 0 END)`, "takeaway_sales")
+            .addSelect(`SUM(CASE WHEN o.order_type = 'Delivery' THEN p.amount ELSE 0 END)`, "delivery_sales")
+            .from(SalesOrder_1.SalesOrder, "o")
             .leftJoin(Payments_1.Payments, "p", "p.order_id = o.id AND p.status = 'Success'")
             .leftJoin(PaymentMethod_1.PaymentMethod, "pm", "p.payment_method_id = pm.id")
-            .where("o.status = 'Paid'")
-            .groupBy("DATE(o.create_date)")
+            .where("o.status IN ('Paid', 'Completed')")
+            .groupBy("DATE(o.create_date)"),
+        synchronize: false
     })
 ], SalesSummaryView);

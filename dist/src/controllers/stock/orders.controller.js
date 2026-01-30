@@ -11,7 +11,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.OrdersController = void 0;
 const orders_service_1 = require("../../services/stock/orders.service");
-const Orders_1 = require("../../entity/stock/Orders");
+const PurchaseOrder_1 = require("../../entity/stock/PurchaseOrder");
 const orders_model_1 = require("../../models/stock/orders.model");
 class OrdersController {
     constructor() {
@@ -40,7 +40,7 @@ class OrdersController {
                 let statusFilter;
                 if (statusParam) {
                     const statuses = statusParam.split(',');
-                    // Optional: Validate statuses against OrderStatus enum
+                    // Optional: Validate statuses against PurchaseOrderStatus enum
                     statusFilter = statuses.length > 1 ? statuses : statuses[0];
                 }
                 const orders = yield this.ordersService.getAllOrders(statusFilter ? { status: statusFilter } : undefined, page, limit);
@@ -84,7 +84,7 @@ class OrdersController {
             try {
                 const { id } = req.params;
                 const { status } = req.body;
-                if (!Object.values(Orders_1.OrderStatus).includes(status)) {
+                if (!Object.values(PurchaseOrder_1.PurchaseOrderStatus).includes(status)) {
                     return res.status(400).json({ message: "ไม่พบข้อมูลสถานะ" });
                 }
                 const updatedOrder = yield this.ordersService.updateStatus(id, status);

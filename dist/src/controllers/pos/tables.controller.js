@@ -15,7 +15,11 @@ class TablesController {
         this.tablesService = tablesService;
         this.findAll = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {
-                const tables = yield this.tablesService.findAll();
+                const page = parseInt(req.query.page) || 1;
+                const rawLimit = parseInt(req.query.limit);
+                const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
+                const q = req.query.q || undefined;
+                const tables = yield this.tablesService.findAll(page, limit, q);
                 res.status(200).json(tables);
             }
             catch (error) {

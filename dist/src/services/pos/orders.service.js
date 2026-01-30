@@ -22,32 +22,154 @@ var __rest = (this && this.__rest) || function (s, e) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.OrdersService = void 0;
 const socket_service_1 = require("../socket.service");
-const Orders_1 = require("../../entity/pos/Orders");
+const SalesOrder_1 = require("../../entity/pos/SalesOrder");
 const database_1 = require("../../database/database");
 const Tables_1 = require("../../entity/pos/Tables");
-const OrdersItem_1 = require("../../entity/pos/OrdersItem");
-const OrdersDetail_1 = require("../../entity/pos/OrdersDetail");
+const SalesOrderItem_1 = require("../../entity/pos/SalesOrderItem");
+const SalesOrderDetail_1 = require("../../entity/pos/SalesOrderDetail");
 const OrderEnums_1 = require("../../entity/pos/OrderEnums");
-const priceCalculator_service_1 = require("./priceCalculator.service");
+const Products_1 = require("../../entity/pos/Products");
+const typeorm_1 = require("typeorm");
+const orderTotals_service_1 = require("./orderTotals.service");
+const AppError_1 = require("../../utils/AppError");
+const shifts_service_1 = require("./shifts.service");
 class OrdersService {
     constructor(ordersModel) {
         this.ordersModel = ordersModel;
         this.socketService = socket_service_1.SocketService.getInstance();
+        this.shiftsService = new shifts_service_1.ShiftsService();
     }
-    findAll(page, limit, statuses) {
+    ensureActiveShift(userId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const activeShift = yield this.shiftsService.getCurrentShift(userId);
+            if (!activeShift) {
+                throw new AppError_1.AppError("กรุณาเปิดกะก่อนทำรายการ (Active Shift Required)", 400);
+            }
+        });
+    }
+    ensureOrderNo(orderNo) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (orderNo)
+                return orderNo;
+            for (let i = 0; i < 5; i++) {
+                const now = new Date();
+                const datePart = now.toISOString().slice(0, 10).replace(/-/g, "");
+                const timePart = now.toTimeString().slice(0, 8).replace(/:/g, "");
+                const rand = Math.floor(1000 + Math.random() * 9000);
+                const candidate = `ORD-${datePart}-${timePart}-${rand}`;
+                const existing = yield this.ordersModel.findOneByOrderNo(candidate);
+                if (!existing)
+                    return candidate;
+            }
+            throw new AppError_1.AppError("Unable to generate order number", 500);
+        });
+    }
+    prepareItems(items, manager) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const productRepo = manager.getRepository(Products_1.Products);
+            // 1. Collect all product IDs
+            const productIds = items
+                .map(i => i.product_id)
+                .filter((id) => !!id);
+            if (productIds.length === 0) {
+                throw new AppError_1.AppError("ไม่มีรายการสินค้าในคำสั่งซื้อ", 400);
+            }
+            // 2. Optimization: Batch Fetch Products (Single Query)
+            // Instead of querying N times inside the loop
+            const products = yield productRepo.findBy({
+                id: (0, typeorm_1.In)(productIds),
+                is_active: true
+            });
+            // 3. Create Map for O(1) Lookup
+            const productMap = new Map(products.map(p => [p.id, p]));
+            const prepared = [];
+            for (const itemData of items) {
+                if (!(itemData === null || itemData === void 0 ? void 0 : itemData.product_id)) {
+                    throw new AppError_1.AppError("Missing product_id", 400);
+                }
+                // Lookup from memory instead of DB
+                const product = productMap.get(itemData.product_id);
+                if (!product) {
+                    throw new AppError_1.AppError(`Product not found or inactive`, 404);
+                }
+                const quantity = Number(itemData.quantity);
+                if (!Number.isFinite(quantity) || quantity <= 0) {
+                    throw new AppError_1.AppError("Invalid quantity", 400);
+                }
+                const discount = Number(itemData.discount_amount || 0);
+                if (discount < 0) {
+                    throw new AppError_1.AppError("Invalid discount amount", 400);
+                }
+                const detailsData = Array.isArray(itemData.details) ? itemData.details : [];
+                const detailsTotal = detailsData.reduce((sum, d) => sum + (Number(d === null || d === void 0 ? void 0 : d.extra_price) || 0), 0);
+                const unitPrice = Number(product.price);
+                const lineTotal = (unitPrice + detailsTotal) * quantity - discount;
+                const item = new SalesOrderItem_1.SalesOrderItem();
+                item.product_id = product.id;
+                item.quantity = quantity;
+                item.price = unitPrice;
+                item.discount_amount = discount;
+                item.total_price = Math.max(0, Number(lineTotal));
+                item.notes = itemData.notes;
+                item.status = itemData.status || OrderEnums_1.OrderStatus.Pending;
+                const details = detailsData.map((d) => {
+                    var _a;
+                    const detail = new SalesOrderDetail_1.SalesOrderDetail();
+                    detail.detail_name = (_a = d === null || d === void 0 ? void 0 : d.detail_name) !== null && _a !== void 0 ? _a : "";
+                    detail.extra_price = Number((d === null || d === void 0 ? void 0 : d.extra_price) || 0);
+                    return detail;
+                });
+                prepared.push({ item, details });
+            }
+            return prepared;
+        });
+    }
+    ensureValidStatus(status) {
+        if (!Object.values(OrderEnums_1.OrderStatus).includes(status)) {
+            throw new AppError_1.AppError("Invalid status", 400);
+        }
+        return status;
+    }
+    findAll(page, limit, statuses, type, query) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.ordersModel.findAll(page, limit, statuses);
+                return this.ordersModel.findAll(page, limit, statuses, type, query);
             }
             catch (error) {
                 throw error;
             }
         });
     }
-    findAllItems(status) {
+    findAllSummary(page, limit, statuses, type, query) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.ordersModel.findAllItems(status);
+                return this.ordersModel.findAllSummary(page, limit, statuses, type, query);
+            }
+            catch (error) {
+                throw error;
+            }
+        });
+    }
+    getStats() {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const activeStatuses = [
+                    OrderEnums_1.OrderStatus.Pending,
+                    OrderEnums_1.OrderStatus.Cooking,
+                    OrderEnums_1.OrderStatus.Served,
+                    OrderEnums_1.OrderStatus.WaitingForPayment
+                ];
+                return yield this.ordersModel.getStats(activeStatuses);
+            }
+            catch (error) {
+                throw error;
+            }
+        });
+    }
+    findAllItems(status_1) {
+        return __awaiter(this, arguments, void 0, function* (status, page = 1, limit = 100) {
+            try {
+                return this.ordersModel.findAllItems(status, page, limit);
             }
             catch (error) {
                 throw error;
@@ -66,30 +188,26 @@ class OrdersService {
     }
     create(orders) {
         return __awaiter(this, void 0, void 0, function* () {
+            if (orders.created_by_id) {
+                yield this.ensureActiveShift(orders.created_by_id);
+            }
             return yield database_1.AppDataSource.transaction((manager) => __awaiter(this, void 0, void 0, function* () {
                 try {
-                    if (!orders.order_no) {
-                        throw new Error("กรุณาระบุเลขที่ออเดอร์");
+                    if (orders.order_no) {
+                        const existingOrder = yield this.ordersModel.findOneByOrderNo(orders.order_no);
+                        if (existingOrder) {
+                            throw new Error("เลขที่ออเดอร์นี้มีอยู่ในระบบแล้ว");
+                        }
                     }
-                    const existingOrder = yield this.ordersModel.findOneByOrderNo(orders.order_no);
-                    if (existingOrder) {
-                        throw new Error("เลขที่ออเดอร์นี้มีอยู่ในระบบแล้ว");
+                    else {
+                        orders.order_no = yield this.ensureOrderNo();
                     }
                     // Pass manager to create which uses it for repository
                     const createdOrder = yield this.ordersModel.create(orders, manager);
-                    // Emitting socket inside transaction is risky if tx fails later, but here it's fine as we are near end.
-                    // Ideally, emit AFTER tx commit.
-                    // But for now, let's keep logic similar but in tx.
                     // Update Table Status if DineIn
                     if (createdOrder.table_id) {
                         const tablesRepo = manager.getRepository(Tables_1.Tables);
                         yield tablesRepo.update(createdOrder.table_id, { status: Tables_1.TableStatus.Unavailable });
-                        const updatedTable = yield tablesRepo.findOneBy({ id: createdOrder.table_id });
-                        /*
-                           Note: Socket emission is side-effect. If tx causes rollback, UI might have received update.
-                           Correct way is to return data and emit in controller, or use 'afterTransaction' hook.
-                           For this refactor, I will emit AFTER the transaction block returns.
-                        */
                     }
                     return createdOrder;
                 }
@@ -100,9 +218,6 @@ class OrdersService {
                 // Post-transaction Side Effects
                 this.socketService.emit('orders:create', createdOrder);
                 if (createdOrder.table_id) {
-                    // We need to fetch table to emit? Or just trust it updated.
-                    // Let's just re-fetch light or emit structure.
-                    // Actually, reading from DB here is safe as tx committed.
                     const tablesRepo = database_1.AppDataSource.getRepository(Tables_1.Tables);
                     tablesRepo.findOneBy({ id: createdOrder.table_id }).then(t => {
                         if (t)
@@ -115,32 +230,66 @@ class OrdersService {
     }
     createFullOrder(data) {
         return __awaiter(this, void 0, void 0, function* () {
-            try {
-                if (!data.order_no) {
-                    throw new Error("กรุณาระบุเลขที่ออเดอร์");
+            const { items } = data, orderData = __rest(data, ["items"]);
+            if (orderData.created_by_id) {
+                yield this.ensureActiveShift(orderData.created_by_id);
+            }
+            return yield database_1.AppDataSource.transaction((manager) => __awaiter(this, void 0, void 0, function* () {
+                if (!items || !Array.isArray(items) || items.length === 0) {
+                    throw new AppError_1.AppError("กรุณาระบุรายการสินค้า", 400);
                 }
-                const existingOrder = yield this.ordersModel.findOneByOrderNo(data.order_no);
-                if (existingOrder) {
-                    throw new Error("เลขที่ออเดอร์นี้มีอยู่ในระบบแล้ว");
+                if (orderData.order_no) {
+                    const existingOrder = yield this.ordersModel.findOneByOrderNo(orderData.order_no);
+                    if (existingOrder) {
+                        throw new Error("เลขที่ออเดอร์นี้มีอยู่ในระบบแล้ว");
+                    }
                 }
-                // Separate items from order data
-                const { items } = data, orderData = __rest(data, ["items"]);
-                const createdOrder = yield this.ordersModel.createFullOrder(orderData, items);
-                // Fetch full data to emit
-                const fullOrder = yield this.ordersModel.findOne(createdOrder.id);
+                else {
+                    orderData.order_no = yield this.ensureOrderNo();
+                }
+                if (!orderData.status) {
+                    orderData.status = OrderEnums_1.OrderStatus.Pending;
+                }
+                const preparedItems = yield this.prepareItems(items, manager);
+                const orderRepo = manager.getRepository(SalesOrder_1.SalesOrder);
+                const itemRepo = manager.getRepository(SalesOrderItem_1.SalesOrderItem);
+                const detailRepo = manager.getRepository(SalesOrderDetail_1.SalesOrderDetail);
+                const savedOrder = yield orderRepo.save(orderData);
+                if (savedOrder.table_id) {
+                    const tablesRepo = manager.getRepository(Tables_1.Tables);
+                    yield tablesRepo.update(savedOrder.table_id, { status: Tables_1.TableStatus.Unavailable });
+                }
+                for (const prepared of preparedItems) {
+                    prepared.item.order_id = savedOrder.id;
+                    const savedItem = yield itemRepo.save(prepared.item);
+                    if (prepared.details.length > 0) {
+                        for (const detail of prepared.details) {
+                            detail.orders_item_id = savedItem.id;
+                            yield detailRepo.save(detail);
+                        }
+                    }
+                }
+                yield (0, orderTotals_service_1.recalculateOrderTotal)(savedOrder.id, manager);
+                return savedOrder;
+            })).then((savedOrder) => __awaiter(this, void 0, void 0, function* () {
+                const fullOrder = yield this.ordersModel.findOne(savedOrder.id);
                 if (fullOrder) {
                     this.socketService.emit('orders:create', fullOrder);
+                    if (fullOrder.table_id) {
+                        const tablesRepo = database_1.AppDataSource.getRepository(Tables_1.Tables);
+                        const t = yield tablesRepo.findOneBy({ id: fullOrder.table_id });
+                        if (t)
+                            this.socketService.emit('tables:update', t);
+                    }
                     return fullOrder;
                 }
-                return createdOrder;
-            }
-            catch (error) {
-                throw error;
-            }
+                return savedOrder;
+            }));
         });
     }
     update(id, orders) {
         return __awaiter(this, void 0, void 0, function* () {
+            var _a;
             try {
                 const orderToUpdate = yield this.ordersModel.findOne(id);
                 if (!orderToUpdate) {
@@ -152,9 +301,30 @@ class OrdersService {
                         throw new Error("เลขที่ออเดอร์นี้มีอยู่ในระบบแล้ว");
                     }
                 }
+                if (orders.status) {
+                    this.ensureValidStatus(String(orders.status));
+                }
                 const updatedOrder = yield this.ordersModel.update(id, orders);
-                this.socketService.emit('orders:update', updatedOrder);
-                return updatedOrder;
+                if (orders.status) {
+                    const normalizedStatus = this.ensureValidStatus(String(orders.status));
+                    if (normalizedStatus === OrderEnums_1.OrderStatus.Cancelled) {
+                        yield this.ordersModel.updateAllItemsStatus(id, OrderEnums_1.OrderStatus.Cancelled);
+                    }
+                }
+                yield (0, orderTotals_service_1.recalculateOrderTotal)(id);
+                const refreshedOrder = yield this.ordersModel.findOne(id);
+                const result = refreshedOrder !== null && refreshedOrder !== void 0 ? refreshedOrder : updatedOrder;
+                const finalStatus = (_a = orders.status) !== null && _a !== void 0 ? _a : result.status;
+                // Release table if Order is Completed or Cancelled
+                if ((finalStatus === OrderEnums_1.OrderStatus.Completed || finalStatus === OrderEnums_1.OrderStatus.Cancelled) && result.table_id) {
+                    const tablesRepo = database_1.AppDataSource.getRepository(Tables_1.Tables);
+                    yield tablesRepo.update(result.table_id, { status: Tables_1.TableStatus.Available });
+                    const t = yield tablesRepo.findOneBy({ id: result.table_id });
+                    if (t)
+                        this.socketService.emit('tables:update', t);
+                }
+                this.socketService.emit('orders:update', result);
+                return result;
             }
             catch (error) {
                 throw error;
@@ -164,6 +334,14 @@ class OrdersService {
     delete(id) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
+                const order = yield this.ordersModel.findOne(id);
+                if (order === null || order === void 0 ? void 0 : order.table_id) {
+                    const tablesRepo = database_1.AppDataSource.getRepository(Tables_1.Tables);
+                    yield tablesRepo.update(order.table_id, { status: Tables_1.TableStatus.Available });
+                    const t = yield tablesRepo.findOneBy({ id: order.table_id });
+                    if (t)
+                        this.socketService.emit('tables:update', t);
+                }
                 yield this.ordersModel.delete(id);
                 this.socketService.emit('orders:delete', { id });
             }
@@ -175,7 +353,15 @@ class OrdersService {
     updateItemStatus(itemId, status) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                yield this.ordersModel.updateItemStatus(itemId, status);
+                const normalized = this.ensureValidStatus(status);
+                const item = yield this.ordersModel.findItemById(itemId);
+                if (!item)
+                    throw new AppError_1.AppError("Item not found", 404);
+                yield this.ordersModel.updateItemStatus(itemId, normalized);
+                yield (0, orderTotals_service_1.recalculateOrderTotal)(item.order_id);
+                const updatedOrder = yield this.ordersModel.findOne(item.order_id);
+                if (updatedOrder)
+                    this.socketService.emit('orders:update', updatedOrder);
             }
             catch (error) {
                 throw error;
@@ -186,28 +372,22 @@ class OrdersService {
         return __awaiter(this, void 0, void 0, function* () {
             return yield database_1.AppDataSource.transaction((manager) => __awaiter(this, void 0, void 0, function* () {
                 try {
-                    const item = new OrdersItem_1.OrdersItem();
+                    const orderRepo = manager.getRepository(SalesOrder_1.SalesOrder);
+                    const order = yield orderRepo.findOneBy({ id: orderId });
+                    if (!order)
+                        throw new AppError_1.AppError("Order not found", 404);
+                    const prepared = yield this.prepareItems([itemData], manager);
+                    const { item, details } = prepared[0];
                     item.order_id = orderId;
-                    item.product_id = itemData.product_id;
-                    item.quantity = itemData.quantity;
-                    item.price = itemData.price;
-                    item.discount_amount = itemData.discount_amount || 0;
-                    const detailsTotal = itemData.details ? itemData.details.reduce((sum, d) => sum + (Number(d.extra_price) || 0), 0) : 0;
-                    item.total_price = (Number(item.price) + detailsTotal) * item.quantity - Number(item.discount_amount || 0);
-                    item.notes = itemData.notes;
-                    item.status = OrderEnums_1.OrderStatus.Pending;
                     const savedItem = yield this.ordersModel.createItem(item, manager);
-                    if (itemData.details && itemData.details.length > 0) {
-                        const detailRepo = manager.getRepository(OrdersDetail_1.OrdersDetail);
-                        for (const d of itemData.details) {
-                            const detail = new OrdersDetail_1.OrdersDetail();
+                    if (details.length > 0) {
+                        const detailRepo = manager.getRepository(SalesOrderDetail_1.SalesOrderDetail);
+                        for (const detail of details) {
                             detail.orders_item_id = savedItem.id;
-                            detail.detail_name = d.detail_name;
-                            detail.extra_price = d.extra_price || 0;
                             yield detailRepo.save(detail);
                         }
                     }
-                    yield this.recalculateOrderTotal(orderId, manager);
+                    yield (0, orderTotals_service_1.recalculateOrderTotal)(orderId, manager);
                     const updatedOrder = yield this.ordersModel.findOne(orderId);
                     return updatedOrder;
                 }
@@ -228,20 +408,46 @@ class OrdersService {
                     const item = yield this.ordersModel.findItemById(itemId, manager);
                     if (!item)
                         throw new Error("Item not found");
+                    const detailRepo = manager.getRepository(SalesOrderDetail_1.SalesOrderDetail);
+                    if (data.details !== undefined) {
+                        // 1. Delete existing details
+                        yield detailRepo.delete({ orders_item_id: itemId });
+                        // 2. Add new details
+                        if (Array.isArray(data.details) && data.details.length > 0) {
+                            for (const d of data.details) {
+                                if (!d.detail_name && !d.extra_price)
+                                    continue;
+                                const detail = new SalesOrderDetail_1.SalesOrderDetail();
+                                detail.orders_item_id = itemId;
+                                detail.detail_name = d.detail_name || "";
+                                detail.extra_price = Number(d.extra_price || 0);
+                                yield detailRepo.save(detail);
+                            }
+                        }
+                    }
                     if (data.quantity !== undefined) {
-                        item.quantity = data.quantity;
-                        item.total_price = (Number(item.price) * item.quantity) - Number(item.discount_amount || 0);
+                        const qty = Number(data.quantity);
+                        if (!Number.isFinite(qty) || qty <= 0) {
+                            throw new AppError_1.AppError("Invalid quantity", 400);
+                        }
+                        item.quantity = qty;
                     }
                     if (data.notes !== undefined) {
                         item.notes = data.notes;
                     }
+                    // Refetch item with new details to get total price right
+                    const updatedItemWithDetails = yield this.ordersModel.findItemById(itemId, manager);
+                    if (!updatedItemWithDetails)
+                        throw new Error("Item not found after detail update");
+                    const detailsTotal = updatedItemWithDetails.details ? updatedItemWithDetails.details.reduce((sum, d) => sum + (Number(d.extra_price) || 0), 0) : 0;
+                    updatedItemWithDetails.total_price = Math.max(0, (Number(updatedItemWithDetails.price) + detailsTotal) * updatedItemWithDetails.quantity - Number(updatedItemWithDetails.discount_amount || 0));
                     yield this.ordersModel.updateItem(itemId, {
-                        quantity: item.quantity,
-                        total_price: item.total_price,
-                        notes: item.notes
+                        quantity: updatedItemWithDetails.quantity,
+                        total_price: updatedItemWithDetails.total_price,
+                        notes: updatedItemWithDetails.notes
                     }, manager);
-                    yield this.recalculateOrderTotal(item.order_id, manager);
-                    const updatedOrder = yield this.ordersModel.findOne(item.order_id);
+                    yield (0, orderTotals_service_1.recalculateOrderTotal)(updatedItemWithDetails.order_id, manager);
+                    const updatedOrder = yield this.ordersModel.findOne(updatedItemWithDetails.order_id);
                     return updatedOrder;
                 }
                 catch (error) {
@@ -263,7 +469,7 @@ class OrdersService {
                         throw new Error("Item not found");
                     const orderId = item.order_id;
                     yield this.ordersModel.deleteItem(itemId, manager);
-                    yield this.recalculateOrderTotal(orderId, manager);
+                    yield (0, orderTotals_service_1.recalculateOrderTotal)(orderId, manager);
                     const updatedOrder = yield this.ordersModel.findOne(orderId);
                     return updatedOrder;
                 }
@@ -275,30 +481,6 @@ class OrdersService {
                     this.socketService.emit('orders:update', updatedOrder);
                 return updatedOrder;
             });
-        });
-    }
-    recalculateOrderTotal(orderId, manager) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const repo = manager ? manager.getRepository(Orders_1.Orders) : database_1.AppDataSource.getRepository(Orders_1.Orders);
-            // Fetch order with discount relation
-            const order = yield repo.findOne({
-                where: { id: orderId },
-                relations: ["discount"]
-            });
-            if (!order)
-                return;
-            const items = yield this.ordersModel.findItemsByOrderId(orderId, manager);
-            // Exclude cancelled items from total
-            const validItems = items.filter(i => i.status !== OrderEnums_1.OrderStatus.Cancelled);
-            // Calculate using Service
-            const result = priceCalculator_service_1.PriceCalculatorService.calculateOrderTotal(validItems, order.discount);
-            // Update Order
-            yield this.ordersModel.update(orderId, {
-                sub_total: result.subTotal,
-                discount_amount: result.discountAmount,
-                vat: result.vatAmount,
-                total_amount: result.totalAmount
-            }, manager);
         });
     }
 }

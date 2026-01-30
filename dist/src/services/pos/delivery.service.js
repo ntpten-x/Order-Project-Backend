@@ -16,10 +16,10 @@ class DeliveryService {
         this.deliveryModel = deliveryModel;
         this.socketService = socket_service_1.SocketService.getInstance();
     }
-    findAll() {
+    findAll(page, limit, q) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.deliveryModel.findAll();
+                return this.deliveryModel.findAll(page, limit, q);
             }
             catch (error) {
                 throw error;

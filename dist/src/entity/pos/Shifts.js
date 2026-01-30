@@ -25,6 +25,7 @@ __decorate([
     __metadata("design:type", String)
 ], Shifts.prototype, "id", void 0);
 __decorate([
+    (0, typeorm_1.Index)(),
     (0, typeorm_1.Column)({ name: "user_id", type: "uuid" }),
     __metadata("design:type", String)
 ], Shifts.prototype, "user_id", void 0);
@@ -50,6 +51,7 @@ __decorate([
     __metadata("design:type", Number)
 ], Shifts.prototype, "diff_amount", void 0);
 __decorate([
+    (0, typeorm_1.Index)(),
     (0, typeorm_1.Column)({ type: "enum", enum: ShiftStatus, default: ShiftStatus.OPEN }),
     __metadata("design:type", String)
 ], Shifts.prototype, "status", void 0);

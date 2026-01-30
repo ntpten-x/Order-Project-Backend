@@ -12,7 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.StockOrdersItem = void 0;
 const typeorm_1 = require("typeorm");
 const Ingredients_1 = require("./Ingredients");
-const Orders_1 = require("./Orders");
+const PurchaseOrder_1 = require("./PurchaseOrder");
 const OrdersDetail_1 = require("./OrdersDetail");
 let StockOrdersItem = class StockOrdersItem {
 };
@@ -37,9 +37,9 @@ __decorate([
     __metadata("design:type", String)
 ], StockOrdersItem.prototype, "orders_id", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)(() => Orders_1.StockOrders, (orders) => orders.ordersItems, { onDelete: 'CASCADE' }),
+    (0, typeorm_1.ManyToOne)(() => PurchaseOrder_1.PurchaseOrder, (orders) => orders.ordersItems, { onDelete: 'CASCADE' }),
     (0, typeorm_1.JoinColumn)({ name: "orders_id" }),
-    __metadata("design:type", Orders_1.StockOrders)
+    __metadata("design:type", PurchaseOrder_1.PurchaseOrder)
 ], StockOrdersItem.prototype, "orders", void 0);
 __decorate([
     (0, typeorm_1.Column)({ name: "quantity_ordered", type: "int" }),
