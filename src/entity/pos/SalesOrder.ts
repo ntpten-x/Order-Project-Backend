@@ -11,6 +11,8 @@ import { OrderType, OrderStatus } from "./OrderEnums";
 
 @Index(["create_date"])
 @Index(["status"])
+@Index(["order_type"])
+@Index(["delivery_id"])
 export class SalesOrder {
     @PrimaryGeneratedColumn("uuid")
     id!: string; // รหัสอ้างอิงหลักของออเดอร์

@@ -7,13 +7,25 @@ export class OrdersController {
     constructor(private ordersService: OrdersService) { }
 
     findAll = catchAsync(async (req: Request, res: Response) => {
-        const page = parseInt(req.query.page as string) || 1;
-        const limit = parseInt(req.query.limit as string) || 50;
+        const page = Math.max(parseInt(req.query.page as string) || 1, 1);
+        const limitRaw = parseInt(req.query.limit as string) || 50;
+        const limit = Math.min(Math.max(limitRaw, 1), 200); // cap to prevent huge payloads
         const statuses = req.query.status ? (req.query.status as string).split(',') : undefined;
         const type = req.query.type as string;
 
         const result = await this.ordersService.findAll(page, limit, statuses, type)
         res.status(200).json(result)
+    })
+
+    findSummary = catchAsync(async (req: Request, res: Response) => {
+        const page = Math.max(parseInt(req.query.page as string) || 1, 1);
+        const limitRaw = parseInt(req.query.limit as string) || 50;
+        const limit = Math.min(Math.max(limitRaw, 1), 200);
+        const statuses = req.query.status ? (req.query.status as string).split(',') : undefined;
+        const type = req.query.type as string;
+
+        const result = await this.ordersService.findAllSummary(page, limit, statuses, type);
+        res.status(200).json(result);
     })
 
     getStats = catchAsync(async (req: Request, res: Response) => {

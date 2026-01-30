@@ -128,6 +128,14 @@ export class OrdersService {
         }
     }
 
+    async findAllSummary(page: number, limit: number, statuses?: string[], type?: string): Promise<{ data: any[], total: number, page: number, limit: number }> {
+        try {
+            return this.ordersModel.findAllSummary(page, limit, statuses, type);
+        } catch (error) {
+            throw error;
+        }
+    }
+
     async getStats(): Promise<{ dineIn: number, takeaway: number, delivery: number, total: number }> {
         try {
             const activeStatuses = [

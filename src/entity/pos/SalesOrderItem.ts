@@ -39,6 +39,7 @@ export class SalesOrderItem {
     @Column({ type: "text", nullable: true })
     notes?: string; // หมายเหตุเพิ่มเติม (เช่น ไม่ใส่ผัก, เผ็ดน้อย)
 
+    @Index()
     @Column({ type: "enum", enum: OrderStatus, default: OrderStatus.Pending })
     status!: OrderStatus; // สถานะของรายการ (Pending, Cooking, Served, Cancelled)
 

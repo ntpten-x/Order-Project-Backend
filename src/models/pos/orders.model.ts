@@ -44,6 +44,109 @@ export class OrdersModels {
         }
     }
 
+    async findAllSummary(
+        page: number = 1,
+        limit: number = 50,
+        statuses?: string[],
+        orderType?: string
+    ): Promise<{ data: any[], total: number, page: number, limit: number }> {
+        try {
+            const whereClauses: string[] = [];
+            const params: any[] = [];
+
+            if (statuses && statuses.length > 0) {
+                params.push(statuses);
+                whereClauses.push(`o.status::text = ANY($${params.length})`);
+            }
+
+            if (orderType) {
+                params.push(orderType);
+                whereClauses.push(`o.order_type::text = $${params.length}`);
+            }
+
+            const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
+
+            const countQuery = `
+                SELECT COUNT(*)::int AS total
+                FROM sales_orders o
+                ${whereSql}
+            `;
+            const countResult = await AppDataSource.query(countQuery, params);
+            const total = countResult?.[0]?.total ?? 0;
+
+            const dataParams = [...params, limit, (page - 1) * limit];
+            const limitIndex = params.length + 1;
+            const offsetIndex = params.length + 2;
+
+            const dataQuery = `
+                SELECT
+                    o.id,
+                    o.order_no,
+                    o.order_type,
+                    o.status,
+                    o.create_date,
+                    o.total_amount,
+                    o.delivery_code,
+                    o.table_id,
+                    o.delivery_id,
+                    t.table_name AS table_name,
+                    d.delivery_name AS delivery_name,
+                    COALESCE(item_summary.items_summary, '{}'::jsonb) AS items_summary,
+                    COALESCE(item_summary.items_count, 0) AS items_count
+                FROM sales_orders o
+                LEFT JOIN tables t ON t.id = o.table_id
+                LEFT JOIN delivery d ON d.id = o.delivery_id
+                LEFT JOIN (
+                    SELECT
+                        s.order_id,
+                        jsonb_object_agg(s.category_name, s.qty) FILTER (WHERE s.category_name IS NOT NULL) AS items_summary,
+                        SUM(s.qty) AS items_count
+                    FROM (
+                        SELECT
+                            i.order_id,
+                            c.display_name AS category_name,
+                            SUM(i.quantity)::int AS qty
+                        FROM sales_order_item i
+                        LEFT JOIN products p ON p.id = i.product_id
+                        LEFT JOIN category c ON c.id = p.category_id
+                        WHERE i.status <> 'Cancelled'
+                        GROUP BY i.order_id, c.display_name
+                    ) s
+                    GROUP BY s.order_id
+                ) item_summary ON item_summary.order_id = o.id
+                ${whereSql}
+                ORDER BY o.create_date DESC
+                LIMIT $${limitIndex} OFFSET $${offsetIndex}
+            `;
+
+            const rows = await AppDataSource.query(dataQuery, dataParams);
+            const data = rows.map((row: any) => ({
+                id: row.id,
+                order_no: row.order_no,
+                order_type: row.order_type,
+                status: row.status,
+                create_date: row.create_date,
+                total_amount: Number(row.total_amount),
+                delivery_code: row.delivery_code,
+                table_id: row.table_id,
+                delivery_id: row.delivery_id,
+                table: row.table_name ? { table_name: row.table_name } : null,
+                delivery: row.delivery_name ? { delivery_name: row.delivery_name } : null,
+                items_summary: row.items_summary ?? {},
+                items_count: Number(row.items_count || 0),
+            }));
+
+            return {
+                data,
+                total,
+                page,
+                limit,
+            };
+        } catch (error) {
+            throw error;
+        }
+    }
+
     async getStats(statuses: string[]): Promise<{ dineIn: number, takeaway: number, delivery: number, total: number }> {
         try {
             const stats = await this.ordersRepository
