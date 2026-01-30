@@ -12,8 +12,9 @@ export class OrdersController {
         const limit = Math.min(Math.max(limitRaw, 1), 200); // cap to prevent huge payloads
         const statuses = req.query.status ? (req.query.status as string).split(',') : undefined;
         const type = req.query.type as string;
+        const query = req.query.q as string | undefined;
 
-        const result = await this.ordersService.findAll(page, limit, statuses, type)
+        const result = await this.ordersService.findAll(page, limit, statuses, type, query)
         res.status(200).json(result)
     })
 
@@ -23,8 +24,9 @@ export class OrdersController {
         const limit = Math.min(Math.max(limitRaw, 1), 200);
         const statuses = req.query.status ? (req.query.status as string).split(',') : undefined;
         const type = req.query.type as string;
+        const query = req.query.q as string | undefined;
 
-        const result = await this.ordersService.findAllSummary(page, limit, statuses, type);
+        const result = await this.ordersService.findAllSummary(page, limit, statuses, type, query);
         res.status(200).json(result);
     })
 

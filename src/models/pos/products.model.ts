@@ -4,25 +4,32 @@ import { Products } from "../../entity/pos/Products";
 export class ProductsModels {
     private productsRepository = AppDataSource.getRepository(Products)
 
-    async findAll(page: number = 1, limit: number = 50, category_id?: string): Promise<{ data: Products[], total: number, page: number, last_page: number }> {
+    async findAll(
+        page: number = 1,
+        limit: number = 50,
+        category_id?: string,
+        q?: string
+    ): Promise<{ data: Products[], total: number, page: number, last_page: number }> {
         try {
             const skip = (page - 1) * limit;
 
-            const where: any = {};
-            if (category_id) where.category_id = category_id;
+            const query = this.productsRepository.createQueryBuilder("products")
+                .leftJoinAndSelect("products.category", "category")
+                .leftJoinAndSelect("products.unit", "unit")
+                .orderBy("products.create_date", "ASC");
 
-            const [data, total] = await this.productsRepository.findAndCount({
-                relations: {
-                    category: true,
-                    unit: true
-                },
-                where,
-                order: {
-                    create_date: "ASC"
-                },
-                skip: skip,
-                take: limit
-            });
+            if (category_id) {
+                query.andWhere("products.category_id = :category_id", { category_id });
+            }
+
+            if (q && q.trim()) {
+                query.andWhere(
+                    "(products.product_name ILIKE :q OR products.display_name ILIKE :q OR products.description ILIKE :q)",
+                    { q: `%${q.trim()}%` }
+                );
+            }
+
+            const [data, total] = await query.skip(skip).take(limit).getManyAndCount();
 
             return {
                 data,

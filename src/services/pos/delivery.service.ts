@@ -7,9 +7,9 @@ export class DeliveryService {
 
     constructor(private deliveryModel: DeliveryModels) { }
 
-    async findAll(): Promise<Delivery[]> {
+    async findAll(page: number, limit: number, q?: string): Promise<{ data: Delivery[], total: number, page: number, last_page: number }> {
         try {
-            return this.deliveryModel.findAll()
+            return this.deliveryModel.findAll(page, limit, q)
         } catch (error) {
             throw error
         }

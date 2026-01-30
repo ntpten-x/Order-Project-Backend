@@ -8,9 +8,11 @@ export class ProductsController {
     findAll = async (req: Request, res: Response) => {
         try {
             const page = parseInt(req.query.page as string) || 1;
-            const limit = parseInt(req.query.limit as string) || 50;
+            const rawLimit = parseInt(req.query.limit as string);
+            const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
             const category_id = req.query.category_id as string;
-            const result = await this.productsService.findAll(page, limit, category_id)
+            const q = (req.query.q as string | undefined) || undefined;
+            const result = await this.productsService.findAll(page, limit, category_id, q)
             res.status(200).json(result)
         } catch (error: any) {
             res.status(500).json({ error: error.message })

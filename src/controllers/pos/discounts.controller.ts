@@ -6,7 +6,8 @@ export class DiscountsController {
 
     findAll = async (req: Request, res: Response) => {
         try {
-            const discounts = await this.discountsService.findAll()
+            const q = (req.query.q as string | undefined) || undefined;
+            const discounts = await this.discountsService.findAll(q)
             res.status(200).json(discounts)
         } catch (error: any) {
             res.status(500).json({ error: error.message })

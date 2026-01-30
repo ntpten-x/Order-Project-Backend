@@ -7,9 +7,9 @@ export class DiscountsService {
 
     constructor(private discountsModel: DiscountsModels) { }
 
-    async findAll(): Promise<Discounts[]> {
+    async findAll(q?: string): Promise<Discounts[]> {
         try {
-            return this.discountsModel.findAll()
+            return this.discountsModel.findAll(q)
         } catch (error) {
             throw error
         }

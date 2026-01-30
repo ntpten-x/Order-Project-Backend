@@ -120,17 +120,17 @@ export class OrdersService {
         return status as OrderStatus;
     }
 
-    async findAll(page: number, limit: number, statuses?: string[], type?: string): Promise<{ data: SalesOrder[], total: number, page: number, limit: number }> {
+    async findAll(page: number, limit: number, statuses?: string[], type?: string, query?: string): Promise<{ data: SalesOrder[], total: number, page: number, limit: number }> {
         try {
-            return this.ordersModel.findAll(page, limit, statuses, type)
+            return this.ordersModel.findAll(page, limit, statuses, type, query)
         } catch (error) {
             throw error
         }
     }
 
-    async findAllSummary(page: number, limit: number, statuses?: string[], type?: string): Promise<{ data: any[], total: number, page: number, limit: number }> {
+    async findAllSummary(page: number, limit: number, statuses?: string[], type?: string, query?: string): Promise<{ data: any[], total: number, page: number, limit: number }> {
         try {
-            return this.ordersModel.findAllSummary(page, limit, statuses, type);
+            return this.ordersModel.findAllSummary(page, limit, statuses, type, query);
         } catch (error) {
             throw error;
         }

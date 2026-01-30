@@ -4,13 +4,19 @@ import { Discounts } from "../../entity/pos/Discounts";
 export class DiscountsModels {
     private discountsRepository = AppDataSource.getRepository(Discounts)
 
-    async findAll(): Promise<Discounts[]> {
+    async findAll(q?: string): Promise<Discounts[]> {
         try {
-            return this.discountsRepository.find({
-                order: {
-                    create_date: "ASC"
-                }
-            })
+            const query = this.discountsRepository.createQueryBuilder("discounts")
+                .orderBy("discounts.create_date", "ASC");
+
+            if (q && q.trim()) {
+                query.where(
+                    "(discounts.discount_name ILIKE :q OR discounts.display_name ILIKE :q OR discounts.description ILIKE :q)",
+                    { q: `%${q.trim()}%` }
+                );
+            }
+
+            return query.getMany();
         } catch (error) {
             throw error
         }

@@ -7,9 +7,9 @@ export class PaymentMethodService {
 
     constructor(private paymentMethodModel: PaymentMethodModels) { }
 
-    async findAll(): Promise<PaymentMethod[]> {
+    async findAll(page: number, limit: number, q?: string): Promise<{ data: PaymentMethod[], total: number, page: number, last_page: number }> {
         try {
-            return this.paymentMethodModel.findAll()
+            return this.paymentMethodModel.findAll(page, limit, q)
         } catch (error) {
             throw error
         }

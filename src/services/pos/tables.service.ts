@@ -7,9 +7,9 @@ export class TablesService {
 
     constructor(private tablesModel: TablesModels) { }
 
-    async findAll(): Promise<Tables[]> {
+    async findAll(page: number, limit: number, q?: string): Promise<{ data: Tables[], total: number, page: number, last_page: number }> {
         try {
-            return this.tablesModel.findAll()
+            return this.tablesModel.findAll(page, limit, q)
         } catch (error) {
             throw error
         }

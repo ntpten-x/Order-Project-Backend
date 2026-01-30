@@ -4,13 +4,23 @@ import { Delivery } from "../../entity/pos/Delivery";
 export class DeliveryModels {
     private deliveryRepository = AppDataSource.getRepository(Delivery)
 
-    async findAll(): Promise<Delivery[]> {
+    async findAll(page: number = 1, limit: number = 50, q?: string): Promise<{ data: Delivery[], total: number, page: number, last_page: number }> {
         try {
-            return this.deliveryRepository.find({
-                order: {
-                    create_date: "ASC"
-                }
-            })
+            const skip = (page - 1) * limit;
+            const query = this.deliveryRepository.createQueryBuilder("delivery")
+                .orderBy("delivery.create_date", "ASC");
+
+            if (q && q.trim()) {
+                query.where("delivery.delivery_name ILIKE :q", { q: `%${q.trim()}%` });
+            }
+
+            const [data, total] = await query.skip(skip).take(limit).getManyAndCount();
+            return {
+                data,
+                total,
+                page,
+                last_page: Math.max(1, Math.ceil(total / limit))
+            };
         } catch (error) {
             throw error
         }

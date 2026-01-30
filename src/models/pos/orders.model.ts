@@ -8,10 +8,10 @@ import { EntityManager, In } from "typeorm";
 export class OrdersModels {
     private ordersRepository = AppDataSource.getRepository(SalesOrder)
 
-    async findAll(page: number = 1, limit: number = 50, statuses?: string[], orderType?: string): Promise<{ data: SalesOrder[], total: number, page: number, limit: number }> {
+    async findAll(page: number = 1, limit: number = 50, statuses?: string[], orderType?: string, searchTerm?: string): Promise<{ data: SalesOrder[], total: number, page: number, limit: number }> {
         try {
             const skip = (page - 1) * limit;
-            const query = this.ordersRepository.createQueryBuilder("order")
+            const qb = this.ordersRepository.createQueryBuilder("order")
                 .leftJoinAndSelect("order.table", "table")
                 .leftJoinAndSelect("order.delivery", "delivery")
                 .leftJoinAndSelect("order.discount", "discount")
@@ -24,14 +24,22 @@ export class OrdersModels {
                 .take(limit);
 
             if (statuses && statuses.length > 0) {
-                query.andWhere("order.status IN (:...statuses)", { statuses });
+                qb.andWhere("order.status IN (:...statuses)", { statuses });
             }
 
             if (orderType) {
-                query.andWhere("order.order_type = :orderType", { orderType });
+                qb.andWhere("order.order_type = :orderType", { orderType });
             }
 
-            const [data, total] = await query.getManyAndCount();
+            if (searchTerm) {
+                const search = `${searchTerm}%`;
+                qb.andWhere(
+                    "(order.order_no ILIKE :search OR order.delivery_code ILIKE :search OR table.table_name ILIKE :search OR delivery.delivery_name ILIKE :search)",
+                    { search }
+                );
+            }
+
+            const [data, total] = await qb.getManyAndCount();
 
             return {
                 data,
@@ -48,7 +56,8 @@ export class OrdersModels {
         page: number = 1,
         limit: number = 50,
         statuses?: string[],
-        orderType?: string
+        orderType?: string,
+        query?: string
     ): Promise<{ data: any[], total: number, page: number, limit: number }> {
         try {
             const whereClauses: string[] = [];
@@ -62,6 +71,17 @@ export class OrdersModels {
             if (orderType) {
                 params.push(orderType);
                 whereClauses.push(`o.order_type::text = $${params.length}`);
+            }
+
+            if (query) {
+                params.push(`${query}%`);
+                const qIndex = params.length;
+                whereClauses.push(`(
+                    o.order_no ILIKE $${qIndex}
+                    OR o.delivery_code ILIKE $${qIndex}
+                    OR t.table_name ILIKE $${qIndex}
+                    OR d.delivery_name ILIKE $${qIndex}
+                )`);
             }
 
             const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";

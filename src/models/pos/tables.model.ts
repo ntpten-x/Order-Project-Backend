@@ -4,21 +4,35 @@ import { Tables } from "../../entity/pos/Tables";
 export class TablesModels {
     private tablesRepository = AppDataSource.getRepository(Tables)
 
-    async findAll(): Promise<any[]> {
+    async findAll(page: number = 1, limit: number = 50, q?: string): Promise<{ data: any[], total: number, page: number, last_page: number }> {
         try {
-            return this.tablesRepository.createQueryBuilder("tables")
-                .leftJoinAndMapOne("tables.active_order", "SalesOrder", "so", "so.table_id = tables.id AND so.status NOT IN (:...statuses)", { statuses: ['Paid', 'Cancelled', 'completed'] }) // Exclude 'completed' too just in case
-                .orderBy("tables.create_date", "ASC")
-                .getMany()
-                .then(tables => tables.map((t: any) => {
-                    const activeOrder = t.active_order;
-                    return {
-                        ...t,
-                        status: activeOrder ? "Unavailable" : t.status, // Force Unavailable if active order exists
-                        active_order_status: activeOrder?.status || null,
-                        active_order_id: activeOrder?.id || null
-                    };
-                }));
+            const skip = (page - 1) * limit;
+            const query = this.tablesRepository.createQueryBuilder("tables")
+                .leftJoinAndMapOne("tables.active_order", "SalesOrder", "so", "so.table_id = tables.id AND so.status NOT IN (:...statuses)", { statuses: ['Paid', 'Cancelled', 'completed'] })
+                .orderBy("tables.create_date", "ASC");
+
+            if (q && q.trim()) {
+                query.andWhere("tables.table_name ILIKE :q", { q: `%${q.trim()}%` });
+            }
+
+            const [rows, total] = await query.skip(skip).take(limit).getManyAndCount();
+
+            const data = rows.map((t: any) => {
+                const activeOrder = t.active_order;
+                return {
+                    ...t,
+                    status: activeOrder ? "Unavailable" : t.status,
+                    active_order_status: activeOrder?.status || null,
+                    active_order_id: activeOrder?.id || null
+                };
+            });
+
+            return {
+                data,
+                total,
+                page,
+                last_page: Math.max(1, Math.ceil(total / limit))
+            };
         } catch (error) {
             throw error
         }

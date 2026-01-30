@@ -41,11 +41,28 @@ const app = express();
 const httpServer = createServer(app); // Wrap express with HTTP server
 const port = process.env.PORT || 3000;
 const bodyLimitMb = Number(process.env.REQUEST_BODY_LIMIT_MB || 5);
+const enablePerfLogs = process.env.ENABLE_PERF_LOG === "true" || process.env.NODE_ENV !== "production";
 
 // Trust proxy for secure cookies behind proxies (e.g., Render, Nginx)
 app.set("trust proxy", 1);
 // Reduce information leakage
 app.disable("x-powered-by");
+
+// Basic performance logging (disabled in prod unless ENABLE_PERF_LOG=true)
+if (enablePerfLogs) {
+    app.use((req, res, next) => {
+        const start = process.hrtime.bigint();
+        res.on("finish", () => {
+            const end = process.hrtime.bigint();
+            const ms = Number(end - start) / 1_000_000;
+            const status = res.statusCode;
+            const method = req.method;
+            const path = req.originalUrl;
+            console.log(`[PERF] ${method} ${path} ${status} - ${ms.toFixed(1)}ms`);
+        });
+        next();
+    });
+}
 
 // Ensure JWT secret exists (no insecure default)
 if (!process.env.JWT_SECRET) {

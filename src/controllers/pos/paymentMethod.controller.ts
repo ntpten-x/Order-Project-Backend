@@ -6,7 +6,12 @@ export class PaymentMethodController {
 
     findAll = async (req: Request, res: Response) => {
         try {
-            const paymentMethods = await this.paymentMethodService.findAll()
+            const page = parseInt(req.query.page as string) || 1;
+            const rawLimit = parseInt(req.query.limit as string);
+            const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
+            const q = (req.query.q as string | undefined) || undefined;
+
+            const paymentMethods = await this.paymentMethodService.findAll(page, limit, q)
             res.status(200).json(paymentMethods)
         } catch (error: any) {
             res.status(500).json({ error: error.message })
