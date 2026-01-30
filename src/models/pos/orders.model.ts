@@ -126,24 +126,21 @@ export class OrdersModels {
                 FROM sales_orders o
                 LEFT JOIN tables t ON t.id = o.table_id
                 LEFT JOIN delivery d ON d.id = o.delivery_id
-                LEFT JOIN (
+                LEFT JOIN LATERAL (
                     SELECT
-                        s.order_id,
                         jsonb_object_agg(s.category_name, s.qty) FILTER (WHERE s.category_name IS NOT NULL) AS items_summary,
                         SUM(s.qty) AS items_count
                     FROM (
                         SELECT
-                            i.order_id,
                             c.display_name AS category_name,
                             SUM(i.quantity)::int AS qty
                         FROM sales_order_item i
                         LEFT JOIN products p ON p.id = i.product_id
                         LEFT JOIN category c ON c.id = p.category_id
-                        WHERE i.status <> 'Cancelled'
-                        GROUP BY i.order_id, c.display_name
+                        WHERE i.order_id = o.id AND i.status <> 'Cancelled'
+                        GROUP BY c.display_name
                     ) s
-                    GROUP BY s.order_id
-                ) item_summary ON item_summary.order_id = o.id
+                ) item_summary ON true
                 ${whereSql}
                 ORDER BY o.create_date DESC
                 LIMIT $${limitIndex} OFFSET $${offsetIndex}

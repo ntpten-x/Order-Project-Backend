@@ -48,7 +48,11 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
         req.user = user;
         next();
     } catch (err) {
-        return res.status(403).json({ message: "Invalid or expired token" });
+        if (err instanceof jwt.JsonWebTokenError || err instanceof jwt.TokenExpiredError) {
+            return res.status(403).json({ message: "Invalid or expired token" });
+        }
+        console.error("Authentication Error (System):", err);
+        return res.status(500).json({ message: "Authentication system error", error: (err as any).message });
     }
 };
 
