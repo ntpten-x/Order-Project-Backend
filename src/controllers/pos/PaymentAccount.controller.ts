@@ -8,7 +8,6 @@ export class PaymentAccountController {
 
     constructor() {
         this.service = new PaymentAccountService(new PaymentAccountModel())
-        console.log("PaymentAccountController initialized");
     }
 
     async getAccounts(req: Request, res: Response) {
