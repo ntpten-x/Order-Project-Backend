@@ -7,9 +7,9 @@ export class TablesService {
 
     constructor(private tablesModel: TablesModels) { }
 
-    async findAll(page: number, limit: number, q?: string): Promise<{ data: Tables[], total: number, page: number, last_page: number }> {
+    async findAll(page: number, limit: number, q?: string, branchId?: string): Promise<{ data: Tables[], total: number, page: number, last_page: number }> {
         try {
-            return this.tablesModel.findAll(page, limit, q)
+            return this.tablesModel.findAll(page, limit, q, branchId)
         } catch (error) {
             throw error
         }
@@ -23,9 +23,9 @@ export class TablesService {
         }
     }
 
-    async findOneByName(table_name: string): Promise<Tables | null> {
+    async findOneByName(table_name: string, branchId?: string): Promise<Tables | null> {
         try {
-            return this.tablesModel.findOneByName(table_name)
+            return this.tablesModel.findOneByName(table_name, branchId)
         } catch (error) {
             throw error
         }
@@ -37,7 +37,7 @@ export class TablesService {
                 throw new Error("กรุณาระบุชื่อโต๊ะ")
             }
 
-            const existingTable = await this.tablesModel.findOneByName(tables.table_name)
+            const existingTable = await this.tablesModel.findOneByName(tables.table_name, tables.branch_id)
             if (existingTable) {
                 throw new Error("ชื่อโต๊ะนี้มีอยู่ในระบบแล้ว")
             }
@@ -58,7 +58,7 @@ export class TablesService {
             }
 
             if (tables.table_name && tables.table_name !== tableToUpdate.table_name) {
-                const existingTable = await this.tablesModel.findOneByName(tables.table_name)
+                const existingTable = await this.tablesModel.findOneByName(tables.table_name, tableToUpdate.branch_id)
                 if (existingTable) {
                     throw new Error("ชื่อโต๊ะนี้มีอยู่ในระบบแล้ว")
                 }

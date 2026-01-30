@@ -6,6 +6,7 @@ import { Payments } from "./Payments";
 import { Discounts } from "./Discounts";
 import { Users } from "../Users";
 import { OrderType, OrderStatus } from "./OrderEnums";
+import { Branch } from "../Branch";
 
 @Entity("sales_orders")
 
@@ -13,12 +14,20 @@ import { OrderType, OrderStatus } from "./OrderEnums";
 @Index(["status"])
 @Index(["order_type"])
 @Index(["delivery_id"])
+@Index(["branch_id"])
 export class SalesOrder {
     @PrimaryGeneratedColumn("uuid")
     id!: string; // รหัสอ้างอิงหลักของออเดอร์
 
     @Column({ type: "varchar", unique: true, nullable: true })
     order_no!: string; // เลขที่ออเดอร์ (เช่น ORD-20240501-001)
+
+    @Column({ name: "branch_id", type: "uuid", nullable: true })
+    branch_id?: string;
+
+    @ManyToOne(() => Branch)
+    @JoinColumn({ name: "branch_id" })
+    branch?: Branch;
 
     @Column({ type: "enum", enum: OrderType, nullable: true })
     order_type!: OrderType; // ประเภทของออเดอร์ (ทานร้าน/กลับบ้าน/ส่ง)

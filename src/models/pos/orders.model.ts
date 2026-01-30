@@ -8,7 +8,7 @@ import { EntityManager, In } from "typeorm";
 export class OrdersModels {
     private ordersRepository = AppDataSource.getRepository(SalesOrder)
 
-    async findAll(page: number = 1, limit: number = 50, statuses?: string[], orderType?: string, searchTerm?: string): Promise<{ data: SalesOrder[], total: number, page: number, limit: number }> {
+    async findAll(page: number = 1, limit: number = 50, statuses?: string[], orderType?: string, searchTerm?: string, branchId?: string): Promise<{ data: SalesOrder[], total: number, page: number, limit: number }> {
         try {
             const skip = (page - 1) * limit;
             const qb = this.ordersRepository.createQueryBuilder("order")
@@ -22,6 +22,10 @@ export class OrdersModels {
                 .orderBy("order.create_date", "DESC")
                 .skip(skip)
                 .take(limit);
+
+            if (branchId) {
+                qb.andWhere("order.branch_id = :branchId", { branchId });
+            }
 
             if (statuses && statuses.length > 0) {
                 qb.andWhere("order.status IN (:...statuses)", { statuses });
@@ -57,7 +61,8 @@ export class OrdersModels {
         limit: number = 50,
         statuses?: string[],
         orderType?: string,
-        query?: string
+        query?: string,
+        branchId?: string
     ): Promise<{ data: any[], total: number, page: number, limit: number }> {
         try {
             const whereClauses: string[] = [];
@@ -82,6 +87,11 @@ export class OrdersModels {
                     OR t.table_name ILIKE $${qIndex}
                     OR d.delivery_name ILIKE $${qIndex}
                 )`);
+            }
+
+            if (branchId) {
+                params.push(branchId);
+                whereClauses.push(`o.branch_id = $${params.length}`);
             }
 
             const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
@@ -167,15 +177,19 @@ export class OrdersModels {
         }
     }
 
-    async getStats(statuses: string[]): Promise<{ dineIn: number, takeaway: number, delivery: number, total: number }> {
+    async getStats(statuses: string[], branchId?: string): Promise<{ dineIn: number, takeaway: number, delivery: number, total: number }> {
         try {
             const stats = await this.ordersRepository
                 .createQueryBuilder("order")
                 .select("order.order_type", "type")
                 .addSelect("COUNT(order.id)", "count")
-                .where("order.status IN (:...statuses)", { statuses })
-                .groupBy("order.order_type")
-                .getRawMany();
+                .where("order.status IN (:...statuses)", { statuses });
+
+            if (branchId) {
+                stats.andWhere("order.branch_id = :branchId", { branchId });
+            }
+
+            const resultStats = await stats.groupBy("order.order_type").getRawMany();
 
             const result = {
                 dineIn: 0,
@@ -184,7 +198,7 @@ export class OrdersModels {
                 total: 0
             };
 
-            stats.forEach(stat => {
+            resultStats.forEach(stat => {
                 const count = parseInt(stat.count);
                 if (stat.type === 'DineIn') result.dineIn = count;
                 else if (stat.type === 'TakeAway') result.takeaway = count;
@@ -198,11 +212,12 @@ export class OrdersModels {
         }
     }
 
-    async findAllItems(status?: any, page: number = 1, limit: number = 100): Promise<SalesOrderItem[]> {
+    async findAllItems(status?: any, page: number = 1, limit: number = 100, branchId?: string): Promise<SalesOrderItem[]> {
         try {
             // Need simple find with relations
             const where: any = {};
             if (status) where.status = status;
+            if (branchId) where.order = { branch_id: branchId };
 
             const repo = AppDataSource.getRepository(SalesOrderItem);
             const [items] = await repo.findAndCount({

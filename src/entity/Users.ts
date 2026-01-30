@@ -1,5 +1,6 @@
 import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, JoinColumn, CreateDateColumn, Index } from "typeorm"
 import { Roles } from "./Roles"
+import { Branch } from "./Branch"
 
 @Entity()
 export class Users {
@@ -36,4 +37,12 @@ export class Users {
     @ManyToOne(() => Roles, (roles) => roles.users)
     @JoinColumn({ name: "roles_id" })
     roles!: Roles
+
+    @Index()
+    @Column({ name: "branch_id", type: "uuid", nullable: true })
+    branch_id?: string
+
+    @ManyToOne(() => Branch)
+    @JoinColumn({ name: "branch_id" })
+    branch?: Branch
 }

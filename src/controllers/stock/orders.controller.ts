@@ -11,12 +11,13 @@ export class OrdersController {
     createOrder = async (req: Request, res: Response) => {
         try {
             const { ordered_by_id, items, remark } = req.body;
+            const branch_id = (req as any).user?.branch_id;
             // Validate input
             if (!ordered_by_id || !items || !Array.isArray(items) || items.length === 0) {
                 return res.status(400).json({ message: "ไม่พบข้อมูลการสั่งซื้อ" });
             }
 
-            const order = await this.ordersService.createOrder(ordered_by_id, items, remark);
+            const order = await this.ordersService.createOrder(ordered_by_id, items, remark, branch_id);
             return res.status(201).json(order);
         } catch (error: any) {
             console.error("Error creating order:", error);
@@ -38,7 +39,8 @@ export class OrdersController {
                 statusFilter = statuses.length > 1 ? statuses : statuses[0];
             }
 
-            const orders = await this.ordersService.getAllOrders(statusFilter ? { status: statusFilter } : undefined, page, limit);
+            const branch_id = (req as any).user?.branch_id;
+            const orders = await this.ordersService.getAllOrders(statusFilter ? { status: statusFilter } : undefined, page, limit, branch_id);
             return res.status(200).json(orders);
         } catch (error: any) {
             console.error("Error fetching orders:", error);

@@ -8,7 +8,7 @@ export class StockOrdersModel {
 
     // Creates an order and its items in a transaction
     // Creates an order and its items in a transaction
-    async createOrderWithItems(orderedById: string, items: { ingredient_id: string; quantity_ordered: number }[], remark?: string): Promise<PurchaseOrder> {
+    async createOrderWithItems(orderedById: string, items: { ingredient_id: string; quantity_ordered: number }[], remark?: string, branchId?: string): Promise<PurchaseOrder> {
         const queryRunner = AppDataSource.createQueryRunner();
         await queryRunner.connect();
         await queryRunner.startTransaction();
@@ -17,7 +17,8 @@ export class StockOrdersModel {
             const newOrder = queryRunner.manager.create(PurchaseOrder, {
                 ordered_by_id: orderedById,
                 status: PurchaseOrderStatus.PENDING,
-                remark: remark
+                remark: remark,
+                branch_id: branchId
             });
             const savedOrder = await queryRunner.manager.save(newOrder);
 
@@ -42,7 +43,7 @@ export class StockOrdersModel {
         }
     }
 
-    async findAll(filters?: { status?: PurchaseOrderStatus | PurchaseOrderStatus[] }, page: number = 1, limit: number = 50): Promise<{ data: PurchaseOrder[], total: number, page: number, limit: number }> {
+    async findAll(filters?: { status?: PurchaseOrderStatus | PurchaseOrderStatus[] }, page: number = 1, limit: number = 50, branchId?: string): Promise<{ data: PurchaseOrder[], total: number, page: number, limit: number }> {
         // To support "IN" query with TypeORM find options, we need the "In" operator
         // Importing In from typeorm
         const { In } = require("typeorm");
@@ -72,6 +73,10 @@ export class StockOrdersModel {
             } else {
                 findOptions.where = { status: filters.status };
             }
+        }
+
+        if (branchId) {
+            findOptions.where = { ...findOptions.where, branch_id: branchId };
         }
 
         const [data, total] = await this.ordersRepository.findAndCount(findOptions);

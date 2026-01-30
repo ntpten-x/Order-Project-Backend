@@ -10,6 +10,7 @@ export class ShiftsController {
     openShift = catchAsync(async (req: Request, res: Response) => {
         // Get user_id from authenticated user
         const user_id = (req as any).user?.id;
+        const branch_id = (req as any).user?.branch_id;
         const { start_amount } = req.body;
 
         if (!user_id) {
@@ -20,7 +21,7 @@ export class ShiftsController {
             throw new AppError("กรุณาระบุจำนวนเงินทอนเริ่มต้น", 400);
         }
 
-        const shift = await this.shiftsService.openShift(user_id, Number(start_amount));
+        const shift = await this.shiftsService.openShift(user_id, Number(start_amount), branch_id);
         res.status(201).json(shift);
     });
 

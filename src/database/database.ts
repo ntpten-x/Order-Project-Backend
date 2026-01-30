@@ -3,6 +3,7 @@ import { DataSource } from "typeorm"
 import path from "path"
 import { Users } from "../entity/Users"
 import { Roles } from "../entity/Roles"
+import { Branch } from "../entity/Branch"
 import { IngredientsUnit } from "../entity/stock/IngredientsUnit"
 import { Ingredients } from "../entity/stock/Ingredients"
 // Stock entities (with alias to avoid conflict)
@@ -36,11 +37,11 @@ const synchronize = process.env.TYPEORM_SYNC
     : !isProd
 const useSsl = process.env.DATABASE_SSL === "true" || process.env.DATABASE_SSL === "1"
 const sslOptions = useSsl
-    ? { rejectUnauthorized: process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== "false" }
+    ? { rejectUnauthorized: process.env.DATABASE_SSL_REJECT_UNAUTHORIZED === "true" }
     : false
 
 const poolSize = Number(process.env.DATABASE_POOL_MAX || 10)
-const connectionTimeoutMillis = Number(process.env.DATABASE_CONNECTION_TIMEOUT_MS || 5000)
+const connectionTimeoutMillis = Number(process.env.DATABASE_CONNECTION_TIMEOUT_MS || 30000)
 const statementTimeout = Number(process.env.STATEMENT_TIMEOUT_MS || 30000)
 const migrationsDir = path.join(__dirname, "../migrations/*.{ts,js}")
 export const AppDataSource = new DataSource({
@@ -50,9 +51,9 @@ export const AppDataSource = new DataSource({
     username: process.env.DATABASE_USER,
     password: process.env.DATABASE_PASSWORD,
     database: process.env.DATABASE_NAME,
-    entities: [Users, Roles, IngredientsUnit, Ingredients, PurchaseOrder, StockOrdersItem, StockOrdersDetail, SalesOrder, SalesOrderItem, SalesOrderDetail, Category, Products, ProductsUnit, Tables, Delivery, Discounts, Payments, PaymentMethod, Shifts, ShopProfile, ShopPaymentAccount, SalesSummaryView, TopSellingItemsView],
+    entities: [Users, Roles, Branch, IngredientsUnit, Ingredients, PurchaseOrder, StockOrdersItem, StockOrdersDetail, SalesOrder, SalesOrderItem, SalesOrderDetail, Category, Products, ProductsUnit, Tables, Delivery, Discounts, Payments, PaymentMethod, Shifts, ShopProfile, ShopPaymentAccount, SalesSummaryView, TopSellingItemsView],
     synchronize: synchronize as boolean,
-    logging: true,
+    logging: false,
     ssl: sslOptions,
     migrations: [migrationsDir],
     poolSize,

@@ -120,23 +120,23 @@ export class OrdersService {
         return status as OrderStatus;
     }
 
-    async findAll(page: number, limit: number, statuses?: string[], type?: string, query?: string): Promise<{ data: SalesOrder[], total: number, page: number, limit: number }> {
+    async findAll(page: number, limit: number, statuses?: string[], type?: string, query?: string, branchId?: string): Promise<{ data: SalesOrder[], total: number, page: number, limit: number }> {
         try {
-            return this.ordersModel.findAll(page, limit, statuses, type, query)
+            return this.ordersModel.findAll(page, limit, statuses, type, query, branchId)
         } catch (error) {
             throw error
         }
     }
 
-    async findAllSummary(page: number, limit: number, statuses?: string[], type?: string, query?: string): Promise<{ data: any[], total: number, page: number, limit: number }> {
+    async findAllSummary(page: number, limit: number, statuses?: string[], type?: string, query?: string, branchId?: string): Promise<{ data: any[], total: number, page: number, limit: number }> {
         try {
-            return this.ordersModel.findAllSummary(page, limit, statuses, type, query);
+            return this.ordersModel.findAllSummary(page, limit, statuses, type, query, branchId);
         } catch (error) {
             throw error;
         }
     }
 
-    async getStats(): Promise<{ dineIn: number, takeaway: number, delivery: number, total: number }> {
+    async getStats(branchId?: string): Promise<{ dineIn: number, takeaway: number, delivery: number, total: number }> {
         try {
             const activeStatuses = [
                 OrderStatus.Pending,
@@ -144,15 +144,15 @@ export class OrdersService {
                 OrderStatus.Served,
                 OrderStatus.WaitingForPayment
             ];
-            return await this.ordersModel.getStats(activeStatuses);
+            return await this.ordersModel.getStats(activeStatuses, branchId);
         } catch (error) {
             throw error;
         }
     }
 
-    async findAllItems(status?: string, page: number = 1, limit: number = 100): Promise<any[]> {
+    async findAllItems(status?: string, page: number = 1, limit: number = 100, branchId?: string): Promise<any[]> {
         try {
-            return this.ordersModel.findAllItems(status, page, limit)
+            return this.ordersModel.findAllItems(status, page, limit, branchId)
         } catch (error) {
             throw error
         }

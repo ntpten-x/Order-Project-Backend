@@ -1,6 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn, OneToMany, Index } from "typeorm"
 import { Users } from "../Users"
 import { StockOrdersItem } from "./OrdersItem"
+import { Branch } from "../Branch"
 
 export enum PurchaseOrderStatus {
     PENDING = "pending",
@@ -30,6 +31,14 @@ export class PurchaseOrder {
 
     @Column({ type: "text", nullable: true })
     remark?: string
+
+    @Index()
+    @Column({ name: "branch_id", type: "uuid", nullable: true })
+    branch_id?: string
+
+    @ManyToOne(() => Branch)
+    @JoinColumn({ name: "branch_id" })
+    branch?: Branch
 
     @Index()
     @Column({

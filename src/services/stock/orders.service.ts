@@ -7,9 +7,9 @@ export class OrdersService {
 
     constructor(private ordersModel: StockOrdersModel) { }
 
-    async createOrder(orderedById: string, items: { ingredient_id: string; quantity_ordered: number }[], remark?: string) {
+    async createOrder(orderedById: string, items: { ingredient_id: string; quantity_ordered: number }[], remark?: string, branchId?: string) {
         try {
-            const completeOrder = await this.ordersModel.createOrderWithItems(orderedById, items, remark);
+            const completeOrder = await this.ordersModel.createOrderWithItems(orderedById, items, remark, branchId);
             this.socketService.emit("orders_updated", { action: "create", data: completeOrder });
             return completeOrder;
         } catch (error) {
@@ -17,9 +17,9 @@ export class OrdersService {
         }
     }
 
-    async getAllOrders(filters?: { status?: PurchaseOrderStatus | PurchaseOrderStatus[] }, page: number = 1, limit: number = 50) {
+    async getAllOrders(filters?: { status?: PurchaseOrderStatus | PurchaseOrderStatus[] }, page: number = 1, limit: number = 50, branchId?: string) {
         try {
-            return await this.ordersModel.findAll(filters, page, limit);
+            return await this.ordersModel.findAll(filters, page, limit, branchId);
         } catch (error) {
             throw error;
         }

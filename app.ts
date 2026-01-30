@@ -34,6 +34,7 @@ import shiftsPosRouter from "./src/routes/pos/shifts.route";
 import shopProfilePosRouter from "./src/routes/pos/shopProfile.route";
 import paymentAccountPosRouter from "./src/routes/pos/paymentAccount.routes";
 import dashboardRouter from "./src/routes/pos/dashboard.route";
+import branchRouter from "./src/routes/branch.route";
 import { globalErrorHandler } from "./src/middleware/error.middleware";
 import { AppError } from "./src/utils/AppError";
 
@@ -204,6 +205,7 @@ app.use("/pos/shifts", shiftsPosRouter);
 app.use("/pos/shopProfile", shopProfilePosRouter);
 app.use("/pos/payment-accounts", paymentAccountPosRouter);
 app.use("/pos/dashboard", dashboardRouter);
+app.use("/branches", branchRouter);
 
 // Handle Unhandled Routes
 app.use((req, res, next) => {

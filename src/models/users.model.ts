@@ -8,6 +8,7 @@ export class UsersModels {
         try {
             const query = this.usersRepository.createQueryBuilder("users")
                 .leftJoinAndSelect("users.roles", "roles")
+                .leftJoinAndSelect("users.branch", "branch")
                 .orderBy("users.is_active", "DESC")
                 .addOrderBy("users.create_date", "ASC");
 
@@ -25,6 +26,7 @@ export class UsersModels {
         try {
             return this.usersRepository.createQueryBuilder("users")
                 .leftJoinAndSelect("users.roles", "roles")
+                .leftJoinAndSelect("users.branch", "branch")
                 .where("users.id = :id", { id })
                 .getOne()
         } catch (error) {
@@ -36,6 +38,7 @@ export class UsersModels {
         try {
             return this.usersRepository.createQueryBuilder("users")
                 .leftJoinAndSelect("users.roles", "roles")
+                .leftJoinAndSelect("users.branch", "branch")
                 .where("users.username = :username", { username })
                 .getOne()
         } catch (error) {

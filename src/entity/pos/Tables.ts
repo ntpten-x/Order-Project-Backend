@@ -1,4 +1,5 @@
-import { Column, Entity, PrimaryGeneratedColumn, Index } from "typeorm";
+import { Column, Entity, PrimaryGeneratedColumn, Index, ManyToOne, JoinColumn } from "typeorm";
+import { Branch } from "../Branch";
 
 export enum TableStatus {
     Available = "Available",    // ว่าง
@@ -6,12 +7,21 @@ export enum TableStatus {
 }
 
 @Entity()
+@Index(["table_name", "branch_id"], { unique: true })
 export class Tables {
     @PrimaryGeneratedColumn("uuid")
     id!: string; // รหัสโต๊ะ
 
-    @Column({ type: 'varchar', length: 255, unique: true })
+    @Column({ type: 'varchar', length: 255 })
     table_name!: string; // ชื่อโต๊ะ (เช่น T1, A10)
+
+    @Index()
+    @Column({ name: "branch_id", type: "uuid", nullable: true })
+    branch_id?: string;
+
+    @ManyToOne(() => Branch)
+    @JoinColumn({ name: "branch_id" })
+    branch?: Branch;
 
     @Index()
     @Column({ type: "enum", enum: TableStatus, default: TableStatus.Available })

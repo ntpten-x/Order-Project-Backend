@@ -11,7 +11,9 @@ export class TablesController {
             const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
             const q = (req.query.q as string | undefined) || undefined;
 
-            const tables = await this.tablesService.findAll(page, limit, q)
+            const branchId = (req as any).user?.branch_id;
+
+            const tables = await this.tablesService.findAll(page, limit, q, branchId)
             res.status(200).json(tables)
         } catch (error: any) {
             res.status(500).json({ error: error.message })
@@ -38,6 +40,10 @@ export class TablesController {
 
     create = async (req: Request, res: Response) => {
         try {
+            const branchId = (req as any).user?.branch_id;
+            if (branchId && !req.body.branch_id) {
+                req.body.branch_id = branchId;
+            }
             const table = await this.tablesService.create(req.body)
             res.status(201).json(table)
         } catch (error: any) {

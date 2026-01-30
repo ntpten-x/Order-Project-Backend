@@ -21,7 +21,7 @@ import { Products } from "../Products";
             .addGroupBy("p.display_name")
             .addGroupBy("p.img_url")
             .addGroupBy("p.category_id"),
-    synchronize: false
+    synchronize: true
 })
 export class TopSellingItemsView {
     @ViewColumn()

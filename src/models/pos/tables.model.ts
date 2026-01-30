@@ -4,7 +4,7 @@ import { Tables } from "../../entity/pos/Tables";
 export class TablesModels {
     private tablesRepository = AppDataSource.getRepository(Tables)
 
-    async findAll(page: number = 1, limit: number = 50, q?: string): Promise<{ data: any[], total: number, page: number, last_page: number }> {
+    async findAll(page: number = 1, limit: number = 50, q?: string, branchId?: string): Promise<{ data: any[], total: number, page: number, last_page: number }> {
         try {
             const skip = (page - 1) * limit;
             const query = this.tablesRepository.createQueryBuilder("tables")
@@ -13,6 +13,10 @@ export class TablesModels {
 
             if (q && q.trim()) {
                 query.andWhere("tables.table_name ILIKE :q", { q: `%${q.trim()}%` });
+            }
+
+            if (branchId) {
+                query.andWhere("tables.branch_id = :branchId", { branchId });
             }
 
             const [rows, total] = await query.skip(skip).take(limit).getManyAndCount();
@@ -46,9 +50,11 @@ export class TablesModels {
         }
     }
 
-    async findOneByName(table_name: string): Promise<Tables | null> {
+    async findOneByName(table_name: string, branchId?: string): Promise<Tables | null> {
         try {
-            return this.tablesRepository.findOneBy({ table_name })
+            const where: any = { table_name };
+            if (branchId) where.branch_id = branchId;
+            return this.tablesRepository.findOneBy(where)
         } catch (error) {
             throw error
         }

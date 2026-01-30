@@ -2,6 +2,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToMany, JoinColumn, ManyToOne, Index } from "typeorm";
 import { Users } from "../Users"; // Assuming Users entity is in src/entity/Users.ts or similar. I'll check Users location first actually.
 import { Payments } from "./Payments";
+import { Branch } from "../Branch";
 
 export enum ShiftStatus {
     OPEN = "OPEN",
@@ -9,13 +10,21 @@ export enum ShiftStatus {
 }
 
 @Entity()
+@Index(["user_id"])
+@Index(["branch_id"])
 export class Shifts {
     @PrimaryGeneratedColumn("uuid")
     id!: string;
 
-    @Index()
     @Column({ name: "user_id", type: "uuid" })
     user_id!: string;
+
+    @Column({ name: "branch_id", type: "uuid", nullable: true })
+    branch_id?: string;
+
+    @ManyToOne(() => Branch)
+    @JoinColumn({ name: "branch_id" })
+    branch?: Branch;
 
     // Use string relations for now to avoid circular deps ambiguity mostly
     @ManyToOne("Users")
