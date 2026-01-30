@@ -130,27 +130,27 @@ class OrdersService {
         }
         return status;
     }
-    findAll(page, limit, statuses, type, query) {
+    findAll(page, limit, statuses, type, query, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.ordersModel.findAll(page, limit, statuses, type, query);
+                return this.ordersModel.findAll(page, limit, statuses, type, query, branchId);
             }
             catch (error) {
                 throw error;
             }
         });
     }
-    findAllSummary(page, limit, statuses, type, query) {
+    findAllSummary(page, limit, statuses, type, query, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.ordersModel.findAllSummary(page, limit, statuses, type, query);
+                return this.ordersModel.findAllSummary(page, limit, statuses, type, query, branchId);
             }
             catch (error) {
                 throw error;
             }
         });
     }
-    getStats() {
+    getStats(branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 const activeStatuses = [
@@ -159,7 +159,7 @@ class OrdersService {
                     OrderEnums_1.OrderStatus.Served,
                     OrderEnums_1.OrderStatus.WaitingForPayment
                 ];
-                return yield this.ordersModel.getStats(activeStatuses);
+                return yield this.ordersModel.getStats(activeStatuses, branchId);
             }
             catch (error) {
                 throw error;
@@ -167,9 +167,9 @@ class OrdersService {
         });
     }
     findAllItems(status_1) {
-        return __awaiter(this, arguments, void 0, function* (status, page = 1, limit = 100) {
+        return __awaiter(this, arguments, void 0, function* (status, page = 1, limit = 100, branchId) {
             try {
-                return this.ordersModel.findAllItems(status, page, limit);
+                return this.ordersModel.findAllItems(status, page, limit, branchId);
             }
             catch (error) {
                 throw error;

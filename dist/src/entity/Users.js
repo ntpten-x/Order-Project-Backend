@@ -12,6 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.Users = void 0;
 const typeorm_1 = require("typeorm");
 const Roles_1 = require("./Roles");
+const Branch_1 = require("./Branch");
 let Users = class Users {
 };
 exports.Users = Users;
@@ -59,6 +60,16 @@ __decorate([
     (0, typeorm_1.JoinColumn)({ name: "roles_id" }),
     __metadata("design:type", Roles_1.Roles)
 ], Users.prototype, "roles", void 0);
+__decorate([
+    (0, typeorm_1.Index)(),
+    (0, typeorm_1.Column)({ name: "branch_id", type: "uuid", nullable: true }),
+    __metadata("design:type", String)
+], Users.prototype, "branch_id", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)(() => Branch_1.Branch),
+    (0, typeorm_1.JoinColumn)({ name: "branch_id" }),
+    __metadata("design:type", Branch_1.Branch)
+], Users.prototype, "branch", void 0);
 exports.Users = Users = __decorate([
     (0, typeorm_1.Entity)()
 ], Users);

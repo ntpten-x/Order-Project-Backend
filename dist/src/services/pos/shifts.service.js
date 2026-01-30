@@ -27,7 +27,7 @@ class ShiftsService {
         this.salesOrderRepo = database_1.AppDataSource.getRepository(SalesOrder_1.SalesOrder);
         this.socketService = socket_service_1.SocketService.getInstance();
     }
-    openShift(userId, startAmount) {
+    openShift(userId, startAmount, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             // Check if user already has an OPEN shift
             const activeShift = yield this.shiftsRepo.findOne({
@@ -41,6 +41,8 @@ class ShiftsService {
             }
             const newShift = new Shifts_1.Shifts();
             newShift.user_id = userId;
+            if (branchId)
+                newShift.branch_id = branchId;
             newShift.start_amount = isNaN(startAmount) ? 0 : startAmount;
             newShift.status = Shifts_1.ShiftStatus.OPEN;
             newShift.open_time = new Date();

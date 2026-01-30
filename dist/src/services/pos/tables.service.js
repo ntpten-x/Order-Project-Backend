@@ -16,10 +16,10 @@ class TablesService {
         this.tablesModel = tablesModel;
         this.socketService = socket_service_1.SocketService.getInstance();
     }
-    findAll(page, limit, q) {
+    findAll(page, limit, q, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.tablesModel.findAll(page, limit, q);
+                return this.tablesModel.findAll(page, limit, q, branchId);
             }
             catch (error) {
                 throw error;
@@ -36,10 +36,10 @@ class TablesService {
             }
         });
     }
-    findOneByName(table_name) {
+    findOneByName(table_name, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.tablesModel.findOneByName(table_name);
+                return this.tablesModel.findOneByName(table_name, branchId);
             }
             catch (error) {
                 throw error;
@@ -52,7 +52,7 @@ class TablesService {
                 if (!tables.table_name) {
                     throw new Error("กรุณาระบุชื่อโต๊ะ");
                 }
-                const existingTable = yield this.tablesModel.findOneByName(tables.table_name);
+                const existingTable = yield this.tablesModel.findOneByName(tables.table_name, tables.branch_id);
                 if (existingTable) {
                     throw new Error("ชื่อโต๊ะนี้มีอยู่ในระบบแล้ว");
                 }
@@ -73,7 +73,7 @@ class TablesService {
                     throw new Error("ไม่พบข้อมูลโต๊ะที่ต้องการแก้ไข");
                 }
                 if (tables.table_name && tables.table_name !== tableToUpdate.table_name) {
-                    const existingTable = yield this.tablesModel.findOneByName(tables.table_name);
+                    const existingTable = yield this.tablesModel.findOneByName(tables.table_name, tableToUpdate.branch_id);
                     if (existingTable) {
                         throw new Error("ชื่อโต๊ะนี้มีอยู่ในระบบแล้ว");
                     }

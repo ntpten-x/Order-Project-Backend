@@ -18,6 +18,7 @@ const Payments_1 = require("./Payments");
 const Discounts_1 = require("./Discounts");
 const Users_1 = require("../Users");
 const OrderEnums_1 = require("./OrderEnums");
+const Branch_1 = require("../Branch");
 let SalesOrder = class SalesOrder {
 };
 exports.SalesOrder = SalesOrder;
@@ -29,6 +30,15 @@ __decorate([
     (0, typeorm_1.Column)({ type: "varchar", unique: true, nullable: true }),
     __metadata("design:type", String)
 ], SalesOrder.prototype, "order_no", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: "branch_id", type: "uuid", nullable: true }),
+    __metadata("design:type", String)
+], SalesOrder.prototype, "branch_id", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)(() => Branch_1.Branch),
+    (0, typeorm_1.JoinColumn)({ name: "branch_id" }),
+    __metadata("design:type", Branch_1.Branch)
+], SalesOrder.prototype, "branch", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: "enum", enum: OrderEnums_1.OrderType, nullable: true }),
     __metadata("design:type", String)
@@ -123,5 +133,6 @@ exports.SalesOrder = SalesOrder = __decorate([
     (0, typeorm_1.Index)(["create_date"]),
     (0, typeorm_1.Index)(["status"]),
     (0, typeorm_1.Index)(["order_type"]),
-    (0, typeorm_1.Index)(["delivery_id"])
+    (0, typeorm_1.Index)(["delivery_id"]),
+    (0, typeorm_1.Index)(["branch_id"])
 ], SalesOrder);

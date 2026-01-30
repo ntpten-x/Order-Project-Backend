@@ -18,13 +18,15 @@ class OrdersController {
         this.ordersModel = new orders_model_1.StockOrdersModel();
         this.ordersService = new orders_service_1.OrdersService(this.ordersModel);
         this.createOrder = (req, res) => __awaiter(this, void 0, void 0, function* () {
+            var _a;
             try {
                 const { ordered_by_id, items, remark } = req.body;
+                const branch_id = (_a = req.user) === null || _a === void 0 ? void 0 : _a.branch_id;
                 // Validate input
                 if (!ordered_by_id || !items || !Array.isArray(items) || items.length === 0) {
                     return res.status(400).json({ message: "ไม่พบข้อมูลการสั่งซื้อ" });
                 }
-                const order = yield this.ordersService.createOrder(ordered_by_id, items, remark);
+                const order = yield this.ordersService.createOrder(ordered_by_id, items, remark, branch_id);
                 return res.status(201).json(order);
             }
             catch (error) {
@@ -33,6 +35,7 @@ class OrdersController {
             }
         });
         this.getAllOrders = (req, res) => __awaiter(this, void 0, void 0, function* () {
+            var _a;
             try {
                 const statusParam = req.query.status;
                 const page = parseInt(req.query.page) || 1;
@@ -43,7 +46,8 @@ class OrdersController {
                     // Optional: Validate statuses against PurchaseOrderStatus enum
                     statusFilter = statuses.length > 1 ? statuses : statuses[0];
                 }
-                const orders = yield this.ordersService.getAllOrders(statusFilter ? { status: statusFilter } : undefined, page, limit);
+                const branch_id = (_a = req.user) === null || _a === void 0 ? void 0 : _a.branch_id;
+                const orders = yield this.ordersService.getAllOrders(statusFilter ? { status: statusFilter } : undefined, page, limit, branch_id);
                 return res.status(200).json(orders);
             }
             catch (error) {

@@ -17,7 +17,7 @@ class TablesModels {
         this.tablesRepository = database_1.AppDataSource.getRepository(Tables_1.Tables);
     }
     findAll() {
-        return __awaiter(this, arguments, void 0, function* (page = 1, limit = 50, q) {
+        return __awaiter(this, arguments, void 0, function* (page = 1, limit = 50, q, branchId) {
             try {
                 const skip = (page - 1) * limit;
                 const query = this.tablesRepository.createQueryBuilder("tables")
@@ -25,6 +25,9 @@ class TablesModels {
                     .orderBy("tables.create_date", "ASC");
                 if (q && q.trim()) {
                     query.andWhere("tables.table_name ILIKE :q", { q: `%${q.trim()}%` });
+                }
+                if (branchId) {
+                    query.andWhere("tables.branch_id = :branchId", { branchId });
                 }
                 const [rows, total] = yield query.skip(skip).take(limit).getManyAndCount();
                 const data = rows.map((t) => {
@@ -53,10 +56,13 @@ class TablesModels {
             }
         });
     }
-    findOneByName(table_name) {
+    findOneByName(table_name, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.tablesRepository.findOneBy({ table_name });
+                const where = { table_name };
+                if (branchId)
+                    where.branch_id = branchId;
+                return this.tablesRepository.findOneBy(where);
             }
             catch (error) {
                 throw error;

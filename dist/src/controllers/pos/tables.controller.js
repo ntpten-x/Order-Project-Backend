@@ -14,12 +14,14 @@ class TablesController {
     constructor(tablesService) {
         this.tablesService = tablesService;
         this.findAll = (req, res) => __awaiter(this, void 0, void 0, function* () {
+            var _a;
             try {
                 const page = parseInt(req.query.page) || 1;
                 const rawLimit = parseInt(req.query.limit);
                 const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
                 const q = req.query.q || undefined;
-                const tables = yield this.tablesService.findAll(page, limit, q);
+                const branchId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.branch_id;
+                const tables = yield this.tablesService.findAll(page, limit, q, branchId);
                 res.status(200).json(tables);
             }
             catch (error) {
@@ -45,7 +47,12 @@ class TablesController {
             }
         });
         this.create = (req, res) => __awaiter(this, void 0, void 0, function* () {
+            var _a;
             try {
+                const branchId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.branch_id;
+                if (branchId && !req.body.branch_id) {
+                    req.body.branch_id = branchId;
+                }
                 const table = yield this.tablesService.create(req.body);
                 res.status(201).json(table);
             }

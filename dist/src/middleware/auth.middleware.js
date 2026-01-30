@@ -53,7 +53,11 @@ const authenticateToken = (req, res, next) => __awaiter(void 0, void 0, void 0, 
         next();
     }
     catch (err) {
-        return res.status(403).json({ message: "Invalid or expired token" });
+        if (err instanceof jsonwebtoken_1.default.JsonWebTokenError || err instanceof jsonwebtoken_1.default.TokenExpiredError) {
+            return res.status(403).json({ message: "Invalid or expired token" });
+        }
+        console.error("Authentication Error (System):", err);
+        return res.status(500).json({ message: "Authentication system error", error: err.message });
     }
 });
 exports.authenticateToken = authenticateToken;

@@ -12,6 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.Shifts = exports.ShiftStatus = void 0;
 const typeorm_1 = require("typeorm");
 const Payments_1 = require("./Payments");
+const Branch_1 = require("../Branch");
 var ShiftStatus;
 (function (ShiftStatus) {
     ShiftStatus["OPEN"] = "OPEN";
@@ -25,10 +26,18 @@ __decorate([
     __metadata("design:type", String)
 ], Shifts.prototype, "id", void 0);
 __decorate([
-    (0, typeorm_1.Index)(),
     (0, typeorm_1.Column)({ name: "user_id", type: "uuid" }),
     __metadata("design:type", String)
 ], Shifts.prototype, "user_id", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: "branch_id", type: "uuid", nullable: true }),
+    __metadata("design:type", String)
+], Shifts.prototype, "branch_id", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)(() => Branch_1.Branch),
+    (0, typeorm_1.JoinColumn)({ name: "branch_id" }),
+    __metadata("design:type", Branch_1.Branch)
+], Shifts.prototype, "branch", void 0);
 __decorate([
     (0, typeorm_1.ManyToOne)("Users"),
     (0, typeorm_1.JoinColumn)({ name: "user_id" }),
@@ -76,5 +85,7 @@ __decorate([
     __metadata("design:type", Date)
 ], Shifts.prototype, "update_date", void 0);
 exports.Shifts = Shifts = __decorate([
-    (0, typeorm_1.Entity)()
+    (0, typeorm_1.Entity)(),
+    (0, typeorm_1.Index)(["user_id"]),
+    (0, typeorm_1.Index)(["branch_id"])
 ], Shifts);

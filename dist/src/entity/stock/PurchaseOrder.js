@@ -13,6 +13,7 @@ exports.PurchaseOrder = exports.PurchaseOrderStatus = void 0;
 const typeorm_1 = require("typeorm");
 const Users_1 = require("../Users");
 const OrdersItem_1 = require("./OrdersItem");
+const Branch_1 = require("../Branch");
 var PurchaseOrderStatus;
 (function (PurchaseOrderStatus) {
     PurchaseOrderStatus["PENDING"] = "pending";
@@ -39,6 +40,16 @@ __decorate([
     (0, typeorm_1.Column)({ type: "text", nullable: true }),
     __metadata("design:type", String)
 ], PurchaseOrder.prototype, "remark", void 0);
+__decorate([
+    (0, typeorm_1.Index)(),
+    (0, typeorm_1.Column)({ name: "branch_id", type: "uuid", nullable: true }),
+    __metadata("design:type", String)
+], PurchaseOrder.prototype, "branch_id", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)(() => Branch_1.Branch),
+    (0, typeorm_1.JoinColumn)({ name: "branch_id" }),
+    __metadata("design:type", Branch_1.Branch)
+], PurchaseOrder.prototype, "branch", void 0);
 __decorate([
     (0, typeorm_1.Index)(),
     (0, typeorm_1.Column)({

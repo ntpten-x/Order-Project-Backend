@@ -20,7 +20,7 @@ class StockOrdersModel {
     }
     // Creates an order and its items in a transaction
     // Creates an order and its items in a transaction
-    createOrderWithItems(orderedById, items, remark) {
+    createOrderWithItems(orderedById, items, remark, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             const queryRunner = database_1.AppDataSource.createQueryRunner();
             yield queryRunner.connect();
@@ -29,7 +29,8 @@ class StockOrdersModel {
                 const newOrder = queryRunner.manager.create(PurchaseOrder_1.PurchaseOrder, {
                     ordered_by_id: orderedById,
                     status: PurchaseOrder_1.PurchaseOrderStatus.PENDING,
-                    remark: remark
+                    remark: remark,
+                    branch_id: branchId
                 });
                 const savedOrder = yield queryRunner.manager.save(newOrder);
                 const orderItems = items.map(item => queryRunner.manager.create(OrdersItem_1.StockOrdersItem, {
@@ -53,7 +54,7 @@ class StockOrdersModel {
         });
     }
     findAll(filters_1) {
-        return __awaiter(this, arguments, void 0, function* (filters, page = 1, limit = 50) {
+        return __awaiter(this, arguments, void 0, function* (filters, page = 1, limit = 50, branchId) {
             // To support "IN" query with TypeORM find options, we need the "In" operator
             // Importing In from typeorm
             const { In } = require("typeorm");
@@ -81,6 +82,9 @@ class StockOrdersModel {
                 else {
                     findOptions.where = { status: filters.status };
                 }
+            }
+            if (branchId) {
+                findOptions.where = Object.assign(Object.assign({}, findOptions.where), { branch_id: branchId });
             }
             const [data, total] = yield this.ordersRepository.findAndCount(findOptions);
             return {

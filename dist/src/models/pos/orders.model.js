@@ -20,7 +20,7 @@ class OrdersModels {
         this.ordersRepository = database_1.AppDataSource.getRepository(SalesOrder_1.SalesOrder);
     }
     findAll() {
-        return __awaiter(this, arguments, void 0, function* (page = 1, limit = 50, statuses, orderType, searchTerm) {
+        return __awaiter(this, arguments, void 0, function* (page = 1, limit = 50, statuses, orderType, searchTerm, branchId) {
             try {
                 const skip = (page - 1) * limit;
                 const qb = this.ordersRepository.createQueryBuilder("order")
@@ -34,6 +34,9 @@ class OrdersModels {
                     .orderBy("order.create_date", "DESC")
                     .skip(skip)
                     .take(limit);
+                if (branchId) {
+                    qb.andWhere("order.branch_id = :branchId", { branchId });
+                }
                 if (statuses && statuses.length > 0) {
                     qb.andWhere("order.status IN (:...statuses)", { statuses });
                 }
@@ -58,7 +61,7 @@ class OrdersModels {
         });
     }
     findAllSummary() {
-        return __awaiter(this, arguments, void 0, function* (page = 1, limit = 50, statuses, orderType, query) {
+        return __awaiter(this, arguments, void 0, function* (page = 1, limit = 50, statuses, orderType, query, branchId) {
             var _a, _b;
             try {
                 const whereClauses = [];
@@ -80,6 +83,10 @@ class OrdersModels {
                     OR t.table_name ILIKE $${qIndex}
                     OR d.delivery_name ILIKE $${qIndex}
                 )`);
+                }
+                if (branchId) {
+                    params.push(branchId);
+                    whereClauses.push(`o.branch_id = $${params.length}`);
                 }
                 const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
                 const countQuery = `
@@ -110,24 +117,21 @@ class OrdersModels {
                 FROM sales_orders o
                 LEFT JOIN tables t ON t.id = o.table_id
                 LEFT JOIN delivery d ON d.id = o.delivery_id
-                LEFT JOIN (
+                LEFT JOIN LATERAL (
                     SELECT
-                        s.order_id,
                         jsonb_object_agg(s.category_name, s.qty) FILTER (WHERE s.category_name IS NOT NULL) AS items_summary,
                         SUM(s.qty) AS items_count
                     FROM (
                         SELECT
-                            i.order_id,
                             c.display_name AS category_name,
                             SUM(i.quantity)::int AS qty
                         FROM sales_order_item i
                         LEFT JOIN products p ON p.id = i.product_id
                         LEFT JOIN category c ON c.id = p.category_id
-                        WHERE i.status <> 'Cancelled'
-                        GROUP BY i.order_id, c.display_name
+                        WHERE i.order_id = o.id AND i.status <> 'Cancelled'
+                        GROUP BY c.display_name
                     ) s
-                    GROUP BY s.order_id
-                ) item_summary ON item_summary.order_id = o.id
+                ) item_summary ON true
                 ${whereSql}
                 ORDER BY o.create_date DESC
                 LIMIT $${limitIndex} OFFSET $${offsetIndex}
@@ -163,23 +167,25 @@ class OrdersModels {
             }
         });
     }
-    getStats(statuses) {
+    getStats(statuses, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 const stats = yield this.ordersRepository
                     .createQueryBuilder("order")
                     .select("order.order_type", "type")
                     .addSelect("COUNT(order.id)", "count")
-                    .where("order.status IN (:...statuses)", { statuses })
-                    .groupBy("order.order_type")
-                    .getRawMany();
+                    .where("order.status IN (:...statuses)", { statuses });
+                if (branchId) {
+                    stats.andWhere("order.branch_id = :branchId", { branchId });
+                }
+                const resultStats = yield stats.groupBy("order.order_type").getRawMany();
                 const result = {
                     dineIn: 0,
                     takeaway: 0,
                     delivery: 0,
                     total: 0
                 };
-                stats.forEach(stat => {
+                resultStats.forEach(stat => {
                     const count = parseInt(stat.count);
                     if (stat.type === 'DineIn')
                         result.dineIn = count;
@@ -197,12 +203,14 @@ class OrdersModels {
         });
     }
     findAllItems(status_1) {
-        return __awaiter(this, arguments, void 0, function* (status, page = 1, limit = 100) {
+        return __awaiter(this, arguments, void 0, function* (status, page = 1, limit = 100, branchId) {
             try {
                 // Need simple find with relations
                 const where = {};
                 if (status)
                     where.status = status;
+                if (branchId)
+                    where.order = { branch_id: branchId };
                 const repo = database_1.AppDataSource.getRepository(SalesOrderItem_1.SalesOrderItem);
                 const [items] = yield repo.findAndCount({
                     where,

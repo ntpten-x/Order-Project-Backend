@@ -11,6 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Tables = exports.TableStatus = void 0;
 const typeorm_1 = require("typeorm");
+const Branch_1 = require("../Branch");
 var TableStatus;
 (function (TableStatus) {
     TableStatus["Available"] = "Available";
@@ -24,9 +25,19 @@ __decorate([
     __metadata("design:type", String)
 ], Tables.prototype, "id", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: 'varchar', length: 255, unique: true }),
+    (0, typeorm_1.Column)({ type: 'varchar', length: 255 }),
     __metadata("design:type", String)
 ], Tables.prototype, "table_name", void 0);
+__decorate([
+    (0, typeorm_1.Index)(),
+    (0, typeorm_1.Column)({ name: "branch_id", type: "uuid", nullable: true }),
+    __metadata("design:type", String)
+], Tables.prototype, "branch_id", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)(() => Branch_1.Branch),
+    (0, typeorm_1.JoinColumn)({ name: "branch_id" }),
+    __metadata("design:type", Branch_1.Branch)
+], Tables.prototype, "branch", void 0);
 __decorate([
     (0, typeorm_1.Index)(),
     (0, typeorm_1.Column)({ type: "enum", enum: TableStatus, default: TableStatus.Available }),
@@ -45,5 +56,6 @@ __decorate([
     __metadata("design:type", Boolean)
 ], Tables.prototype, "is_active", void 0);
 exports.Tables = Tables = __decorate([
-    (0, typeorm_1.Entity)()
+    (0, typeorm_1.Entity)(),
+    (0, typeorm_1.Index)(["table_name", "branch_id"], { unique: true })
 ], Tables);

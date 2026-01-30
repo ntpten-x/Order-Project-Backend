@@ -75,6 +75,6 @@ exports.SalesSummaryView = SalesSummaryView = __decorate([
             .leftJoin(PaymentMethod_1.PaymentMethod, "pm", "p.payment_method_id = pm.id")
             .where("o.status IN ('Paid', 'Completed')")
             .groupBy("DATE(o.create_date)"),
-        synchronize: false
+        synchronize: true
     })
 ], SalesSummaryView);

@@ -16,9 +16,10 @@ class ShiftsController {
     constructor(shiftsService) {
         this.shiftsService = shiftsService;
         this.openShift = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
-            var _a;
+            var _a, _b;
             // Get user_id from authenticated user
             const user_id = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
+            const branch_id = (_b = req.user) === null || _b === void 0 ? void 0 : _b.branch_id;
             const { start_amount } = req.body;
             if (!user_id) {
                 throw new AppError_1.AppError("Unauthorized - User not authenticated", 401);
@@ -26,7 +27,7 @@ class ShiftsController {
             if (start_amount === undefined || start_amount === null) {
                 throw new AppError_1.AppError("กรุณาระบุจำนวนเงินทอนเริ่มต้น", 400);
             }
-            const shift = yield this.shiftsService.openShift(user_id, Number(start_amount));
+            const shift = yield this.shiftsService.openShift(user_id, Number(start_amount), branch_id);
             res.status(201).json(shift);
         }));
         this.closeShift = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {

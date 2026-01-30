@@ -51,6 +51,7 @@ const typeorm_1 = require("typeorm");
 const path_1 = __importDefault(require("path"));
 const Users_1 = require("../entity/Users");
 const Roles_1 = require("../entity/Roles");
+const Branch_1 = require("../entity/Branch");
 const IngredientsUnit_1 = require("../entity/stock/IngredientsUnit");
 const Ingredients_1 = require("../entity/stock/Ingredients");
 // Stock entities (with alias to avoid conflict)
@@ -83,10 +84,10 @@ const synchronize = process.env.TYPEORM_SYNC
     : !isProd;
 const useSsl = process.env.DATABASE_SSL === "true" || process.env.DATABASE_SSL === "1";
 const sslOptions = useSsl
-    ? { rejectUnauthorized: process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== "false" }
+    ? { rejectUnauthorized: process.env.DATABASE_SSL_REJECT_UNAUTHORIZED === "true" }
     : false;
 const poolSize = Number(process.env.DATABASE_POOL_MAX || 10);
-const connectionTimeoutMillis = Number(process.env.DATABASE_CONNECTION_TIMEOUT_MS || 5000);
+const connectionTimeoutMillis = Number(process.env.DATABASE_CONNECTION_TIMEOUT_MS || 30000);
 const statementTimeout = Number(process.env.STATEMENT_TIMEOUT_MS || 30000);
 const migrationsDir = path_1.default.join(__dirname, "../migrations/*.{ts,js}");
 exports.AppDataSource = new typeorm_1.DataSource({
@@ -96,9 +97,9 @@ exports.AppDataSource = new typeorm_1.DataSource({
     username: process.env.DATABASE_USER,
     password: process.env.DATABASE_PASSWORD,
     database: process.env.DATABASE_NAME,
-    entities: [Users_1.Users, Roles_1.Roles, IngredientsUnit_1.IngredientsUnit, Ingredients_1.Ingredients, PurchaseOrder_1.PurchaseOrder, OrdersItem_1.StockOrdersItem, OrdersDetail_1.StockOrdersDetail, SalesOrder_1.SalesOrder, SalesOrderItem_1.SalesOrderItem, SalesOrderDetail_1.SalesOrderDetail, Category_1.Category, Products_1.Products, ProductsUnit_1.ProductsUnit, Tables_1.Tables, Delivery_1.Delivery, Discounts_1.Discounts, Payments_1.Payments, PaymentMethod_1.PaymentMethod, Shifts_1.Shifts, ShopProfile_1.ShopProfile, ShopPaymentAccount_1.ShopPaymentAccount, SalesSummaryView_1.SalesSummaryView, TopSellingItemsView_1.TopSellingItemsView],
+    entities: [Users_1.Users, Roles_1.Roles, Branch_1.Branch, IngredientsUnit_1.IngredientsUnit, Ingredients_1.Ingredients, PurchaseOrder_1.PurchaseOrder, OrdersItem_1.StockOrdersItem, OrdersDetail_1.StockOrdersDetail, SalesOrder_1.SalesOrder, SalesOrderItem_1.SalesOrderItem, SalesOrderDetail_1.SalesOrderDetail, Category_1.Category, Products_1.Products, ProductsUnit_1.ProductsUnit, Tables_1.Tables, Delivery_1.Delivery, Discounts_1.Discounts, Payments_1.Payments, PaymentMethod_1.PaymentMethod, Shifts_1.Shifts, ShopProfile_1.ShopProfile, ShopPaymentAccount_1.ShopPaymentAccount, SalesSummaryView_1.SalesSummaryView, TopSellingItemsView_1.TopSellingItemsView],
     synchronize: synchronize,
-    logging: true,
+    logging: false,
     ssl: sslOptions,
     migrations: [migrationsDir],
     poolSize,

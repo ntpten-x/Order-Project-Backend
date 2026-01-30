@@ -16,10 +16,10 @@ class OrdersService {
         this.ordersModel = ordersModel;
         this.socketService = socket_service_1.SocketService.getInstance();
     }
-    createOrder(orderedById, items, remark) {
+    createOrder(orderedById, items, remark, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const completeOrder = yield this.ordersModel.createOrderWithItems(orderedById, items, remark);
+                const completeOrder = yield this.ordersModel.createOrderWithItems(orderedById, items, remark, branchId);
                 this.socketService.emit("orders_updated", { action: "create", data: completeOrder });
                 return completeOrder;
             }
@@ -29,9 +29,9 @@ class OrdersService {
         });
     }
     getAllOrders(filters_1) {
-        return __awaiter(this, arguments, void 0, function* (filters, page = 1, limit = 50) {
+        return __awaiter(this, arguments, void 0, function* (filters, page = 1, limit = 50, branchId) {
             try {
-                return yield this.ordersModel.findAll(filters, page, limit);
+                return yield this.ordersModel.findAll(filters, page, limit, branchId);
             }
             catch (error) {
                 throw error;
