@@ -3,6 +3,13 @@ import { IngredientsModel } from "../../models/stock/ingredients.model";
 import { IngredientsService } from "../../services/stock/ingredients.service";
 import { IngredientsController } from "../../controllers/stock/ingredients.controller";
 import { authenticateToken, authorizeRole } from "../../middleware/auth.middleware";
+import { validate } from "../../middleware/validate.middleware";
+import {
+    createIngredientSchema,
+    ingredientIdParamSchema,
+    ingredientNameParamSchema,
+    updateIngredientSchema
+} from "../../utils/schemas/stock.schema";
 
 const router = Router()
 
@@ -16,12 +23,12 @@ router.use(authorizeRole(["Admin", "Manager", "Employee"]))
 
 // Public-ish routes (All authenticated roles)
 router.get("/", ingredientsController.findAll)
-router.get("/:id", ingredientsController.findOne)
-router.get("/name/:ingredient_name", ingredientsController.findOneByName)
+router.get("/:id", validate(ingredientIdParamSchema), ingredientsController.findOne)
+router.get("/name/:ingredient_name", validate(ingredientNameParamSchema), ingredientsController.findOneByName)
 
 // Admin only routes for management
-router.post("/", authorizeRole(["Admin"]), ingredientsController.create)
-router.put("/:id", authorizeRole(["Admin"]), ingredientsController.update)
-router.delete("/:id", authorizeRole(["Admin"]), ingredientsController.delete)
+router.post("/", authorizeRole(["Admin"]), validate(createIngredientSchema), ingredientsController.create)
+router.put("/:id", authorizeRole(["Admin"]), validate(updateIngredientSchema), ingredientsController.update)
+router.delete("/:id", authorizeRole(["Admin"]), validate(ingredientIdParamSchema), ingredientsController.delete)
 
 export default router

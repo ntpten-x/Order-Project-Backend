@@ -5,6 +5,8 @@ const salesOrderDetail_model_1 = require("../../models/pos/salesOrderDetail.mode
 const salesOrderDetail_service_1 = require("../../services/pos/salesOrderDetail.service");
 const salesOrderDetail_controller_1 = require("../../controllers/pos/salesOrderDetail.controller");
 const auth_middleware_1 = require("../../middleware/auth.middleware");
+const validate_middleware_1 = require("../../middleware/validate.middleware");
+const posMaster_schema_1 = require("../../utils/schemas/posMaster.schema");
 const router = (0, express_1.Router)();
 const salesOrderDetailModel = new salesOrderDetail_model_1.SalesOrderDetailModels();
 const salesOrderDetailService = new salesOrderDetail_service_1.SalesOrderDetailService(salesOrderDetailModel);
@@ -12,8 +14,8 @@ const salesOrderDetailController = new salesOrderDetail_controller_1.SalesOrderD
 router.use(auth_middleware_1.authenticateToken);
 router.use((0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]));
 router.get("/", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), salesOrderDetailController.findAll);
-router.get("/:id", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), salesOrderDetailController.findOne);
-router.post("/", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), salesOrderDetailController.create);
-router.put("/:id", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), salesOrderDetailController.update);
-router.delete("/:id", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager"]), salesOrderDetailController.delete);
+router.get("/:id", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), (0, validate_middleware_1.validate)(posMaster_schema_1.salesOrderDetailIdParamSchema), salesOrderDetailController.findOne);
+router.post("/", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), (0, validate_middleware_1.validate)(posMaster_schema_1.createSalesOrderDetailSchema), salesOrderDetailController.create);
+router.put("/:id", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), (0, validate_middleware_1.validate)(posMaster_schema_1.updateSalesOrderDetailSchema), salesOrderDetailController.update);
+router.delete("/:id", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager"]), (0, validate_middleware_1.validate)(posMaster_schema_1.salesOrderDetailIdParamSchema), salesOrderDetailController.delete);
 exports.default = router;

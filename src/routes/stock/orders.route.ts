@@ -1,6 +1,15 @@
 import { Router } from "express";
 import { OrdersController } from "../../controllers/stock/orders.controller";
 import { authenticateToken, authorizeRole } from "../../middleware/auth.middleware";
+import { validate } from "../../middleware/validate.middleware";
+import { paginationQuerySchema } from "../../utils/schemas/common.schema";
+import {
+    confirmPurchaseSchema,
+    createStockOrderSchema,
+    stockOrderIdParamSchema,
+    updateStockOrderSchema,
+    updateStockOrderStatusSchema
+} from "../../utils/schemas/stock.schema";
 
 const router = Router();
 const ordersController = new OrdersController();
@@ -9,14 +18,14 @@ const ordersController = new OrdersController();
 router.use(authenticateToken)
 router.use(authorizeRole(["Admin", "Manager", "Employee"]))
 
-router.post("/", ordersController.createOrder);
-router.get("/", ordersController.getAllOrders);
-router.get("/:id", ordersController.getOrderById);
-router.put("/:id/status", ordersController.updateStatus);
-router.put("/:id", ordersController.updateOrder);
+router.post("/", validate(createStockOrderSchema), ordersController.createOrder);
+router.get("/", validate(paginationQuerySchema), ordersController.getAllOrders);
+router.get("/:id", validate(stockOrderIdParamSchema), ordersController.getOrderById);
+router.put("/:id/status", validate(updateStockOrderStatusSchema), ordersController.updateStatus);
+router.put("/:id", validate(updateStockOrderSchema), ordersController.updateOrder);
 
 // Restricted routes
-router.post("/:id/purchase", authorizeRole(["Admin", "Manager"]), ordersController.confirmPurchase);
-router.delete("/:id", authorizeRole(["Admin"]), ordersController.deleteOrder);
+router.post("/:id/purchase", authorizeRole(["Admin", "Manager"]), validate(confirmPurchaseSchema), ordersController.confirmPurchase);
+router.delete("/:id", authorizeRole(["Admin"]), validate(stockOrderIdParamSchema), ordersController.deleteOrder);
 
 export default router;

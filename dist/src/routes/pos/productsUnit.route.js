@@ -5,6 +5,8 @@ const productsUnit_controller_1 = require("../../controllers/pos/productsUnit.co
 const productsUnit_service_1 = require("../../services/pos/productsUnit.service");
 const productsUnit_model_1 = require("../../models/pos/productsUnit.model");
 const auth_middleware_1 = require("../../middleware/auth.middleware");
+const validate_middleware_1 = require("../../middleware/validate.middleware");
+const posMaster_schema_1 = require("../../utils/schemas/posMaster.schema");
 const router = (0, express_1.Router)();
 const productsUnitModel = new productsUnit_model_1.ProductsUnitModels();
 const productsUnitService = new productsUnit_service_1.ProductsUnitService(productsUnitModel);
@@ -12,9 +14,9 @@ const productsUnitController = new productsUnit_controller_1.ProductsUnitControl
 router.use(auth_middleware_1.authenticateToken);
 router.use((0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]));
 router.get("/", productsUnitController.findAll);
-router.get("/:id", productsUnitController.findOne);
-router.get("/name/:unit_name", productsUnitController.findOneByName);
-router.post("/", (0, auth_middleware_1.authorizeRole)(["Admin"]), productsUnitController.create);
-router.put("/:id", (0, auth_middleware_1.authorizeRole)(["Admin"]), productsUnitController.update);
-router.delete("/:id", (0, auth_middleware_1.authorizeRole)(["Admin"]), productsUnitController.delete);
+router.get("/:id", (0, validate_middleware_1.validate)(posMaster_schema_1.productsUnitIdParamSchema), productsUnitController.findOne);
+router.get("/name/:unit_name", (0, validate_middleware_1.validate)(posMaster_schema_1.productsUnitNameParamSchema), productsUnitController.findOneByName);
+router.post("/", (0, auth_middleware_1.authorizeRole)(["Admin"]), (0, validate_middleware_1.validate)(posMaster_schema_1.createProductsUnitSchema), productsUnitController.create);
+router.put("/:id", (0, auth_middleware_1.authorizeRole)(["Admin"]), (0, validate_middleware_1.validate)(posMaster_schema_1.updateProductsUnitSchema), productsUnitController.update);
+router.delete("/:id", (0, auth_middleware_1.authorizeRole)(["Admin"]), (0, validate_middleware_1.validate)(posMaster_schema_1.productsUnitIdParamSchema), productsUnitController.delete);
 exports.default = router;

@@ -2,6 +2,8 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const auth_middleware_1 = require("../../middleware/auth.middleware");
+const validate_middleware_1 = require("../../middleware/validate.middleware");
+const posMaster_schema_1 = require("../../utils/schemas/posMaster.schema");
 const category_controller_1 = require("../../controllers/pos/category.controller");
 const category_service_1 = require("../../services/pos/category.service");
 const category_model_1 = require("../../models/pos/category.model");
@@ -12,9 +14,9 @@ const categoryController = new category_controller_1.CategoryController(category
 router.use(auth_middleware_1.authenticateToken);
 router.use((0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]));
 router.get("/", categoryController.findAll);
-router.get("/:id", categoryController.findOne);
-router.get("/name/:category_name", categoryController.findOneByName);
-router.post("/", (0, auth_middleware_1.authorizeRole)(["Admin"]), categoryController.create);
-router.put("/:id", (0, auth_middleware_1.authorizeRole)(["Admin"]), categoryController.update);
-router.delete("/:id", (0, auth_middleware_1.authorizeRole)(["Admin"]), categoryController.delete);
+router.get("/:id", (0, validate_middleware_1.validate)(posMaster_schema_1.categoryIdParamSchema), categoryController.findOne);
+router.get("/name/:category_name", (0, validate_middleware_1.validate)(posMaster_schema_1.categoryNameParamSchema), categoryController.findOneByName);
+router.post("/", (0, auth_middleware_1.authorizeRole)(["Admin"]), (0, validate_middleware_1.validate)(posMaster_schema_1.createCategorySchema), categoryController.create);
+router.put("/:id", (0, auth_middleware_1.authorizeRole)(["Admin"]), (0, validate_middleware_1.validate)(posMaster_schema_1.updateCategorySchema), categoryController.update);
+router.delete("/:id", (0, auth_middleware_1.authorizeRole)(["Admin"]), (0, validate_middleware_1.validate)(posMaster_schema_1.categoryIdParamSchema), categoryController.delete);
 exports.default = router;

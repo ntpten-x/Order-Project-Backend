@@ -99,7 +99,7 @@ exports.AppDataSource = new typeorm_1.DataSource({
     database: process.env.DATABASE_NAME,
     entities: [Users_1.Users, Roles_1.Roles, Branch_1.Branch, IngredientsUnit_1.IngredientsUnit, Ingredients_1.Ingredients, PurchaseOrder_1.PurchaseOrder, OrdersItem_1.StockOrdersItem, OrdersDetail_1.StockOrdersDetail, SalesOrder_1.SalesOrder, SalesOrderItem_1.SalesOrderItem, SalesOrderDetail_1.SalesOrderDetail, Category_1.Category, Products_1.Products, ProductsUnit_1.ProductsUnit, Tables_1.Tables, Delivery_1.Delivery, Discounts_1.Discounts, Payments_1.Payments, PaymentMethod_1.PaymentMethod, Shifts_1.Shifts, ShopProfile_1.ShopProfile, ShopPaymentAccount_1.ShopPaymentAccount, SalesSummaryView_1.SalesSummaryView, TopSellingItemsView_1.TopSellingItemsView],
     synchronize: synchronize,
-    logging: false,
+    logging: true,
     ssl: sslOptions,
     migrations: [migrationsDir],
     poolSize,

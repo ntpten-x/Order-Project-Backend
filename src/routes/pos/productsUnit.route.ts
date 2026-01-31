@@ -3,6 +3,13 @@ import { ProductsUnitController } from "../../controllers/pos/productsUnit.contr
 import { ProductsUnitService } from "../../services/pos/productsUnit.service";
 import { ProductsUnitModels } from "../../models/pos/productsUnit.model";
 import { authenticateToken, authorizeRole } from "../../middleware/auth.middleware";
+import { validate } from "../../middleware/validate.middleware";
+import {
+    createProductsUnitSchema,
+    productsUnitIdParamSchema,
+    productsUnitNameParamSchema,
+    updateProductsUnitSchema
+} from "../../utils/schemas/posMaster.schema";
 
 const router = Router()
 
@@ -14,11 +21,11 @@ router.use(authenticateToken)
 router.use(authorizeRole(["Admin", "Manager", "Employee"]))
 
 router.get("/", productsUnitController.findAll)
-router.get("/:id", productsUnitController.findOne)
-router.get("/name/:unit_name", productsUnitController.findOneByName)
+router.get("/:id", validate(productsUnitIdParamSchema), productsUnitController.findOne)
+router.get("/name/:unit_name", validate(productsUnitNameParamSchema), productsUnitController.findOneByName)
 
-router.post("/", authorizeRole(["Admin"]), productsUnitController.create)
-router.put("/:id", authorizeRole(["Admin"]), productsUnitController.update)
-router.delete("/:id", authorizeRole(["Admin"]), productsUnitController.delete)
+router.post("/", authorizeRole(["Admin"]), validate(createProductsUnitSchema), productsUnitController.create)
+router.put("/:id", authorizeRole(["Admin"]), validate(updateProductsUnitSchema), productsUnitController.update)
+router.delete("/:id", authorizeRole(["Admin"]), validate(productsUnitIdParamSchema), productsUnitController.delete)
 
 export default router

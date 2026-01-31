@@ -4,11 +4,13 @@ import { ShopProfile } from "../../entity/pos/ShopProfile"
 import { paymentAccountSchema, CreatePaymentAccountDto } from "../../schemas/paymentAccount.schema"
 import { PaymentAccountModel } from "../../models/pos/PaymentAccount.model"
 import { ShopPaymentAccount } from "../../entity/pos/ShopPaymentAccount"
+import { SocketService } from "../socket.service"
 
 
 export class PaymentAccountService {
     private model: PaymentAccountModel
     private shopRepository: Repository<ShopProfile>
+    private socketService = SocketService.getInstance()
 
     constructor(model: PaymentAccountModel) {
         this.model = model
@@ -56,6 +58,7 @@ export class PaymentAccountService {
             await this.syncToShopProfile(shopId, account);
         }
 
+        this.socketService.emit("payment-accounts:create", account);
         return account;
     }
 
@@ -90,6 +93,7 @@ export class PaymentAccountService {
             await this.syncToShopProfile(shopId, savedAccount);
         }
 
+        this.socketService.emit("payment-accounts:update", savedAccount);
         return savedAccount;
     }
 
@@ -107,6 +111,7 @@ export class PaymentAccountService {
         // Sync with ShopProfile
         await this.syncToShopProfile(shopId, savedAccount);
 
+        this.socketService.emit("payment-accounts:update", savedAccount);
         return savedAccount;
     }
 
@@ -118,7 +123,9 @@ export class PaymentAccountService {
             throw new Error("Cannot delete the active account. Please activate another account first.");
         }
 
-        return await this.model.delete(account);
+        const result = await this.model.delete(account);
+        this.socketService.emit("payment-accounts:delete", { id: accountId });
+        return result;
     }
 
     // Helper to sync active account to ShopProfile for backward compatibility

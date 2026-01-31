@@ -3,6 +3,13 @@ import { DiscountsModels } from "../../models/pos/discounts.model";
 import { DiscountsService } from "../../services/pos/discounts.service";
 import { DiscountsController } from "../../controllers/pos/discounts.controller";
 import { authenticateToken, authorizeRole } from "../../middleware/auth.middleware";
+import { validate } from "../../middleware/validate.middleware";
+import {
+    createDiscountSchema,
+    discountIdParamSchema,
+    discountNameParamSchema,
+    updateDiscountSchema
+} from "../../utils/schemas/posMaster.schema";
 
 const router = Router()
 
@@ -17,11 +24,11 @@ router.use(authorizeRole(["Admin", "Manager", "Employee"]))
 // Employee can Read
 
 router.get("/", authorizeRole(["Admin", "Manager", "Employee"]), discountsController.findAll)
-router.get("/:id", authorizeRole(["Admin", "Manager", "Employee"]), discountsController.findOne)
-router.get("/getByName/:name", authorizeRole(["Admin", "Manager", "Employee"]), discountsController.findByName)
+router.get("/:id", authorizeRole(["Admin", "Manager", "Employee"]), validate(discountIdParamSchema), discountsController.findOne)
+router.get("/getByName/:name", authorizeRole(["Admin", "Manager", "Employee"]), validate(discountNameParamSchema), discountsController.findByName)
 
-router.post("/", authorizeRole(["Admin", "Manager"]), discountsController.create)
-router.put("/:id", authorizeRole(["Admin", "Manager"]), discountsController.update)
-router.delete("/:id", authorizeRole(["Admin", "Manager"]), discountsController.delete)
+router.post("/", authorizeRole(["Admin", "Manager"]), validate(createDiscountSchema), discountsController.create)
+router.put("/:id", authorizeRole(["Admin", "Manager"]), validate(updateDiscountSchema), discountsController.update)
+router.delete("/:id", authorizeRole(["Admin", "Manager"]), validate(discountIdParamSchema), discountsController.delete)
 
 export default router

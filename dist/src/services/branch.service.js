@@ -13,9 +13,11 @@ exports.BranchService = void 0;
 const database_1 = require("../database/database");
 const Branch_1 = require("../entity/Branch");
 const AppError_1 = require("../utils/AppError");
+const socket_service_1 = require("./socket.service");
 class BranchService {
     constructor() {
         this.branchRepo = database_1.AppDataSource.getRepository(Branch_1.Branch);
+        this.socketService = socket_service_1.SocketService.getInstance();
     }
     findAll() {
         return __awaiter(this, arguments, void 0, function* (isActive = true) {
@@ -33,7 +35,9 @@ class BranchService {
     create(data) {
         return __awaiter(this, void 0, void 0, function* () {
             const branch = this.branchRepo.create(data);
-            return this.branchRepo.save(branch);
+            const created = yield this.branchRepo.save(branch);
+            this.socketService.emit("branches:create", created);
+            return created;
         });
     }
     update(id, data) {
@@ -43,7 +47,9 @@ class BranchService {
                 throw new AppError_1.AppError("Branch not found", 404);
             }
             this.branchRepo.merge(branch, data);
-            return this.branchRepo.save(branch);
+            const updated = yield this.branchRepo.save(branch);
+            this.socketService.emit("branches:update", updated);
+            return updated;
         });
     }
     delete(id) {
@@ -55,6 +61,7 @@ class BranchService {
             // Soft delete
             branch.is_active = false;
             yield this.branchRepo.save(branch);
+            this.socketService.emit("branches:delete", { id });
         });
     }
 }

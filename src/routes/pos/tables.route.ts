@@ -3,6 +3,14 @@ import { TablesModels } from "../../models/pos/tables.model";
 import { TablesService } from "../../services/pos/tables.service";
 import { TablesController } from "../../controllers/pos/tables.controller";
 import { authenticateToken, authorizeRole } from "../../middleware/auth.middleware";
+import { validate } from "../../middleware/validate.middleware";
+import { paginationQuerySchema } from "../../utils/schemas/common.schema";
+import {
+    createTableSchema,
+    tableIdParamSchema,
+    tableNameParamSchema,
+    updateTableSchema
+} from "../../utils/schemas/posMaster.schema";
 
 const router = Router()
 
@@ -18,12 +26,12 @@ router.use(authorizeRole(["Admin", "Manager", "Employee"]))
 // Employee can view, Admin/Manager can manage.
 // Actually, Waiters need to update table status, so they need update rights.
 
-router.get("/", authorizeRole(["Admin", "Manager", "Employee"]), tablesController.findAll)
-router.get("/:id", authorizeRole(["Admin", "Manager", "Employee"]), tablesController.findOne)
-router.get("/getByName/:name", authorizeRole(["Admin", "Manager", "Employee"]), tablesController.findByName)
+router.get("/", authorizeRole(["Admin", "Manager", "Employee"]), validate(paginationQuerySchema), tablesController.findAll)
+router.get("/:id", authorizeRole(["Admin", "Manager", "Employee"]), validate(tableIdParamSchema), tablesController.findOne)
+router.get("/getByName/:name", authorizeRole(["Admin", "Manager", "Employee"]), validate(tableNameParamSchema), tablesController.findByName)
 
-router.post("/", authorizeRole(["Admin", "Manager"]), tablesController.create)
-router.put("/:id", authorizeRole(["Admin", "Manager", "Employee"]), tablesController.update) // Employee can update status
-router.delete("/:id", authorizeRole(["Admin", "Manager"]), tablesController.delete)
+router.post("/", authorizeRole(["Admin", "Manager"]), validate(createTableSchema), tablesController.create)
+router.put("/:id", authorizeRole(["Admin", "Manager", "Employee"]), validate(updateTableSchema), tablesController.update) // Employee can update status
+router.delete("/:id", authorizeRole(["Admin", "Manager"]), validate(tableIdParamSchema), tablesController.delete)
 
 export default router

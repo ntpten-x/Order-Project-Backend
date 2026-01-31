@@ -3,6 +3,12 @@ import { SalesOrderDetailModels } from "../../models/pos/salesOrderDetail.model"
 import { SalesOrderDetailService } from "../../services/pos/salesOrderDetail.service";
 import { SalesOrderDetailController } from "../../controllers/pos/salesOrderDetail.controller";
 import { authenticateToken, authorizeRole } from "../../middleware/auth.middleware";
+import { validate } from "../../middleware/validate.middleware";
+import {
+    createSalesOrderDetailSchema,
+    salesOrderDetailIdParamSchema,
+    updateSalesOrderDetailSchema
+} from "../../utils/schemas/posMaster.schema";
 
 const router = Router()
 
@@ -14,10 +20,10 @@ router.use(authenticateToken)
 router.use(authorizeRole(["Admin", "Manager", "Employee"]))
 
 router.get("/", authorizeRole(["Admin", "Manager", "Employee"]), salesOrderDetailController.findAll)
-router.get("/:id", authorizeRole(["Admin", "Manager", "Employee"]), salesOrderDetailController.findOne)
+router.get("/:id", authorizeRole(["Admin", "Manager", "Employee"]), validate(salesOrderDetailIdParamSchema), salesOrderDetailController.findOne)
 
-router.post("/", authorizeRole(["Admin", "Manager", "Employee"]), salesOrderDetailController.create)
-router.put("/:id", authorizeRole(["Admin", "Manager", "Employee"]), salesOrderDetailController.update)
-router.delete("/:id", authorizeRole(["Admin", "Manager"]), salesOrderDetailController.delete)
+router.post("/", authorizeRole(["Admin", "Manager", "Employee"]), validate(createSalesOrderDetailSchema), salesOrderDetailController.create)
+router.put("/:id", authorizeRole(["Admin", "Manager", "Employee"]), validate(updateSalesOrderDetailSchema), salesOrderDetailController.update)
+router.delete("/:id", authorizeRole(["Admin", "Manager"]), validate(salesOrderDetailIdParamSchema), salesOrderDetailController.delete)
 
 export default router

@@ -13,8 +13,10 @@ exports.PaymentAccountService = void 0;
 const database_1 = require("../../database/database");
 const ShopProfile_1 = require("../../entity/pos/ShopProfile");
 const paymentAccount_schema_1 = require("../../schemas/paymentAccount.schema");
+const socket_service_1 = require("../socket.service");
 class PaymentAccountService {
     constructor(model) {
+        this.socketService = socket_service_1.SocketService.getInstance();
         this.model = model;
         this.shopRepository = database_1.AppDataSource.getRepository(ShopProfile_1.ShopProfile);
     }
@@ -50,6 +52,7 @@ class PaymentAccountService {
                 // Sync with ShopProfile
                 yield this.syncToShopProfile(shopId, account);
             }
+            this.socketService.emit("payment-accounts:create", account);
             return account;
         });
     }
@@ -81,6 +84,7 @@ class PaymentAccountService {
             if (savedAccount.is_active) {
                 yield this.syncToShopProfile(shopId, savedAccount);
             }
+            this.socketService.emit("payment-accounts:update", savedAccount);
             return savedAccount;
         });
     }
@@ -96,6 +100,7 @@ class PaymentAccountService {
             const savedAccount = yield this.model.save(account);
             // Sync with ShopProfile
             yield this.syncToShopProfile(shopId, savedAccount);
+            this.socketService.emit("payment-accounts:update", savedAccount);
             return savedAccount;
         });
     }
@@ -107,7 +112,9 @@ class PaymentAccountService {
             if (account.is_active) {
                 throw new Error("Cannot delete the active account. Please activate another account first.");
             }
-            return yield this.model.delete(account);
+            const result = yield this.model.delete(account);
+            this.socketService.emit("payment-accounts:delete", { id: accountId });
+            return result;
         });
     }
     // Helper to sync active account to ShopProfile for backward compatibility

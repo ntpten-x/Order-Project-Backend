@@ -3,6 +3,13 @@ import { IngredientsUnitModel } from "../../models/stock/ingredientsUnit.model";
 import { IngredientsUnitService } from "../../services/stock/ingredientsUnit.service";
 import { IngredientsUnitController } from "../../controllers/stock/ingredientsUnit.controller";
 import { authenticateToken, authorizeRole } from "../../middleware/auth.middleware";
+import { validate } from "../../middleware/validate.middleware";
+import {
+    createIngredientUnitSchema,
+    ingredientUnitIdParamSchema,
+    ingredientUnitNameParamSchema,
+    updateIngredientUnitSchema
+} from "../../utils/schemas/stock.schema";
 
 const router = Router()
 
@@ -15,10 +22,10 @@ router.use(authenticateToken)
 router.use(authorizeRole(["Admin"]))
 
 router.get("/", ingredientsUnitController.findAll)
-router.get("/:id", ingredientsUnitController.findOne)
-router.get("/unit_name/:unit_name", ingredientsUnitController.findOneByUnitName)
-router.post("/", ingredientsUnitController.create)
-router.put("/:id", ingredientsUnitController.update)
-router.delete("/:id", ingredientsUnitController.delete)
+router.get("/:id", validate(ingredientUnitIdParamSchema), ingredientsUnitController.findOne)
+router.get("/unit_name/:unit_name", validate(ingredientUnitNameParamSchema), ingredientsUnitController.findOneByUnitName)
+router.post("/", validate(createIngredientUnitSchema), ingredientsUnitController.create)
+router.put("/:id", validate(updateIngredientUnitSchema), ingredientsUnitController.update)
+router.delete("/:id", validate(ingredientUnitIdParamSchema), ingredientsUnitController.delete)
 
 export default router
