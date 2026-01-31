@@ -107,6 +107,7 @@ const allowedOrigins = [
     "http://localhost:3000",
     "http://localhost:3001",
     "http://127.0.0.1:3000",
+    "http://13.239.29.168:3001",
     "https://order-project-frontend.onrender.com",
     process.env.FRONTEND_URL
 ].filter(Boolean) as string[];

@@ -53,7 +53,7 @@ export const AppDataSource = new DataSource({
     database: process.env.DATABASE_NAME,
     entities: [Users, Roles, Branch, IngredientsUnit, Ingredients, PurchaseOrder, StockOrdersItem, StockOrdersDetail, SalesOrder, SalesOrderItem, SalesOrderDetail, Category, Products, ProductsUnit, Tables, Delivery, Discounts, Payments, PaymentMethod, Shifts, ShopProfile, ShopPaymentAccount, SalesSummaryView, TopSellingItemsView],
     synchronize: synchronize as boolean,
-    logging: false,
+    logging: true,
     ssl: sslOptions,
     migrations: [migrationsDir],
     poolSize,
