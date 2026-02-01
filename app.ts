@@ -14,7 +14,7 @@ import csurf from "csurf";
 import compression from "compression";
 import { randomBytes } from "crypto";
 import { apiLimiter, authLimiter, orderCreateLimiter, paymentLimiter } from "./src/middleware/rateLimit.middleware";
-import { sanitizeObject } from "./src/utils/sanitize";
+import { sanitizeObject, sanitizeString } from "./src/utils/sanitize";
 import ingredientsUnitStockRouter from "./src/routes/stock/ingredientsUnit.route";
 import ingredientsStockRouter from "./src/routes/stock/ingredients.route";
 import ordersStockRouter from "./src/routes/stock/orders.route";
@@ -122,8 +122,22 @@ app.use((req, res, next) => {
         req.body = sanitizeObject(req.body);
     }
     // Sanitize query parameters
+    // NOTE: req.query is read-only, so we sanitize in-place
     if (req.query && typeof req.query === 'object') {
-        req.query = sanitizeObject(req.query as any);
+        const query = req.query as Record<string, any>;
+        for (const key in query) {
+            if (Object.prototype.hasOwnProperty.call(query, key)) {
+                if (typeof query[key] === 'string') {
+                    // Sanitize string values in query
+                    (query as any)[key] = sanitizeString(query[key]);
+                } else if (Array.isArray(query[key])) {
+                    // Sanitize array values
+                    (query as any)[key] = query[key].map((item: any) =>
+                        typeof item === 'string' ? sanitizeString(item) : item
+                    );
+                }
+            }
+        }
     }
     next();
 });
@@ -150,40 +164,153 @@ SocketService.getInstance().init(io);
 // Conditional CSRF for now to avoid breaking existing API instantly without frontend changes.
 // Uncomment below to enable strict CSRF.
 // Initialize CSRF protection
+// Using cookie-based CSRF tokens (no session required)
 const csrfProtection = csurf({
     cookie: {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
-        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax"
-    }
+        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+        key: '_csrf', // Cookie name for CSRF secret
+        path: '/' // Cookie path
+    },
+    ignoreMethods: ['GET', 'HEAD', 'OPTIONS'] // Don't enforce for these methods
 });
 
 // Apply CSRF protection to cookie-authenticated requests except explicit public endpoints
 const csrfExcludedPaths = new Set([
     "/auth/login",
     "/auth/logout",
-    "/health"
+    "/health",
+    "/csrf-token"
 ]);
+
+// CSRF token endpoint - must be defined before CSRF middleware
+// This endpoint needs to initialize CSRF token generation
+// IMPORTANT: This endpoint must always work to ensure security
+// NOTE: This endpoint is excluded from global error handler to return custom format
+app.get('/csrf-token', (req, res, next) => {
+    // Wrap in try-catch to handle any unexpected errors
+    try {
+        // Use csrfProtection middleware to generate token
+        // csurf uses cookie-based tokens, so it should work even without explicit session
+        // The cookie will be set automatically by csurf
+        csrfProtection(req, res, (err) => {
+            if (err) {
+                // If CSRF initialization fails, log and return error
+                console.error('CSRF token generation error:', err);
+                console.error('Error details:', {
+                    code: (err as any).code,
+                    message: err.message,
+                    name: err.name
+                });
+                
+                // Check if it's a missing secret error (first request)
+                if ((err as any).code === 'EBADCSRFTOKEN' || err.message?.includes('secret')) {
+                    // This might be the first request - try to generate token anyway
+                    // csurf should create the secret cookie on first call
+                    console.log('First CSRF request - attempting to generate secret...');
+                }
+                
+                // Return error in consistent format (bypass global error handler)
+                return res.status(500).json({ 
+                    success: false,
+                    error: {
+                        code: 'CSRF_TOKEN_ERROR',
+                        message: 'Failed to generate CSRF token. Please try again.'
+                    }
+                });
+            }
+            
+            // Success - get the generated token
+            try {
+                const token = req.csrfToken ? req.csrfToken() : '';
+                if (!token) {
+                    console.warn('CSRF token is empty after generation');
+                    return res.status(500).json({ 
+                        success: false,
+                        error: {
+                            code: 'CSRF_TOKEN_EMPTY',
+                            message: 'CSRF token not generated. Please try again.'
+                        }
+                    });
+                }
+                
+                // Return token in expected format
+                return res.json({ 
+                    success: true,
+                    csrfToken: token 
+                });
+            } catch (tokenError) {
+                console.error('Error getting CSRF token:', tokenError);
+                return res.status(500).json({ 
+                    success: false,
+                    error: {
+                        code: 'CSRF_TOKEN_ERROR',
+                        message: 'Failed to retrieve CSRF token. Please try again.'
+                    }
+                });
+            }
+        });
+    } catch (error) {
+        // Catch any unexpected errors
+        console.error('Unexpected error in CSRF token endpoint:', error);
+        return res.status(500).json({ 
+            success: false,
+            error: {
+                code: 'INTERNAL_ERROR',
+                message: 'Something went wrong while generating CSRF token.'
+            }
+        });
+    }
+});
 
 app.use((req, res, next) => {
     // Skip CSRF when using pure Bearer header (non-cookie flows) or explicitly excluded paths.
     const usesCookieAuth = Boolean(req.cookies?.token);
     const bearerOnly = req.headers.authorization && !usesCookieAuth;
 
-    if (req.path.startsWith("/pos/payment-accounts")) {
-        console.log(`[DEBUG Backend] CSRF Check for ${req.method} ${req.path}`);
-        console.log(`- Cookie: ${req.headers.cookie ? 'Present' : 'Missing'}`);
-        console.log(`- Token: ${req.headers['x-csrf-token'] ? 'Present' : 'Missing'}`);
-    }
-
-    if (csrfExcludedPaths.has(req.path) || bearerOnly) {
+    // Skip CSRF for excluded paths
+    if (csrfExcludedPaths.has(req.path)) {
         return next();
     }
-    return csrfProtection(req, res, next);
-});
 
-app.get('/csrf-token', (req, res) => {
-    res.json({ csrfToken: req.csrfToken() });
+    // Skip CSRF for Bearer token only requests (no cookie)
+    if (bearerOnly) {
+        return next();
+    }
+
+    // For cookie-based authentication, enforce CSRF protection
+    // This prevents CSRF attacks where malicious sites make requests with user's cookies
+    if (usesCookieAuth) {
+        // Only enforce for state-changing methods (POST, PUT, DELETE, PATCH)
+        const stateChangingMethods = ['POST', 'PUT', 'DELETE', 'PATCH'];
+        if (stateChangingMethods.includes(req.method)) {
+            // STRICT: Reject requests without CSRF token for state-changing methods
+            return csrfProtection(req, res, (err) => {
+                if (err) {
+                    // CSRF token missing or invalid
+                    console.warn(`[CSRF] Rejected ${req.method} ${req.path} - Missing or invalid CSRF token`);
+                    return res.status(403).json({ 
+                        error: 'CSRF token required',
+                        message: 'Please refresh the page and try again'
+                    });
+                }
+                return next();
+            });
+        }
+        // For GET requests, still initialize CSRF but don't enforce
+        // This allows CSRF token generation for subsequent requests
+        return csrfProtection(req, res, (err) => {
+            if (err && err.code !== 'EBADCSRFTOKEN') {
+                return next(err);
+            }
+            // Allow GET requests even if CSRF token is missing
+            return next();
+        });
+    }
+
+    // No authentication - allow through
+    return next();
 });
 
 app.get('/health', (req, res) => {

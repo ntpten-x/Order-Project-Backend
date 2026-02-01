@@ -129,6 +129,12 @@ export const globalErrorHandler = (
         errorCode = ErrorCodes.TOKEN_EXPIRED;
         message = 'Authentication token has expired';
     }
+    // Handle CSRF errors
+    else if ((err as any).code === 'EBADCSRFTOKEN' || err.message?.includes('CSRF')) {
+        statusCode = 403;
+        errorCode = ErrorCodes.FORBIDDEN;
+        message = 'Invalid CSRF token';
+    }
 
     // Log error in development or for server errors
     if (isDev || statusCode >= 500) {
