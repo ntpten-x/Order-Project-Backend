@@ -4,14 +4,18 @@ import { PaymentMethod } from "../../entity/pos/PaymentMethod";
 export class PaymentMethodModels {
     private paymentMethodRepository = AppDataSource.getRepository(PaymentMethod)
 
-    async findAll(page: number = 1, limit: number = 50, q?: string): Promise<{ data: PaymentMethod[], total: number, page: number, last_page: number }> {
+    async findAll(page: number = 1, limit: number = 50, q?: string, branchId?: string): Promise<{ data: PaymentMethod[], total: number, page: number, last_page: number }> {
         try {
             const skip = (page - 1) * limit;
             const query = this.paymentMethodRepository.createQueryBuilder("paymentMethod")
                 .orderBy("paymentMethod.create_date", "ASC");
 
+            if (branchId) {
+                query.andWhere("paymentMethod.branch_id = :branchId", { branchId });
+            }
+
             if (q && q.trim()) {
-                query.where("(paymentMethod.payment_method_name ILIKE :q OR paymentMethod.display_name ILIKE :q)", { q: `%${q.trim()}%` });
+                query.andWhere("(paymentMethod.payment_method_name ILIKE :q OR paymentMethod.display_name ILIKE :q)", { q: `%${q.trim()}%` });
             }
 
             const [data, total] = await query.skip(skip).take(limit).getManyAndCount();
@@ -26,17 +30,25 @@ export class PaymentMethodModels {
         }
     }
 
-    async findOne(id: string): Promise<PaymentMethod | null> {
+    async findOne(id: string, branchId?: string): Promise<PaymentMethod | null> {
         try {
-            return this.paymentMethodRepository.findOneBy({ id })
+            const where: any = { id };
+            if (branchId) {
+                where.branch_id = branchId;
+            }
+            return this.paymentMethodRepository.findOneBy(where)
         } catch (error) {
             throw error
         }
     }
 
-    async findOneByName(payment_method_name: string): Promise<PaymentMethod | null> {
+    async findOneByName(payment_method_name: string, branchId?: string): Promise<PaymentMethod | null> {
         try {
-            return this.paymentMethodRepository.findOneBy({ payment_method_name })
+            const where: any = { payment_method_name };
+            if (branchId) {
+                where.branch_id = branchId;
+            }
+            return this.paymentMethodRepository.findOneBy(where)
         } catch (error) {
             throw error
         }

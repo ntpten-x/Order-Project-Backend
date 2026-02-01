@@ -4,13 +4,17 @@ import { Discounts } from "../../entity/pos/Discounts";
 export class DiscountsModels {
     private discountsRepository = AppDataSource.getRepository(Discounts)
 
-    async findAll(q?: string): Promise<Discounts[]> {
+    async findAll(q?: string, branchId?: string): Promise<Discounts[]> {
         try {
             const query = this.discountsRepository.createQueryBuilder("discounts")
                 .orderBy("discounts.create_date", "ASC");
 
+            if (branchId) {
+                query.andWhere("discounts.branch_id = :branchId", { branchId });
+            }
+
             if (q && q.trim()) {
-                query.where(
+                query.andWhere(
                     "(discounts.discount_name ILIKE :q OR discounts.display_name ILIKE :q OR discounts.description ILIKE :q)",
                     { q: `%${q.trim()}%` }
                 );
@@ -22,17 +26,25 @@ export class DiscountsModels {
         }
     }
 
-    async findOne(id: string): Promise<Discounts | null> {
+    async findOne(id: string, branchId?: string): Promise<Discounts | null> {
         try {
-            return this.discountsRepository.findOneBy({ id })
+            const where: any = { id };
+            if (branchId) {
+                where.branch_id = branchId;
+            }
+            return this.discountsRepository.findOneBy(where)
         } catch (error) {
             throw error
         }
     }
 
-    async findOneByName(discount_name: string): Promise<Discounts | null> {
+    async findOneByName(discount_name: string, branchId?: string): Promise<Discounts | null> {
         try {
-            return this.discountsRepository.findOneBy({ discount_name })
+            const where: any = { discount_name };
+            if (branchId) {
+                where.branch_id = branchId;
+            }
+            return this.discountsRepository.findOneBy(where)
         } catch (error) {
             throw error
         }

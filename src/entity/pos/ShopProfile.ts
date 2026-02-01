@@ -1,9 +1,18 @@
-import { Column, Entity, PrimaryGeneratedColumn } from "typeorm"
+import { Column, Entity, PrimaryGeneratedColumn, Index, ManyToOne, JoinColumn } from "typeorm"
+import { Branch } from "../Branch"
 
 @Entity()
+@Index(["branch_id"])
 export class ShopProfile {
     @PrimaryGeneratedColumn("uuid")
     id!: string
+
+    @Column({ name: "branch_id", type: "uuid", nullable: true })
+    branch_id?: string
+
+    @ManyToOne(() => Branch)
+    @JoinColumn({ name: "branch_id" })
+    branch?: Branch
 
     @Column({ type: "varchar", length: 200, default: "My Shop" })
     shop_name!: string

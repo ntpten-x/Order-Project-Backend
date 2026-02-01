@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { DeliveryService } from "../../services/pos/delivery.service";
+import { getBranchId } from "../../middleware/branch.middleware";
 
 export class DeliveryController {
     constructor(private deliveryService: DeliveryService) { }
@@ -10,8 +11,9 @@ export class DeliveryController {
             const rawLimit = parseInt(req.query.limit as string);
             const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
             const q = (req.query.q as string | undefined) || undefined;
+            const branchId = getBranchId(req as any);
 
-            const delivery = await this.deliveryService.findAll(page, limit, q)
+            const delivery = await this.deliveryService.findAll(page, limit, q, branchId)
             res.status(200).json(delivery)
         } catch (error: any) {
             res.status(500).json({ error: error.message })
@@ -20,7 +22,8 @@ export class DeliveryController {
 
     findOne = async (req: Request, res: Response) => {
         try {
-            const delivery = await this.deliveryService.findOne(req.params.id)
+            const branchId = getBranchId(req as any);
+            const delivery = await this.deliveryService.findOne(req.params.id, branchId)
             res.status(200).json(delivery)
         } catch (error: any) {
             res.status(500).json({ error: error.message })
@@ -29,7 +32,8 @@ export class DeliveryController {
 
     findByName = async (req: Request, res: Response) => {
         try {
-            const delivery = await this.deliveryService.findOneByName(req.params.name)
+            const branchId = getBranchId(req as any);
+            const delivery = await this.deliveryService.findOneByName(req.params.name, branchId)
             res.status(200).json(delivery)
         } catch (error: any) {
             res.status(500).json({ error: error.message })
@@ -38,6 +42,10 @@ export class DeliveryController {
 
     create = async (req: Request, res: Response) => {
         try {
+            const branchId = getBranchId(req as any);
+            if (branchId && !req.body.branch_id) {
+                req.body.branch_id = branchId;
+            }
             const delivery = await this.deliveryService.create(req.body)
             res.status(201).json(delivery)
         } catch (error: any) {

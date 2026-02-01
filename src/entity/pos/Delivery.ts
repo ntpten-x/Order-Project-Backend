@@ -1,9 +1,18 @@
-import { Column, Entity, PrimaryGeneratedColumn } from "typeorm";
+import { Column, Entity, PrimaryGeneratedColumn, Index, ManyToOne, JoinColumn } from "typeorm";
+import { Branch } from "../Branch";
 
 @Entity()
+@Index(["branch_id"])
 export class Delivery {
     @PrimaryGeneratedColumn("uuid")
     id!: string; // รหัสอ้างอิงบริการส่ง
+
+    @Column({ name: "branch_id", type: "uuid", nullable: true })
+    branch_id?: string;
+
+    @ManyToOne(() => Branch)
+    @JoinColumn({ name: "branch_id" })
+    branch?: Branch;
 
     @Column({ type: 'varchar', length: 255 })
     delivery_name!: string; // ชื่อบริการส่ง (เช่น Grab, Lineman)

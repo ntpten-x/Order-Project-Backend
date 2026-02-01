@@ -7,25 +7,25 @@ export class DiscountsService {
 
     constructor(private discountsModel: DiscountsModels) { }
 
-    async findAll(q?: string): Promise<Discounts[]> {
+    async findAll(q?: string, branchId?: string): Promise<Discounts[]> {
         try {
-            return this.discountsModel.findAll(q)
+            return this.discountsModel.findAll(q, branchId)
         } catch (error) {
             throw error
         }
     }
 
-    async findOne(id: string): Promise<Discounts | null> {
+    async findOne(id: string, branchId?: string): Promise<Discounts | null> {
         try {
-            return this.discountsModel.findOne(id)
+            return this.discountsModel.findOne(id, branchId)
         } catch (error) {
             throw error
         }
     }
 
-    async findOneByName(discount_name: string): Promise<Discounts | null> {
+    async findOneByName(discount_name: string, branchId?: string): Promise<Discounts | null> {
         try {
-            return this.discountsModel.findOneByName(discount_name)
+            return this.discountsModel.findOneByName(discount_name, branchId)
         } catch (error) {
             throw error
         }
@@ -37,7 +37,7 @@ export class DiscountsService {
                 throw new Error("กรุณาระบุชื่อส่วนลด")
             }
 
-            const existingDiscount = await this.discountsModel.findOneByName(discounts.discount_name)
+            const existingDiscount = await this.discountsModel.findOneByName(discounts.discount_name, discounts.branch_id)
             if (existingDiscount) {
                 throw new Error("ชื่อส่วนลดนี้มีอยู่ในระบบแล้ว")
             }
@@ -58,7 +58,7 @@ export class DiscountsService {
             }
 
             if (discounts.discount_name && discounts.discount_name !== discountToUpdate.discount_name) {
-                const existingDiscount = await this.discountsModel.findOneByName(discounts.discount_name)
+                const existingDiscount = await this.discountsModel.findOneByName(discounts.discount_name, discounts.branch_id || discountToUpdate.branch_id)
                 if (existingDiscount) {
                     throw new Error("ชื่อส่วนลดนี้มีอยู่ในระบบแล้ว")
                 }

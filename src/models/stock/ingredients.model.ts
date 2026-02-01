@@ -7,14 +7,20 @@ import { addBooleanFilter } from "../../utils/dbHelpers";
  * Following supabase-postgres-best-practices:
  * - Uses dbHelpers for consistent query patterns
  * - Optimized queries with proper joins
+ * - Branch-based data isolation support
  */
 export class IngredientsModel {
     private ingredientsRepository = AppDataSource.getRepository(Ingredients)
 
-    async findAll(filters?: { is_active?: boolean }): Promise<Ingredients[]> {
+    async findAll(filters?: { is_active?: boolean }, branchId?: string): Promise<Ingredients[]> {
         let query = this.ingredientsRepository.createQueryBuilder("ingredients")
             .leftJoinAndSelect("ingredients.unit", "unit")
             .orderBy("ingredients.create_date", "ASC");
+
+        // Filter by branch for data isolation
+        if (branchId) {
+            query.andWhere("ingredients.branch_id = :branchId", { branchId });
+        }
 
         // Use dbHelpers for consistent filtering
         query = addBooleanFilter(query, filters?.is_active, "is_active", "ingredients");
@@ -25,23 +31,33 @@ export class IngredientsModel {
         return query.getMany();
     }
 
-    async findOne(id: string): Promise<Ingredients | null> {
+    async findOne(id: string, branchId?: string): Promise<Ingredients | null> {
         try {
-            return this.ingredientsRepository.createQueryBuilder("ingredients")
+            const query = this.ingredientsRepository.createQueryBuilder("ingredients")
                 .leftJoinAndSelect("ingredients.unit", "unit")
-                .where("ingredients.id = :id", { id })
-                .getOne()
+                .where("ingredients.id = :id", { id });
+            
+            if (branchId) {
+                query.andWhere("ingredients.branch_id = :branchId", { branchId });
+            }
+            
+            return query.getOne();
         } catch (error) {
             throw error
         }
     }
 
-    async findOneByName(ingredient_name: string): Promise<Ingredients | null> {
+    async findOneByName(ingredient_name: string, branchId?: string): Promise<Ingredients | null> {
         try {
-            return this.ingredientsRepository.createQueryBuilder("ingredients")
+            const query = this.ingredientsRepository.createQueryBuilder("ingredients")
                 .leftJoinAndSelect("ingredients.unit", "unit")
-                .where("ingredients.ingredient_name = :ingredient_name", { ingredient_name })
-                .getOne()
+                .where("ingredients.ingredient_name = :ingredient_name", { ingredient_name });
+            
+            if (branchId) {
+                query.andWhere("ingredients.branch_id = :branchId", { branchId });
+            }
+            
+            return query.getOne();
         } catch (error) {
             throw error
         }

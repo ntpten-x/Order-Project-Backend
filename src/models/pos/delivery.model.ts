@@ -4,14 +4,18 @@ import { Delivery } from "../../entity/pos/Delivery";
 export class DeliveryModels {
     private deliveryRepository = AppDataSource.getRepository(Delivery)
 
-    async findAll(page: number = 1, limit: number = 50, q?: string): Promise<{ data: Delivery[], total: number, page: number, last_page: number }> {
+    async findAll(page: number = 1, limit: number = 50, q?: string, branchId?: string): Promise<{ data: Delivery[], total: number, page: number, last_page: number }> {
         try {
             const skip = (page - 1) * limit;
             const query = this.deliveryRepository.createQueryBuilder("delivery")
                 .orderBy("delivery.create_date", "ASC");
 
+            if (branchId) {
+                query.andWhere("delivery.branch_id = :branchId", { branchId });
+            }
+
             if (q && q.trim()) {
-                query.where("delivery.delivery_name ILIKE :q", { q: `%${q.trim()}%` });
+                query.andWhere("delivery.delivery_name ILIKE :q", { q: `%${q.trim()}%` });
             }
 
             const [data, total] = await query.skip(skip).take(limit).getManyAndCount();
@@ -26,17 +30,25 @@ export class DeliveryModels {
         }
     }
 
-    async findOne(id: string): Promise<Delivery | null> {
+    async findOne(id: string, branchId?: string): Promise<Delivery | null> {
         try {
-            return this.deliveryRepository.findOneBy({ id })
+            const where: any = { id };
+            if (branchId) {
+                where.branch_id = branchId;
+            }
+            return this.deliveryRepository.findOneBy(where)
         } catch (error) {
             throw error
         }
     }
 
-    async findOneByName(delivery_name: string): Promise<Delivery | null> {
+    async findOneByName(delivery_name: string, branchId?: string): Promise<Delivery | null> {
         try {
-            return this.deliveryRepository.findOneBy({ delivery_name })
+            const where: any = { delivery_name };
+            if (branchId) {
+                where.branch_id = branchId;
+            }
+            return this.deliveryRepository.findOneBy(where)
         } catch (error) {
             throw error
         }

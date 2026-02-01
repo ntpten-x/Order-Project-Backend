@@ -1,5 +1,6 @@
-import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn } from "typeorm"
+import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn, Index } from "typeorm"
 import { ShopProfile } from "./ShopProfile"
+import { Branch } from "../Branch"
 
 export enum AccountType {
     PROMPTPAY = "PromptPay",
@@ -7,9 +8,17 @@ export enum AccountType {
 }
 
 @Entity()
+@Index(["branch_id"])
 export class ShopPaymentAccount {
     @PrimaryGeneratedColumn("uuid")
     id!: string
+
+    @Column({ name: "branch_id", type: "uuid", nullable: true })
+    branch_id?: string
+
+    @ManyToOne(() => Branch)
+    @JoinColumn({ name: "branch_id" })
+    branch?: Branch
 
     @Column({ type: "uuid" })
     shop_id!: string

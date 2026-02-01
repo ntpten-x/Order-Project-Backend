@@ -3,6 +3,7 @@ import { ProductsService } from "../../services/pos/products.service";
 import { catchAsync } from "../../utils/catchAsync";
 import { AppError } from "../../utils/AppError";
 import { ApiResponses } from "../../utils/ApiResponse";
+import { getBranchId } from "../../middleware/branch.middleware";
 
 /**
  * Products Controller
@@ -10,6 +11,7 @@ import { ApiResponses } from "../../utils/ApiResponse";
  * - Standardized API responses
  * - Consistent error handling
  * - Pagination support
+ * - Branch-based data isolation
  */
 export class ProductsController {
     constructor(private productsService: ProductsService) { }
@@ -20,8 +22,9 @@ export class ProductsController {
         const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
         const category_id = req.query.category_id as string;
         const q = (req.query.q as string | undefined) || undefined;
+        const branchId = getBranchId(req as any);
         
-        const result = await this.productsService.findAll(page, limit, category_id, q);
+        const result = await this.productsService.findAll(page, limit, category_id, q, branchId);
         
         return ApiResponses.paginated(res, result.data, {
             page: result.page,
@@ -31,7 +34,8 @@ export class ProductsController {
     });
 
     findOne = catchAsync(async (req: Request, res: Response) => {
-        const product = await this.productsService.findOne(req.params.id);
+        const branchId = getBranchId(req as any);
+        const product = await this.productsService.findOne(req.params.id, branchId);
         if (!product) {
             throw AppError.notFound("สินค้า");
         }
@@ -39,7 +43,8 @@ export class ProductsController {
     });
 
     findOneByName = catchAsync(async (req: Request, res: Response) => {
-        const product = await this.productsService.findOneByName(req.params.product_name);
+        const branchId = getBranchId(req as any);
+        const product = await this.productsService.findOneByName(req.params.product_name, branchId);
         if (!product) {
             throw AppError.notFound("สินค้า");
         }
@@ -47,6 +52,10 @@ export class ProductsController {
     });
 
     create = catchAsync(async (req: Request, res: Response) => {
+        const branchId = getBranchId(req as any);
+        if (branchId && !req.body.branch_id) {
+            req.body.branch_id = branchId;
+        }
         const product = await this.productsService.create(req.body);
         return ApiResponses.created(res, product);
     });

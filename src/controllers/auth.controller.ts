@@ -14,7 +14,7 @@ export class AuthController {
         try {
             const user = await userRepository.findOne({
                 where: { username },
-                relations: ["roles"]
+                relations: ["roles", "branch"]
             });
 
             if (!user) {
@@ -72,7 +72,16 @@ export class AuthController {
                     id: user.id,
                     username: user.username,
                     role: user.roles.roles_name,
-                    display_name: user.roles.display_name
+                    display_name: user.roles.display_name,
+                    branch_id: user.branch_id,
+                    branch: user.branch ? {
+                        id: user.branch.id,
+                        branch_name: user.branch.branch_name,
+                        branch_code: user.branch.branch_code,
+                        address: user.branch.address,
+                        phone: user.branch.phone,
+                        is_active: user.branch.is_active
+                    } : undefined
                 }
             });
 
@@ -136,7 +145,16 @@ export class AuthController {
             role: user.roles ? user.roles.roles_name : "unknown",
             display_name: user.roles ? user.roles.display_name : user.username,
             is_active: user.is_active,
-            is_use: user.is_use
+            is_use: user.is_use,
+            branch_id: user.branch_id,
+            branch: user.branch ? {
+                id: user.branch.id,
+                branch_name: user.branch.branch_name,
+                branch_code: user.branch.branch_code,
+                address: user.branch.address,
+                phone: user.branch.phone,
+                is_active: user.branch.is_active
+            } : undefined
         });
     }
 }

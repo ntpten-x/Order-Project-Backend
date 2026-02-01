@@ -6,25 +6,25 @@ export class CategoryService {
     private socketService = SocketService.getInstance();
     constructor(private categoryModel: CategoryModels) { }
 
-    async findAll(): Promise<Category[]> {
+    async findAll(branchId?: string): Promise<Category[]> {
         try {
-            return this.categoryModel.findAll()
+            return this.categoryModel.findAll(branchId)
         } catch (error) {
             throw error
         }
     }
 
-    async findOne(id: string): Promise<Category | null> {
+    async findOne(id: string, branchId?: string): Promise<Category | null> {
         try {
-            return this.categoryModel.findOne(id)
+            return this.categoryModel.findOne(id, branchId)
         } catch (error) {
             throw error
         }
     }
 
-    async findOneByName(category_name: string): Promise<Category | null> {
+    async findOneByName(category_name: string, branchId?: string): Promise<Category | null> {
         try {
-            return this.categoryModel.findOneByName(category_name)
+            return this.categoryModel.findOneByName(category_name, branchId)
         } catch (error) {
             throw error
         }
@@ -32,6 +32,13 @@ export class CategoryService {
 
     async create(category: Category): Promise<Category> {
         try {
+            // Check for duplicate name within the same branch
+            if (category.category_name && category.branch_id) {
+                const existing = await this.categoryModel.findOneByName(category.category_name, category.branch_id);
+                if (existing) {
+                    throw new Error("ชื่อหมวดหมู่นี้มีอยู่ในระบบแล้ว");
+                }
+            }
             const savedCategory = await this.categoryModel.create(category)
             const createdCategory = await this.categoryModel.findOne(savedCategory.id)
             if (createdCategory) {

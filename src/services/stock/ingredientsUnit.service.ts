@@ -7,25 +7,25 @@ export class IngredientsUnitService {
 
     constructor(private ingredientsUnitModel: IngredientsUnitModel) { }
 
-    async findAll(filters?: { is_active?: boolean }): Promise<IngredientsUnit[]> {
+    async findAll(filters?: { is_active?: boolean }, branchId?: string): Promise<IngredientsUnit[]> {
         try {
-            return this.ingredientsUnitModel.findAll(filters)
+            return this.ingredientsUnitModel.findAll(filters, branchId)
         } catch (error) {
             throw error
         }
     }
 
-    async findOne(id: string): Promise<IngredientsUnit | null> {
+    async findOne(id: string, branchId?: string): Promise<IngredientsUnit | null> {
         try {
-            return this.ingredientsUnitModel.findOne(id)
+            return this.ingredientsUnitModel.findOne(id, branchId)
         } catch (error) {
             throw error
         }
     }
 
-    async findOneByUnitName(unit_name: string): Promise<IngredientsUnit | null> {
+    async findOneByUnitName(unit_name: string, branchId?: string): Promise<IngredientsUnit | null> {
         try {
-            return this.ingredientsUnitModel.findOneByUnitName(unit_name)
+            return this.ingredientsUnitModel.findOneByUnitName(unit_name, branchId)
         } catch (error) {
             throw error
         }
@@ -33,6 +33,14 @@ export class IngredientsUnitService {
 
     async create(ingredientsUnit: IngredientsUnit): Promise<IngredientsUnit> {
         try {
+            // Check for duplicate name within the same branch
+            if (ingredientsUnit.unit_name && ingredientsUnit.branch_id) {
+                const existing = await this.ingredientsUnitModel.findOneByUnitName(ingredientsUnit.unit_name, ingredientsUnit.branch_id);
+                if (existing) {
+                    throw new Error("ชื่อหน่วยนับนี้มีอยู่ในระบบแล้ว");
+                }
+            }
+            
             // @ts-ignore - model returns {id} essentially
             const savedIngredientsUnit = await this.ingredientsUnitModel.create(ingredientsUnit)
             const createdIngredientsUnit = await this.ingredientsUnitModel.findOne(savedIngredientsUnit.id)

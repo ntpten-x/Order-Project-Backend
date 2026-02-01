@@ -6,6 +6,7 @@ import { withCache, cacheKey, invalidateCache, metadataCache } from "../../utils
 /**
  * Ingredients Service with Caching
  * Following supabase-postgres-best-practices: server-cache-lru
+ * Branch-based data isolation supported
  */
 export class IngredientsService {
     private socketService = SocketService.getInstance();
@@ -14,40 +15,48 @@ export class IngredientsService {
 
     constructor(private ingredientsModel: IngredientsModel) { }
 
-    async findAll(filters?: { is_active?: boolean }): Promise<Ingredients[]> {
-        const key = cacheKey(this.CACHE_PREFIX, 'list', JSON.stringify(filters || {}));
+    async findAll(filters?: { is_active?: boolean }, branchId?: string): Promise<Ingredients[]> {
+        const key = cacheKey(this.CACHE_PREFIX, 'list', JSON.stringify(filters || {}), branchId);
         
         return withCache(
             key,
-            () => this.ingredientsModel.findAll(filters),
+            () => this.ingredientsModel.findAll(filters, branchId),
             this.CACHE_TTL,
             metadataCache as any
         );
     }
 
-    async findOne(id: string): Promise<Ingredients | null> {
-        const key = cacheKey(this.CACHE_PREFIX, 'single', id);
+    async findOne(id: string, branchId?: string): Promise<Ingredients | null> {
+        const key = cacheKey(this.CACHE_PREFIX, 'single', id, branchId);
         
         return withCache(
             key,
-            () => this.ingredientsModel.findOne(id),
+            () => this.ingredientsModel.findOne(id, branchId),
             this.CACHE_TTL,
             metadataCache as any
         );
     }
 
-    async findOneByName(ingredient_name: string): Promise<Ingredients | null> {
-        const key = cacheKey(this.CACHE_PREFIX, 'name', ingredient_name);
+    async findOneByName(ingredient_name: string, branchId?: string): Promise<Ingredients | null> {
+        const key = cacheKey(this.CACHE_PREFIX, 'name', ingredient_name, branchId);
         
         return withCache(
             key,
-            () => this.ingredientsModel.findOneByName(ingredient_name),
+            () => this.ingredientsModel.findOneByName(ingredient_name, branchId),
             this.CACHE_TTL,
             metadataCache as any
         );
     }
 
     async create(ingredients: Ingredients): Promise<Ingredients> {
+        // Check for duplicate name within the same branch
+        if (ingredients.ingredient_name && ingredients.branch_id) {
+            const existing = await this.ingredientsModel.findOneByName(ingredients.ingredient_name, ingredients.branch_id);
+            if (existing) {
+                throw new Error("ชื่อวัตถุดิบนี้มีอยู่ในระบบแล้ว");
+            }
+        }
+        
         const savedIngredients = await this.ingredientsModel.create(ingredients);
         const createdIngredients = await this.ingredientsModel.findOne(savedIngredients.id);
         

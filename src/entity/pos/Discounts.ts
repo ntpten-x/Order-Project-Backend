@@ -1,4 +1,5 @@
-import { Column, Entity, PrimaryGeneratedColumn } from "typeorm"
+import { Column, Entity, PrimaryGeneratedColumn, Index, ManyToOne, JoinColumn } from "typeorm"
+import { Branch } from "../Branch"
 
 export enum DiscountType {
     Fixed = "Fixed",        // ลดเป็นจำนวนเงินคงที่ (บาท)
@@ -6,15 +7,25 @@ export enum DiscountType {
 }
 
 @Entity()
+@Index(["discount_name", "branch_id"], { unique: true })
+@Index(["display_name", "branch_id"], { unique: true })
 export class Discounts {
     @PrimaryGeneratedColumn("uuid")
     id!: string // รหัสส่วนลด
 
-    @Column({ type: "varchar", length: 100, unique: true })
+    @Column({ type: "varchar", length: 100 })
     discount_name!: string // ชื่อส่วนลด (สำหรับระบบ)
 
-    @Column({ type: "varchar", length: 100, unique: true })
+    @Column({ type: "varchar", length: 100 })
     display_name!: string // ชื่อส่วนลดที่แสดงให้ลูกค้าเห็น
+
+    @Index()
+    @Column({ name: "branch_id", type: "uuid", nullable: true })
+    branch_id?: string
+
+    @ManyToOne(() => Branch)
+    @JoinColumn({ name: "branch_id" })
+    branch?: Branch
 
     @Column({ type: "text", nullable: true })
     description?: string // รายละเอียดเงื่อนไข

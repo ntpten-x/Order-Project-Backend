@@ -31,11 +31,11 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
         }
         const decoded: any = jwt.verify(token, secret);
 
-        // 3. Attach user to request
+        // 3. Attach user to request (including branch relation for branch-based filtering)
         const userRepository = AppDataSource.getRepository(Users);
         const user = await userRepository.findOne({
             where: { id: decoded.id },
-            relations: ["roles"]
+            relations: ["roles", "branch"]
         });
 
         if (!user) {

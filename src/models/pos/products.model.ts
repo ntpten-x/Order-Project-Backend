@@ -23,25 +23,26 @@ export class ProductsModels {
 
     /**
      * Find all products with pagination, filtering, and search
-     * Uses indexed columns: category_id, product_name, is_active
+     * Uses indexed columns: category_id, product_name, is_active, branch_id
      */
     async findAll(
         page: number = 1,
         limit: number = 50,
         category_id?: string,
         q?: string,
-        is_active?: boolean
+        is_active?: boolean,
+        branchId?: string
     ): Promise<PaginatedResult<Products>> {
-        const key = cacheKey(this.CACHE_PREFIX, 'list', page, limit, category_id, q, is_active);
+        const key = cacheKey(this.CACHE_PREFIX, 'list', page, limit, category_id, q, is_active, branchId);
         
         // Skip cache if search query exists (too many variants)
         if (q?.trim()) {
-            return this.findAllQuery(page, limit, category_id, q, is_active);
+            return this.findAllQuery(page, limit, category_id, q, is_active, branchId);
         }
         
         return withCache(
             key,
-            () => this.findAllQuery(page, limit, category_id, q, is_active),
+            () => this.findAllQuery(page, limit, category_id, q, is_active, branchId),
             this.CACHE_TTL,
             queryCache as any
         );
@@ -52,12 +53,18 @@ export class ProductsModels {
         limit: number,
         category_id?: string,
         q?: string,
-        is_active?: boolean
+        is_active?: boolean,
+        branchId?: string
     ): Promise<PaginatedResult<Products>> {
         let query = this.productsRepository.createQueryBuilder("products")
             .leftJoinAndSelect("products.category", "category")
             .leftJoinAndSelect("products.unit", "unit")
             .orderBy("products.create_date", "ASC");
+
+        // Filter by branch_id for data isolation
+        if (branchId) {
+            query.andWhere("products.branch_id = :branchId", { branchId });
+        }
 
         // Use indexed category_id filter
         query = addFilterCondition(query, category_id, "category_id", "products");
@@ -80,16 +87,23 @@ export class ProductsModels {
      * Find single product by ID
      * ID is primary key (indexed)
      */
-    async findOne(id: string): Promise<Products | null> {
-        const key = cacheKey(this.CACHE_PREFIX, 'single', id);
+    async findOne(id: string, branchId?: string): Promise<Products | null> {
+        const key = cacheKey(this.CACHE_PREFIX, 'single', id, branchId);
         
         return withCache(
             key,
-            () => this.productsRepository.createQueryBuilder("products")
-                .leftJoinAndSelect("products.category", "category")
-                .leftJoinAndSelect("products.unit", "unit")
-                .where("products.id = :id", { id })
-                .getOne(),
+            () => {
+                const query = this.productsRepository.createQueryBuilder("products")
+                    .leftJoinAndSelect("products.category", "category")
+                    .leftJoinAndSelect("products.unit", "unit")
+                    .where("products.id = :id", { id });
+                
+                if (branchId) {
+                    query.andWhere("products.branch_id = :branchId", { branchId });
+                }
+                
+                return query.getOne();
+            },
             this.CACHE_TTL,
             queryCache as any
         );
@@ -99,16 +113,23 @@ export class ProductsModels {
      * Find product by name
      * Uses indexed product_name column
      */
-    async findOneByName(product_name: string): Promise<Products | null> {
-        const key = cacheKey(this.CACHE_PREFIX, 'name', product_name);
+    async findOneByName(product_name: string, branchId?: string): Promise<Products | null> {
+        const key = cacheKey(this.CACHE_PREFIX, 'name', product_name, branchId);
         
         return withCache(
             key,
-            () => this.productsRepository.createQueryBuilder("products")
-                .leftJoinAndSelect("products.category", "category")
-                .leftJoinAndSelect("products.unit", "unit")
-                .where("products.product_name = :product_name", { product_name })
-                .getOne(),
+            () => {
+                const query = this.productsRepository.createQueryBuilder("products")
+                    .leftJoinAndSelect("products.category", "category")
+                    .leftJoinAndSelect("products.unit", "unit")
+                    .where("products.product_name = :product_name", { product_name });
+                
+                if (branchId) {
+                    query.andWhere("products.branch_id = :branchId", { branchId });
+                }
+                
+                return query.getOne();
+            },
             this.CACHE_TTL,
             queryCache as any
         );

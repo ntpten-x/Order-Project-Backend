@@ -7,25 +7,25 @@ export class PaymentMethodService {
 
     constructor(private paymentMethodModel: PaymentMethodModels) { }
 
-    async findAll(page: number, limit: number, q?: string): Promise<{ data: PaymentMethod[], total: number, page: number, last_page: number }> {
+    async findAll(page: number, limit: number, q?: string, branchId?: string): Promise<{ data: PaymentMethod[], total: number, page: number, last_page: number }> {
         try {
-            return this.paymentMethodModel.findAll(page, limit, q)
+            return this.paymentMethodModel.findAll(page, limit, q, branchId)
         } catch (error) {
             throw error
         }
     }
 
-    async findOne(id: string): Promise<PaymentMethod | null> {
+    async findOne(id: string, branchId?: string): Promise<PaymentMethod | null> {
         try {
-            return this.paymentMethodModel.findOne(id)
+            return this.paymentMethodModel.findOne(id, branchId)
         } catch (error) {
             throw error
         }
     }
 
-    async findOneByName(payment_method_name: string): Promise<PaymentMethod | null> {
+    async findOneByName(payment_method_name: string, branchId?: string): Promise<PaymentMethod | null> {
         try {
-            return this.paymentMethodModel.findOneByName(payment_method_name)
+            return this.paymentMethodModel.findOneByName(payment_method_name, branchId)
         } catch (error) {
             throw error
         }
@@ -37,7 +37,7 @@ export class PaymentMethodService {
                 throw new Error("กรุณาระบุชื่อวิธีการชำระเงิน")
             }
 
-            const existingPaymentMethod = await this.paymentMethodModel.findOneByName(paymentMethod.payment_method_name)
+            const existingPaymentMethod = await this.paymentMethodModel.findOneByName(paymentMethod.payment_method_name, paymentMethod.branch_id)
             if (existingPaymentMethod) {
                 throw new Error("ชื่อวิธีการชำระเงินนี้มีอยู่ในระบบแล้ว")
             }
@@ -58,7 +58,7 @@ export class PaymentMethodService {
             }
 
             if (paymentMethod.payment_method_name && paymentMethod.payment_method_name !== paymentMethodToUpdate.payment_method_name) {
-                const existingPaymentMethod = await this.paymentMethodModel.findOneByName(paymentMethod.payment_method_name)
+                const existingPaymentMethod = await this.paymentMethodModel.findOneByName(paymentMethod.payment_method_name, paymentMethod.branch_id || paymentMethodToUpdate.branch_id)
                 if (existingPaymentMethod) {
                     throw new Error("ชื่อวิธีการชำระเงินนี้มีอยู่ในระบบแล้ว")
                 }

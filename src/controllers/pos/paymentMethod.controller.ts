@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { PaymentMethodService } from "../../services/pos/paymentMethod.service";
+import { getBranchId } from "../../middleware/branch.middleware";
 
 export class PaymentMethodController {
     constructor(private paymentMethodService: PaymentMethodService) { }
@@ -10,8 +11,9 @@ export class PaymentMethodController {
             const rawLimit = parseInt(req.query.limit as string);
             const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
             const q = (req.query.q as string | undefined) || undefined;
+            const branchId = getBranchId(req as any);
 
-            const paymentMethods = await this.paymentMethodService.findAll(page, limit, q)
+            const paymentMethods = await this.paymentMethodService.findAll(page, limit, q, branchId)
             res.status(200).json(paymentMethods)
         } catch (error: any) {
             res.status(500).json({ error: error.message })
@@ -20,7 +22,8 @@ export class PaymentMethodController {
 
     findOne = async (req: Request, res: Response) => {
         try {
-            const paymentMethod = await this.paymentMethodService.findOne(req.params.id)
+            const branchId = getBranchId(req as any);
+            const paymentMethod = await this.paymentMethodService.findOne(req.params.id, branchId)
             res.status(200).json(paymentMethod)
         } catch (error: any) {
             res.status(500).json({ error: error.message })
@@ -29,7 +32,8 @@ export class PaymentMethodController {
 
     findByName = async (req: Request, res: Response) => {
         try {
-            const paymentMethod = await this.paymentMethodService.findOneByName(req.params.name)
+            const branchId = getBranchId(req as any);
+            const paymentMethod = await this.paymentMethodService.findOneByName(req.params.name, branchId)
             res.status(200).json(paymentMethod)
         } catch (error: any) {
             res.status(500).json({ error: error.message })
@@ -38,6 +42,10 @@ export class PaymentMethodController {
 
     create = async (req: Request, res: Response) => {
         try {
+            const branchId = getBranchId(req as any);
+            if (branchId && !req.body.branch_id) {
+                req.body.branch_id = branchId;
+            }
             const paymentMethod = await this.paymentMethodService.create(req.body)
             res.status(201).json(paymentMethod)
         } catch (error: any) {

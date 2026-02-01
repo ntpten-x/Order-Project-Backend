@@ -1,8 +1,8 @@
 import { Column, Entity, PrimaryGeneratedColumn, ManyToOne, JoinColumn, OneToMany, Index } from "typeorm";
 import { SalesOrder } from "./SalesOrder";
 import { PaymentMethod } from "./PaymentMethod";
-
 import { Shifts } from "./Shifts";
+import { Branch } from "../Branch";
 
 export enum PaymentStatus {
     Pending = "Pending",    // รอชำระ
@@ -54,5 +54,11 @@ export class Payments {
     @Column({ type: "timestamptz", default: () => "CURRENT_TIMESTAMP" })
     payment_date!: Date; // วันที่และเวลาชำระเงิน
 
+    @Index()
+    @Column({ name: "branch_id", type: "uuid", nullable: true })
+    branch_id?: string;
 
+    @ManyToOne(() => Branch)
+    @JoinColumn({ name: "branch_id" })
+    branch?: Branch;
 }

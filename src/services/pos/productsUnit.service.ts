@@ -7,25 +7,25 @@ export class ProductsUnitService {
 
     constructor(private productsUnitModel: ProductsUnitModels) { }
 
-    async findAll(): Promise<ProductsUnit[]> {
+    async findAll(branchId?: string): Promise<ProductsUnit[]> {
         try {
-            return this.productsUnitModel.findAll()
+            return this.productsUnitModel.findAll(branchId)
         } catch (error) {
             throw error
         }
     }
 
-    async findOne(id: string): Promise<ProductsUnit | null> {
+    async findOne(id: string, branchId?: string): Promise<ProductsUnit | null> {
         try {
-            return this.productsUnitModel.findOne(id)
+            return this.productsUnitModel.findOne(id, branchId)
         } catch (error) {
             throw error
         }
     }
 
-    async findOneByName(products_unit_name: string): Promise<ProductsUnit | null> {
+    async findOneByName(products_unit_name: string, branchId?: string): Promise<ProductsUnit | null> {
         try {
-            return this.productsUnitModel.findOneByName(products_unit_name)
+            return this.productsUnitModel.findOneByName(products_unit_name, branchId)
         } catch (error) {
             throw error
         }
@@ -33,7 +33,7 @@ export class ProductsUnitService {
 
     async create(productsUnit: ProductsUnit): Promise<ProductsUnit> {
         try {
-            const findProductsUnit = await this.productsUnitModel.findOneByName(productsUnit.unit_name)
+            const findProductsUnit = await this.productsUnitModel.findOneByName(productsUnit.unit_name, productsUnit.branch_id)
             if (findProductsUnit) {
                 throw new Error("หน่วยนี้มีอยู่ในระบบแล้ว")
             }
@@ -52,7 +52,7 @@ export class ProductsUnitService {
 
     async update(id: string, productsUnit: ProductsUnit): Promise<ProductsUnit> {
         try {
-            const findProductsUnit = await this.productsUnitModel.findOneByName(productsUnit.unit_name)
+            const findProductsUnit = await this.productsUnitModel.findOneByName(productsUnit.unit_name, productsUnit.branch_id)
             if (findProductsUnit && findProductsUnit.id !== id) {
                 throw new Error("หน่วยนี้มีอยู่ในระบบแล้ว")
             }

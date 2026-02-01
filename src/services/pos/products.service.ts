@@ -7,6 +7,7 @@ import { invalidateCache } from "../../utils/cache";
  * Products Service
  * Note: Caching is handled in ProductsModel
  * This service handles cache invalidation on mutations
+ * Branch-based data isolation supported
  */
 export class ProductsService {
     private socketService = SocketService.getInstance();
@@ -18,20 +19,21 @@ export class ProductsService {
         page: number,
         limit: number,
         category_id?: string,
-        q?: string
+        q?: string,
+        branchId?: string
     ): Promise<{ data: Products[], total: number, page: number, last_page: number }> {
         // Caching is handled in ProductsModel
-        return this.productsModel.findAll(page, limit, category_id, q);
+        return this.productsModel.findAll(page, limit, category_id, q, undefined, branchId);
     }
 
-    async findOne(id: string): Promise<Products | null> {
+    async findOne(id: string, branchId?: string): Promise<Products | null> {
         // Caching is handled in ProductsModel
-        return this.productsModel.findOne(id);
+        return this.productsModel.findOne(id, branchId);
     }
 
-    async findOneByName(product_name: string): Promise<Products | null> {
+    async findOneByName(product_name: string, branchId?: string): Promise<Products | null> {
         // Caching is handled in ProductsModel
-        return this.productsModel.findOneByName(product_name);
+        return this.productsModel.findOneByName(product_name, branchId);
     }
 
     async create(products: Products): Promise<Products> {

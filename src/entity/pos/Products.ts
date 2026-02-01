@@ -1,11 +1,20 @@
 import { Column, Entity, PrimaryGeneratedColumn, ManyToOne, JoinColumn, Index } from "typeorm"
 import { Category } from "./Category"
 import { ProductsUnit } from "./ProductsUnit"
+import { Branch } from "../Branch"
 
 @Entity()
+@Index(["branch_id"])
 export class Products {
     @PrimaryGeneratedColumn("uuid")
     id!: string // รหัสสินค้า
+
+    @Column({ name: "branch_id", type: "uuid", nullable: true })
+    branch_id?: string
+
+    @ManyToOne(() => Branch)
+    @JoinColumn({ name: "branch_id" })
+    branch?: Branch
 
     @Index()
     @Column({ type: "varchar", length: 100 })

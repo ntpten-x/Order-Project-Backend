@@ -4,9 +4,14 @@ import { ProductsUnit } from "../../entity/pos/ProductsUnit";
 export class ProductsUnitModels {
     private productsUnitRepository = AppDataSource.getRepository(ProductsUnit)
 
-    async findAll(): Promise<ProductsUnit[]> {
+    async findAll(branchId?: string): Promise<ProductsUnit[]> {
         try {
+            const where: any = {};
+            if (branchId) {
+                where.branch_id = branchId;
+            }
             return this.productsUnitRepository.find({
+                where,
                 order: {
                     create_date: "ASC"
                 }
@@ -16,20 +21,28 @@ export class ProductsUnitModels {
         }
     }
 
-    async findOne(id: string): Promise<ProductsUnit | null> {
+    async findOne(id: string, branchId?: string): Promise<ProductsUnit | null> {
         try {
+            const where: any = { id };
+            if (branchId) {
+                where.branch_id = branchId;
+            }
             return this.productsUnitRepository.findOne({
-                where: { id }
+                where
             })
         } catch (error) {
             throw error
         }
     }
 
-    async findOneByName(name: string): Promise<ProductsUnit | null> {
+    async findOneByName(name: string, branchId?: string): Promise<ProductsUnit | null> {
         try {
+            const where: any = { unit_name: name };
+            if (branchId) {
+                where.branch_id = branchId;
+            }
             return this.productsUnitRepository.findOne({
-                where: { unit_name: name }
+                where
             })
         } catch (error) {
             throw error

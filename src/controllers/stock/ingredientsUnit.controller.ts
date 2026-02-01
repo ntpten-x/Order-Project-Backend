@@ -3,26 +3,31 @@ import { IngredientsUnitService } from "../../services/stock/ingredientsUnit.ser
 import { catchAsync } from "../../utils/catchAsync";
 import { AppError } from "../../utils/AppError";
 import { ApiResponses } from "../../utils/ApiResponse";
+import { getBranchId } from "../../middleware/branch.middleware";
 
 /**
  * Ingredients Unit Controller
  * Following supabase-postgres-best-practices:
  * - Standardized API responses
  * - Consistent error handling
+ * - Branch-based data isolation
  */
 export class IngredientsUnitController {
     constructor(private ingredientsUnitService: IngredientsUnitService) { }
 
     findAll = catchAsync(async (req: Request, res: Response) => {
         const active = req.query.active === 'true' ? true : req.query.active === 'false' ? false : undefined;
+        const branchId = getBranchId(req as any);
         const ingredientsUnit = await this.ingredientsUnitService.findAll(
-            active !== undefined ? { is_active: active } : undefined
+            active !== undefined ? { is_active: active } : undefined,
+            branchId
         );
         return ApiResponses.ok(res, ingredientsUnit);
     });
 
     findOne = catchAsync(async (req: Request, res: Response) => {
-        const ingredientsUnit = await this.ingredientsUnitService.findOne(req.params.id);
+        const branchId = getBranchId(req as any);
+        const ingredientsUnit = await this.ingredientsUnitService.findOne(req.params.id, branchId);
         if (!ingredientsUnit) {
             throw AppError.notFound("หน่วยนับวัตถุดิบ");
         }
@@ -30,7 +35,8 @@ export class IngredientsUnitController {
     });
 
     findOneByUnitName = catchAsync(async (req: Request, res: Response) => {
-        const ingredientsUnit = await this.ingredientsUnitService.findOneByUnitName(req.params.unit_name);
+        const branchId = getBranchId(req as any);
+        const ingredientsUnit = await this.ingredientsUnitService.findOneByUnitName(req.params.unit_name, branchId);
         if (!ingredientsUnit) {
             throw AppError.notFound("หน่วยนับวัตถุดิบ");
         }
@@ -38,6 +44,10 @@ export class IngredientsUnitController {
     });
 
     create = catchAsync(async (req: Request, res: Response) => {
+        const branchId = getBranchId(req as any);
+        if (branchId && !req.body.branch_id) {
+            req.body.branch_id = branchId;
+        }
         const ingredientsUnit = await this.ingredientsUnitService.create(req.body);
         return ApiResponses.created(res, ingredientsUnit);
     });

@@ -7,25 +7,25 @@ export class DeliveryService {
 
     constructor(private deliveryModel: DeliveryModels) { }
 
-    async findAll(page: number, limit: number, q?: string): Promise<{ data: Delivery[], total: number, page: number, last_page: number }> {
+    async findAll(page: number, limit: number, q?: string, branchId?: string): Promise<{ data: Delivery[], total: number, page: number, last_page: number }> {
         try {
-            return this.deliveryModel.findAll(page, limit, q)
+            return this.deliveryModel.findAll(page, limit, q, branchId)
         } catch (error) {
             throw error
         }
     }
 
-    async findOne(id: string): Promise<Delivery | null> {
+    async findOne(id: string, branchId?: string): Promise<Delivery | null> {
         try {
-            return this.deliveryModel.findOne(id)
+            return this.deliveryModel.findOne(id, branchId)
         } catch (error) {
             throw error
         }
     }
 
-    async findOneByName(delivery_name: string): Promise<Delivery | null> {
+    async findOneByName(delivery_name: string, branchId?: string): Promise<Delivery | null> {
         try {
-            return this.deliveryModel.findOneByName(delivery_name)
+            return this.deliveryModel.findOneByName(delivery_name, branchId)
         } catch (error) {
             throw error
         }
@@ -37,7 +37,7 @@ export class DeliveryService {
                 throw new Error("กรุณาระบุชื่อบริการส่ง")
             }
 
-            const existingDelivery = await this.deliveryModel.findOneByName(delivery.delivery_name)
+            const existingDelivery = await this.deliveryModel.findOneByName(delivery.delivery_name, delivery.branch_id)
             if (existingDelivery) {
                 throw new Error("ชื่อบริการส่งนี้มีอยู่ในระบบแล้ว")
             }
@@ -58,7 +58,7 @@ export class DeliveryService {
             }
 
             if (delivery.delivery_name && delivery.delivery_name !== deliveryToUpdate.delivery_name) {
-                const existingDelivery = await this.deliveryModel.findOneByName(delivery.delivery_name)
+                const existingDelivery = await this.deliveryModel.findOneByName(delivery.delivery_name, delivery.branch_id || deliveryToUpdate.branch_id)
                 if (existingDelivery) {
                     throw new Error("ชื่อบริการส่งนี้มีอยู่ในระบบแล้ว")
                 }
