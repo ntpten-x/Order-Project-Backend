@@ -13,6 +13,8 @@ import rateLimit from "express-rate-limit";
 import csurf from "csurf";
 import compression from "compression";
 import { randomBytes } from "crypto";
+import { apiLimiter, authLimiter, orderCreateLimiter, paymentLimiter } from "./src/middleware/rateLimit.middleware";
+import { sanitizeObject } from "./src/utils/sanitize";
 import ingredientsUnitStockRouter from "./src/routes/stock/ingredientsUnit.route";
 import ingredientsStockRouter from "./src/routes/stock/ingredients.route";
 import ordersStockRouter from "./src/routes/stock/orders.route";
@@ -37,6 +39,7 @@ import dashboardRouter from "./src/routes/pos/dashboard.route";
 import branchRouter from "./src/routes/branch.route";
 import { globalErrorHandler } from "./src/middleware/error.middleware";
 import { AppError } from "./src/utils/AppError";
+import { performanceMonitoring, errorTracking } from "./src/middleware/monitoring.middleware";
 
 const app = express();
 const httpServer = createServer(app); // Wrap express with HTTP server
@@ -48,6 +51,9 @@ const enablePerfLogs = process.env.ENABLE_PERF_LOG === "true" || process.env.NOD
 app.set("trust proxy", 1);
 // Reduce information leakage
 app.disable("x-powered-by");
+
+// Performance monitoring (always enabled)
+app.use(performanceMonitoring);
 
 // Basic performance logging (disabled in prod unless ENABLE_PERF_LOG=true)
 if (enablePerfLogs) {
@@ -81,23 +87,11 @@ app.use(helmet());
 app.use(cookieParser());
 app.use(compression());
 
-// Rate Limiting
-const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 1000, // limit each IP to 1000 requests per windowMs
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: "Too many requests from this IP, please try again after 15 minutes"
-});
-const loginLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 20, // tighter limit for auth brute-force
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: "Too many login attempts, please try again shortly"
-});
-app.use(limiter);
-app.use("/auth/login", loginLimiter);
+// Rate Limiting - Enhanced with specific limiters
+app.use(apiLimiter);
+app.use("/auth/login", authLimiter);
+app.use("/pos/orders", orderCreateLimiter); // Stricter limit for order creation
+app.use("/pos/payments", paymentLimiter); // Stricter limit for payments
 
 // CORS
 // Update origin to match your frontend URL.
@@ -118,6 +112,19 @@ app.use(cors({
 
 app.use(express.json({ limit: `${bodyLimitMb}mb` }));
 app.use(express.urlencoded({ limit: `${bodyLimitMb}mb`, extended: true }));
+
+// Input Sanitization Middleware
+app.use((req, res, next) => {
+    // Sanitize request body
+    if (req.body && typeof req.body === 'object') {
+        req.body = sanitizeObject(req.body);
+    }
+    // Sanitize query parameters
+    if (req.query && typeof req.query === 'object') {
+        req.query = sanitizeObject(req.query as any);
+    }
+    next();
+});
 
 // Initialize Socket.IO
 const io = new Server(httpServer, {
@@ -211,6 +218,9 @@ app.use("/branches", branchRouter);
 app.use((req, res, next) => {
     next(new AppError(`Can't find ${req.originalUrl} on this server!`, 404));
 });
+
+// Error Tracking Middleware (before global error handler)
+app.use(errorTracking);
 
 // Global Error Handler
 app.use(globalErrorHandler);

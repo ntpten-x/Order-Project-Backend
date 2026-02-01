@@ -82,9 +82,13 @@ export class SocketService {
         this.io.on('connection', async (socket) => {
             const user = (socket as any).user as Users;
             const userId = user.id;
+            const branchId = user.branch_id;
 
-            // Join a room with the user's ID
+            // Join rooms: user-specific and branch-specific
             await socket.join(userId);
+            if (branchId) {
+                await socket.join(`branch:${branchId}`);
+            }
 
             // Count sockets in this room
             const sockets = await this.io?.in(userId).fetchSockets();
@@ -98,12 +102,22 @@ export class SocketService {
                 this.emit('users:update-status', { id: userId, is_active: true });
             }
 
-            socket.on('disconnect', async () => {
+            // Handle reconnection
+            socket.on('reconnect', async (attemptNumber) => {
+                console.log(`User reconnected: ${user.username} (${userId}). Attempt: ${attemptNumber}`);
+                // Rejoin rooms on reconnect
+                await socket.join(userId);
+                if (branchId) {
+                    await socket.join(`branch:${branchId}`);
+                }
+            });
+
+            socket.on('disconnect', async (reason) => {
                 // Check remaining sockets in the room
                 const sockets = await this.io?.in(userId).fetchSockets();
                 const count = sockets?.length || 0;
 
-                console.log(`User disconnected: ${user.username} (${userId}). Remaining connections: ${count}`);
+                console.log(`User disconnected: ${user.username} (${userId}). Reason: ${reason}. Remaining connections: ${count}`);
 
                 if (count === 0) {
                     await this.updateUserStatus(userId, false);
@@ -124,9 +138,47 @@ export class SocketService {
         }
     }
 
+    /**
+     * Emit event to all connected clients
+     */
     public emit(event: string, data: any): void {
         if (this.io) {
             this.io.emit(event, data);
+        } else {
+            console.warn("Socket.IO not initialized! Event missed:", event);
+        }
+    }
+
+    /**
+     * Emit event to a specific user
+     */
+    public emitToUser(userId: string, event: string, data: any): void {
+        if (this.io) {
+            this.io.to(userId).emit(event, data);
+        } else {
+            console.warn("Socket.IO not initialized! Event missed:", event);
+        }
+    }
+
+    /**
+     * Emit event to all users in a specific branch (room-based broadcasting)
+     */
+    public emitToBranch(branchId: string, event: string, data: any): void {
+        if (this.io) {
+            this.io.to(`branch:${branchId}`).emit(event, data);
+        } else {
+            console.warn("Socket.IO not initialized! Event missed:", event);
+        }
+    }
+
+    /**
+     * Emit event to multiple users
+     */
+    public emitToUsers(userIds: string[], event: string, data: any): void {
+        if (this.io) {
+            userIds.forEach(userId => {
+                this.io!.to(userId).emit(event, data);
+            });
         } else {
             console.warn("Socket.IO not initialized! Event missed:", event);
         }

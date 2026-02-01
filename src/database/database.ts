@@ -29,6 +29,8 @@ import { SalesSummaryView } from "../entity/pos/views/SalesSummaryView"
 import { TopSellingItemsView } from "../entity/pos/views/TopSellingItemsView"
 
 import { Shifts } from "../entity/pos/Shifts"
+import { OrderQueue } from "../entity/pos/OrderQueue"
+import { Promotions } from "../entity/pos/Promotions"
 import * as dotenv from "dotenv"
 dotenv.config()
 const isProd = process.env.NODE_ENV === "production"
@@ -40,10 +42,14 @@ const sslOptions = useSsl
     ? { rejectUnauthorized: process.env.DATABASE_SSL_REJECT_UNAUTHORIZED === "true" }
     : false
 
-const poolSize = Number(process.env.DATABASE_POOL_MAX || 10)
+// Enhanced Database Connection Pooling Configuration
+const poolSize = Number(process.env.DATABASE_POOL_MAX || 20) // Increased default pool size
+const minPoolSize = Number(process.env.DATABASE_POOL_MIN || 5) // Minimum connections
 const connectionTimeoutMillis = Number(process.env.DATABASE_CONNECTION_TIMEOUT_MS || 30000)
 const statementTimeout = Number(process.env.STATEMENT_TIMEOUT_MS || 30000)
+const idleTimeoutMillis = Number(process.env.DATABASE_IDLE_TIMEOUT_MS || 30000) // Close idle connections after 30s
 const migrationsDir = path.join(__dirname, "../migrations/*.{ts,js}")
+
 export const AppDataSource = new DataSource({
     type: "postgres",
     host: process.env.DATABASE_HOST,
@@ -51,7 +57,7 @@ export const AppDataSource = new DataSource({
     username: process.env.DATABASE_USER,
     password: process.env.DATABASE_PASSWORD,
     database: process.env.DATABASE_NAME,
-    entities: [Users, Roles, Branch, IngredientsUnit, Ingredients, PurchaseOrder, StockOrdersItem, StockOrdersDetail, SalesOrder, SalesOrderItem, SalesOrderDetail, Category, Products, ProductsUnit, Tables, Delivery, Discounts, Payments, PaymentMethod, Shifts, ShopProfile, ShopPaymentAccount, SalesSummaryView, TopSellingItemsView],
+    entities: [Users, Roles, Branch, IngredientsUnit, Ingredients, PurchaseOrder, StockOrdersItem, StockOrdersDetail, SalesOrder, SalesOrderItem, SalesOrderDetail, Category, Products, ProductsUnit, Tables, Delivery, Discounts, Payments, PaymentMethod, Shifts, ShopProfile, ShopPaymentAccount, SalesSummaryView, TopSellingItemsView, OrderQueue, Promotions],
     synchronize: synchronize as boolean,
     logging: isProd ? ["error"] : true,
     ssl: sslOptions,
@@ -59,9 +65,37 @@ export const AppDataSource = new DataSource({
     poolSize,
     extra: {
         max: poolSize,
+        min: minPoolSize,
         connectionTimeoutMillis,
+        idleTimeoutMillis,
         statement_timeout: statementTimeout,
-        application_name: "order-project-backend"
+        application_name: "order-project-backend",
+        // Connection pool optimization
+        keepAlive: true,
+        keepAliveInitialDelayMillis: 10000,
+        // Query optimization
+        query_timeout: statementTimeout,
+        // Connection retry
+        retry: {
+            max: 3,
+            match: [
+                /ETIMEDOUT/,
+                /EHOSTUNREACH/,
+                /ECONNRESET/,
+                /ECONNREFUSED/,
+                /ETIMEDOUT/,
+                /ESOCKETTIMEDOUT/,
+                /EHOSTUNREACH/,
+                /EPIPE/,
+                /EAI_AGAIN/,
+                /SequelizeConnectionError/,
+                /SequelizeConnectionRefusedError/,
+                /SequelizeHostNotFoundError/,
+                /SequelizeHostNotReachableError/,
+                /SequelizeInvalidConnectionError/,
+                /SequelizeConnectionTimedOutError/
+            ]
+        }
     }
 })
 

@@ -4,12 +4,14 @@ import { Users } from "../entity/Users";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { AuthRequest } from "../middleware/auth.middleware";
+import { securityLogger, getClientIp } from "../utils/securityLogger";
 
 export class AuthController {
 
     static async login(req: Request, res: Response) {
         const { username, password } = req.body;
         const userRepository = AppDataSource.getRepository(Users);
+        const ip = getClientIp(req);
 
         try {
             const user = await userRepository.findOne({
@@ -18,11 +20,28 @@ export class AuthController {
             });
 
             if (!user) {
+                securityLogger.log({
+                    type: 'AUTH_FAILURE',
+                    ip,
+                    userAgent: req.headers['user-agent'],
+                    path: req.path,
+                    method: req.method,
+                    details: { reason: 'User not found', username }
+                });
                 return res.status(401).json({ message: "ไม่พบข้อมูลผู้ใช้" });
             }
 
             // Check if user is disabled
             if (user.is_use === false) {
+                securityLogger.log({
+                    type: 'UNAUTHORIZED_ACCESS',
+                    userId: user.id,
+                    ip,
+                    userAgent: req.headers['user-agent'],
+                    path: req.path,
+                    method: req.method,
+                    details: { reason: 'Account disabled' }
+                });
                 return res.status(403).json({ message: "บัญชีถูกปิด" });
             }
 
@@ -34,8 +53,32 @@ export class AuthController {
             const isMatch = await bcrypt.compare(password, user.password);
 
             if (!isMatch) {
+                securityLogger.log({
+                    type: 'AUTH_FAILURE',
+                    userId: user.id,
+                    ip,
+                    userAgent: req.headers['user-agent'],
+                    path: req.path,
+                    method: req.method,
+                    details: { reason: 'Invalid password', username }
+                });
+                
+                // Check for suspicious activity
+                securityLogger.checkSuspiciousActivity(user.id, ip);
+                
                 return res.status(401).json({ message: "ไม่พบข้อมูลผู้ใช้" });
             }
+
+            // Log successful login
+            securityLogger.log({
+                type: 'AUTH_SUCCESS',
+                userId: user.id,
+                ip,
+                userAgent: req.headers['user-agent'],
+                path: req.path,
+                method: req.method,
+                details: { username }
+            });
 
             // Generate Token
             const secret = process.env.JWT_SECRET;
