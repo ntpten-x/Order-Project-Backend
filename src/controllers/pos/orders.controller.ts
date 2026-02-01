@@ -2,6 +2,8 @@ import { Request, Response, NextFunction } from "express";
 import { OrdersService } from "../../services/pos/orders.service";
 import { catchAsync } from "../../utils/catchAsync";
 import { AppError } from "../../utils/AppError";
+import { auditLogger, AuditActionType } from "../../utils/auditLogger";
+import { getClientIp } from "../../utils/securityLogger";
 
 export class OrdersController {
     constructor(private ordersService: OrdersService) { }
@@ -66,17 +68,54 @@ export class OrdersController {
             req.body.branch_id = user.branch_id;
         }
         // Check if input has items, if so use createFullOrder
+        let order;
         if (req.body.items && Array.isArray(req.body.items) && req.body.items.length > 0) {
-            const order = await this.ordersService.createFullOrder(req.body)
-            res.status(201).json(order)
+            order = await this.ordersService.createFullOrder(req.body)
         } else {
-            const order = await this.ordersService.create(req.body)
-            res.status(201).json(order)
+            order = await this.ordersService.create(req.body)
         }
+        
+        // Audit log
+        await auditLogger.log({
+            action_type: AuditActionType.ORDER_CREATE,
+            user_id: user?.id,
+            username: user?.username,
+            ip_address: getClientIp(req),
+            user_agent: req.headers['user-agent'],
+            entity_type: 'SalesOrder',
+            entity_id: order.id,
+            branch_id: user?.branch_id,
+            new_values: { order_no: order.order_no, status: order.status, order_type: order.order_type },
+            description: `Created order ${order.order_no}`,
+            path: req.path,
+            method: req.method,
+        });
+        
+        res.status(201).json(order)
     })
 
     update = catchAsync(async (req: Request, res: Response) => {
+        const user = (req as any).user;
+        const oldOrder = await this.ordersService.findOne(req.params.id);
         const order = await this.ordersService.update(req.params.id, req.body)
+        
+        // Audit log
+        await auditLogger.log({
+            action_type: AuditActionType.ORDER_UPDATE,
+            user_id: user?.id,
+            username: user?.username,
+            ip_address: getClientIp(req),
+            user_agent: req.headers['user-agent'],
+            entity_type: 'SalesOrder',
+            entity_id: order.id,
+            branch_id: user?.branch_id,
+            old_values: oldOrder ? { status: oldOrder.status, order_no: oldOrder.order_no } : undefined,
+            new_values: { status: order.status, order_no: order.order_no },
+            description: `Updated order ${order.order_no}`,
+            path: req.path,
+            method: req.method,
+        });
+        
         res.status(200).json(order)
     })
 
@@ -95,7 +134,25 @@ export class OrdersController {
     })
 
     addItem = catchAsync(async (req: Request, res: Response) => {
+        const user = (req as any).user;
         const order = await this.ordersService.addItem(req.params.id, req.body);
+        
+        // Audit log
+        await auditLogger.log({
+            action_type: AuditActionType.ITEM_ADD,
+            user_id: user?.id,
+            username: user?.username,
+            ip_address: getClientIp(req),
+            user_agent: req.headers['user-agent'],
+            entity_type: 'SalesOrder',
+            entity_id: order.id,
+            branch_id: user?.branch_id,
+            new_values: { product_id: req.body.product_id, quantity: req.body.quantity },
+            description: `Added item to order ${order.order_no}`,
+            path: req.path,
+            method: req.method,
+        });
+        
         res.status(201).json(order);
     })
 

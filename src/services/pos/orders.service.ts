@@ -11,10 +11,15 @@ import { EntityManager, In } from "typeorm";
 import { recalculateOrderTotal } from "./orderTotals.service";
 import { AppError } from "../../utils/AppError";
 import { ShiftsService } from "./shifts.service";
+import { OrderQueueService } from "./orderQueue.service";
+import { QueuePriority, QueueStatus, OrderQueue } from "../../entity/pos/OrderQueue";
+import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../../utils/auditLogger";
+import { getClientIp } from "../../utils/securityLogger";
 
 export class OrdersService {
     private socketService = SocketService.getInstance();
     private shiftsService = new ShiftsService();
+    private queueService = new OrderQueueService();
 
     constructor(private ordersModel: OrdersModels) { }
 
@@ -193,7 +198,7 @@ export class OrdersService {
             } catch (error) {
                 throw error
             }
-        }).then((createdOrder) => {
+        }).then(async (createdOrder) => {
             // Post-transaction Side Effects
             this.socketService.emit('orders:create', createdOrder)
             if (createdOrder.table_id) {
@@ -202,6 +207,21 @@ export class OrdersService {
                     if (t) this.socketService.emit('tables:update', t)
                 })
             }
+            
+            // Auto-add to queue if order is pending
+            if (createdOrder.status === OrderStatus.Pending) {
+                try {
+                    await this.queueService.addToQueue(
+                        createdOrder.id,
+                        QueuePriority.Normal,
+                        createdOrder.branch_id
+                    );
+                } catch (error) {
+                    // Log but don't fail if queue add fails (might already be in queue)
+                    console.warn('Failed to add order to queue:', error);
+                }
+            }
+            
             return createdOrder
         })
     }
@@ -266,6 +286,21 @@ export class OrdersService {
                     const t = await tablesRepo.findOneBy({ id: fullOrder.table_id })
                     if (t) this.socketService.emit('tables:update', t)
                 }
+                
+                // Auto-add to queue if order is pending
+                if (fullOrder.status === OrderStatus.Pending) {
+                    try {
+                        await this.queueService.addToQueue(
+                            fullOrder.id,
+                            QueuePriority.Normal,
+                            fullOrder.branch_id
+                        );
+                    } catch (error) {
+                        // Log but don't fail if queue add fails (might already be in queue)
+                        console.warn('Failed to add order to queue:', error);
+                    }
+                }
+                
                 return fullOrder;
             }
             return savedOrder;
@@ -311,6 +346,25 @@ export class OrdersService {
                 await tablesRepo.update(result.table_id, { status: TableStatus.Available });
                 const t = await tablesRepo.findOneBy({ id: result.table_id });
                 if (t) this.socketService.emit('tables:update', t);
+            }
+
+            // Update queue status based on order status
+            try {
+                const queueRepo = AppDataSource.getRepository(OrderQueue);
+                const queueItem = await queueRepo.findOne({ where: { order_id: result.id } });
+                
+                if (queueItem) {
+                    if (finalStatus === OrderStatus.Cooking) {
+                        await this.queueService.updateStatus(queueItem.id, QueueStatus.Processing);
+                    } else if (finalStatus === OrderStatus.Completed || finalStatus === OrderStatus.Cancelled) {
+                        await this.queueService.updateStatus(queueItem.id, finalStatus === OrderStatus.Completed 
+                            ? QueueStatus.Completed 
+                            : QueueStatus.Cancelled);
+                    }
+                }
+            } catch (error) {
+                // Log but don't fail if queue update fails
+                console.warn('Failed to update queue status:', error);
             }
 
             this.socketService.emit('orders:update', result)

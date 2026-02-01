@@ -5,6 +5,8 @@ import { catchAsync } from "../../utils/catchAsync";
 import { AppError } from "../../utils/AppError";
 import { ApiResponses } from "../../utils/ApiResponse";
 import { AuthRequest } from "../../middleware/auth.middleware";
+import { auditLogger, AuditActionType } from "../../utils/auditLogger";
+import { getClientIp } from "../../utils/securityLogger";
 
 export class OrderQueueController {
     private queueService = new OrderQueueService();
@@ -22,6 +24,22 @@ export class OrderQueueController {
 
         const queuePriority = priority || QueuePriority.Normal;
         const queueItem = await this.queueService.addToQueue(orderId, queuePriority, branchId);
+
+        // Audit log
+        await auditLogger.log({
+            action_type: AuditActionType.QUEUE_ADD,
+            user_id: req.user?.id,
+            username: req.user?.username,
+            ip_address: getClientIp(req),
+            user_agent: req.headers['user-agent'],
+            entity_type: 'OrderQueue',
+            entity_id: queueItem.id,
+            branch_id: branchId,
+            new_values: { order_id: orderId, priority: queuePriority, status: queueItem.status },
+            description: `Added order ${orderId} to queue`,
+            path: req.path,
+            method: req.method,
+        });
 
         return ApiResponses.created(res, queueItem);
     });
@@ -49,7 +67,25 @@ export class OrderQueueController {
             throw AppError.badRequest("Invalid status");
         }
 
+        const oldQueueItem = await this.queueService.getQueue(req.user?.branch_id).then(q => q.find(item => item.id === id));
         const updated = await this.queueService.updateStatus(id, status);
+
+        // Audit log
+        await auditLogger.log({
+            action_type: AuditActionType.QUEUE_UPDATE,
+            user_id: req.user?.id,
+            username: req.user?.username,
+            ip_address: getClientIp(req),
+            user_agent: req.headers['user-agent'],
+            entity_type: 'OrderQueue',
+            entity_id: id,
+            branch_id: req.user?.branch_id,
+            old_values: oldQueueItem ? { status: oldQueueItem.status } : undefined,
+            new_values: { status },
+            description: `Updated queue status to ${status}`,
+            path: req.path,
+            method: req.method,
+        });
 
         return ApiResponses.ok(res, updated);
     });

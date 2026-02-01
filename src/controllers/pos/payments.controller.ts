@@ -3,6 +3,8 @@ import { Request, Response } from "express";
 import { PaymentsService } from "../../services/pos/payments.service";
 import { catchAsync } from "../../utils/catchAsync";
 import { AppError } from "../../utils/AppError";
+import { auditLogger, AuditActionType } from "../../utils/auditLogger";
+import { getClientIp } from "../../utils/securityLogger";
 
 export class PaymentsController {
     constructor(private paymentsService: PaymentsService) { }
@@ -26,6 +28,28 @@ export class PaymentsController {
         }
 
         const payment = await this.paymentsService.create(req.body, user.id)
+        
+        // Audit log - CRITICAL for payment tracking
+        await auditLogger.log({
+            action_type: AuditActionType.PAYMENT_CREATE,
+            user_id: user.id,
+            username: user.username,
+            ip_address: getClientIp(req),
+            user_agent: req.headers['user-agent'],
+            entity_type: 'Payments',
+            entity_id: payment.id,
+            branch_id: user.branch_id,
+            new_values: { 
+                order_id: payment.order_id, 
+                amount: payment.amount, 
+                payment_method_id: payment.payment_method_id,
+                status: payment.status 
+            },
+            description: `Created payment for order ${payment.order_id} - Amount: ${payment.amount}`,
+            path: req.path,
+            method: req.method,
+        });
+        
         res.status(201).json(payment)
     })
 
