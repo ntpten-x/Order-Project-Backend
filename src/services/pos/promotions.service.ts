@@ -224,4 +224,132 @@ export class PromotionsService {
 
         return query.getMany();
     }
+
+    /**
+     * Get all promotions (with optional filters)
+     */
+    async getAll(branchId?: string, isActive?: boolean): Promise<Promotions[]> {
+        const query = this.promotionsRepository.createQueryBuilder('promotion');
+
+        if (branchId) {
+            query.andWhere('(promotion.branch_id = :branchId OR promotion.branch_id IS NULL)', { branchId });
+        }
+
+        if (isActive !== undefined) {
+            query.andWhere('promotion.is_active = :isActive', { isActive });
+        }
+
+        return query.orderBy('promotion.create_date', 'DESC').getMany();
+    }
+
+    /**
+     * Get promotion by ID
+     */
+    async getById(id: string, branchId?: string): Promise<Promotions | null> {
+        const query = this.promotionsRepository
+            .createQueryBuilder('promotion')
+            .where('promotion.id = :id', { id });
+
+        if (branchId) {
+            query.andWhere('(promotion.branch_id = :branchId OR promotion.branch_id IS NULL)', { branchId });
+        }
+
+        return query.getOne();
+    }
+
+    /**
+     * Create new promotion
+     */
+    async create(data: Partial<Promotions>, branchId?: string): Promise<Promotions> {
+        // Check if promotion code already exists
+        const existing = await this.promotionsRepository.findOne({
+            where: {
+                promotion_code: data.promotion_code!,
+                branch_id: branchId || undefined,
+            },
+        });
+
+        if (existing) {
+            throw AppError.conflict("Promotion code already exists");
+        }
+
+        const promotion = this.promotionsRepository.create({
+            ...data,
+            branch_id: branchId || data.branch_id,
+            usage_count: 0,
+            create_date: new Date(),
+            update_date: new Date(),
+        });
+
+        const saved = await this.promotionsRepository.save(promotion);
+
+        // Emit socket event
+        this.socketService.emitToBranch(
+            branchId || '',
+            'promotions:updated',
+            saved
+        );
+
+        return saved;
+    }
+
+    /**
+     * Update promotion
+     */
+    async update(id: string, data: Partial<Promotions>, branchId?: string): Promise<Promotions | null> {
+        const promotion = await this.getById(id, branchId);
+        if (!promotion) {
+            throw AppError.notFound("Promotion not found");
+        }
+
+        // Check if promotion code is being changed and if it conflicts
+        if (data.promotion_code && data.promotion_code !== promotion.promotion_code) {
+            const existing = await this.promotionsRepository.findOne({
+                where: {
+                    promotion_code: data.promotion_code,
+                    branch_id: branchId || promotion.branch_id || undefined,
+                },
+            });
+
+            if (existing && existing.id !== id) {
+                throw AppError.conflict("Promotion code already exists");
+            }
+        }
+
+        // Update fields
+        Object.assign(promotion, {
+            ...data,
+            update_date: new Date(),
+        });
+
+        const saved = await this.promotionsRepository.save(promotion);
+
+        // Emit socket event
+        this.socketService.emitToBranch(
+            branchId || promotion.branch_id || '',
+            'promotions:updated',
+            saved
+        );
+
+        return saved;
+    }
+
+    /**
+     * Delete promotion
+     */
+    async delete(id: string, branchId?: string): Promise<void> {
+        const promotion = await this.getById(id, branchId);
+        if (!promotion) {
+            throw AppError.notFound("Promotion not found");
+        }
+
+        await this.promotionsRepository.remove(promotion);
+
+        // Emit socket event
+        this.socketService.emitToBranch(
+            branchId || promotion.branch_id || '',
+            'promotions:deleted',
+            { id }
+        );
+    }
 }
