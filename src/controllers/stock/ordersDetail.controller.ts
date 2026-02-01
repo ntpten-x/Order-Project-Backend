@@ -1,30 +1,33 @@
 import { Request, Response } from "express";
 import { OrdersDetailService } from "../../services/stock/ordersDetail.service";
-
 import { StockOrdersDetailModel } from "../../models/stock/ordersDetail.model";
+import { catchAsync } from "../../utils/catchAsync";
+import { AppError } from "../../utils/AppError";
+import { ApiResponses } from "../../utils/ApiResponse";
 
+/**
+ * Orders Detail Controller
+ * Following supabase-postgres-best-practices:
+ * - Standardized API responses
+ * - Consistent error handling
+ */
 export class OrdersDetailController {
     private ordersDetailModel = new StockOrdersDetailModel();
     private ordersDetailService = new OrdersDetailService(this.ordersDetailModel);
 
-    updatePurchase = async (req: Request, res: Response) => {
-        try {
-            const { orders_item_id, actual_quantity, purchased_by_id, is_purchased } = req.body;
+    updatePurchase = catchAsync(async (req: Request, res: Response) => {
+        const { orders_item_id, actual_quantity, purchased_by_id, is_purchased } = req.body;
 
-            if (!orders_item_id || !purchased_by_id) {
-                return res.status(400).json({ message: "ไม่พบข้อมูลสินค้า" });
-            }
-
-            const result = await this.ordersDetailService.updatePurchaseDetail(orders_item_id, {
-                actual_quantity,
-                purchased_by_id,
-                is_purchased: is_purchased ?? true // Default to true if not sent, assuming calling this API means ticking
-            });
-
-            return res.status(200).json(result);
-        } catch (error: any) {
-            console.error("เกิดข้อผิดพลาดในการยืนยันการสั่งซื้อ:", error);
-            return res.status(500).json({ message: "เกิดข้อผิดพลาดในการยืนยันการสั่งซื้อ", error: error.message });
+        if (!orders_item_id || !purchased_by_id) {
+            throw AppError.badRequest("ไม่พบข้อมูลสินค้าหรือผู้สั่งซื้อ");
         }
-    }
+
+        const result = await this.ordersDetailService.updatePurchaseDetail(orders_item_id, {
+            actual_quantity,
+            purchased_by_id,
+            is_purchased: is_purchased ?? true
+        });
+
+        return ApiResponses.ok(res, result);
+    });
 }

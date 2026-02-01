@@ -1,71 +1,75 @@
 import { Request, Response } from "express";
 import { TablesService } from "../../services/pos/tables.service";
+import { catchAsync } from "../../utils/catchAsync";
+import { AppError } from "../../utils/AppError";
+import { ApiResponses } from "../../utils/ApiResponse";
 
+/**
+ * Tables Controller
+ * Following supabase-postgres-best-practices:
+ * - Standardized API responses
+ * - Consistent error handling
+ * - Pagination support
+ */
 export class TablesController {
     constructor(private tablesService: TablesService) { }
 
-    findAll = async (req: Request, res: Response) => {
-        try {
-            const page = parseInt(req.query.page as string) || 1;
-            const rawLimit = parseInt(req.query.limit as string);
-            const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
-            const q = (req.query.q as string | undefined) || undefined;
+    findAll = catchAsync(async (req: Request, res: Response) => {
+        const page = Math.max(parseInt(req.query.page as string) || 1, 1);
+        const rawLimit = parseInt(req.query.limit as string);
+        const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
+        const q = (req.query.q as string | undefined) || undefined;
+        const branchId = (req as any).user?.branch_id;
 
-            const branchId = (req as any).user?.branch_id;
-
-            const tables = await this.tablesService.findAll(page, limit, q, branchId)
-            res.status(200).json(tables)
-        } catch (error: any) {
-            res.status(500).json({ error: error.message })
+        const result = await this.tablesService.findAll(page, limit, q, branchId);
+        
+        // Check if result has pagination structure
+        if (result.data && result.total !== undefined) {
+            return ApiResponses.paginated(res, result.data, {
+                page: result.page || page,
+                limit: limit,
+                total: result.total,
+            });
         }
-    }
+        
+        return ApiResponses.ok(res, result);
+    });
 
-    findOne = async (req: Request, res: Response) => {
-        try {
-            const table = await this.tablesService.findOne(req.params.id)
-            res.status(200).json(table)
-        } catch (error: any) {
-            res.status(500).json({ error: error.message })
+    findOne = catchAsync(async (req: Request, res: Response) => {
+        const table = await this.tablesService.findOne(req.params.id);
+        if (!table) {
+            throw AppError.notFound("โต๊ะ");
         }
-    }
+        return ApiResponses.ok(res, table);
+    });
 
-    findByName = async (req: Request, res: Response) => {
-        try {
-            const table = await this.tablesService.findOneByName(req.params.name)
-            res.status(200).json(table)
-        } catch (error: any) {
-            res.status(500).json({ error: error.message })
+    findByName = catchAsync(async (req: Request, res: Response) => {
+        const table = await this.tablesService.findOneByName(req.params.name);
+        if (!table) {
+            throw AppError.notFound("โต๊ะ");
         }
-    }
+        return ApiResponses.ok(res, table);
+    });
 
-    create = async (req: Request, res: Response) => {
-        try {
-            const branchId = (req as any).user?.branch_id;
-            if (branchId && !req.body.branch_id) {
-                req.body.branch_id = branchId;
-            }
-            const table = await this.tablesService.create(req.body)
-            res.status(201).json(table)
-        } catch (error: any) {
-            res.status(500).json({ error: error.message })
+    create = catchAsync(async (req: Request, res: Response) => {
+        const branchId = (req as any).user?.branch_id;
+        if (branchId && !req.body.branch_id) {
+            req.body.branch_id = branchId;
         }
-    }
+        const table = await this.tablesService.create(req.body);
+        return ApiResponses.created(res, table);
+    });
 
-    update = async (req: Request, res: Response) => {
-        try {
-            const table = await this.tablesService.update(req.params.id, req.body)
-            res.status(200).json(table)
-        } catch (error: any) {
-            res.status(500).json({ error: error.message })
+    update = catchAsync(async (req: Request, res: Response) => {
+        const table = await this.tablesService.update(req.params.id, req.body);
+        if (!table) {
+            throw AppError.notFound("โต๊ะ");
         }
-    }
+        return ApiResponses.ok(res, table);
+    });
 
-    delete = async (req: Request, res: Response) => {
-        try {
-            await this.tablesService.delete(req.params.id)
-            res.status(200).json({ message: "ลบข้อมูลโต๊ะสำเร็จ" })
-        } catch (error: any) {
-            res.status(500).json({ error: error.message })
-        }
-    }
+    delete = catchAsync(async (req: Request, res: Response) => {
+        await this.tablesService.delete(req.params.id);
+        return ApiResponses.ok(res, { message: "ลบข้อมูลโต๊ะสำเร็จ" });
+    });
 }

@@ -1,26 +1,28 @@
 import { AppDataSource } from "../../database/database";
 import { Ingredients } from "../../entity/stock/Ingredients";
+import { addBooleanFilter } from "../../utils/dbHelpers";
 
+/**
+ * Ingredients Model
+ * Following supabase-postgres-best-practices:
+ * - Uses dbHelpers for consistent query patterns
+ * - Optimized queries with proper joins
+ */
 export class IngredientsModel {
     private ingredientsRepository = AppDataSource.getRepository(Ingredients)
 
     async findAll(filters?: { is_active?: boolean }): Promise<Ingredients[]> {
-        try {
-            const query = this.ingredientsRepository.createQueryBuilder("ingredients")
-                .leftJoinAndSelect("ingredients.unit", "unit")
-                .orderBy("ingredients.create_date", "ASC")
+        let query = this.ingredientsRepository.createQueryBuilder("ingredients")
+            .leftJoinAndSelect("ingredients.unit", "unit")
+            .orderBy("ingredients.create_date", "ASC");
 
-            if (filters?.is_active !== undefined) {
-                query.andWhere("ingredients.is_active = :is_active", { is_active: filters.is_active })
-            }
+        // Use dbHelpers for consistent filtering
+        query = addBooleanFilter(query, filters?.is_active, "is_active", "ingredients");
 
-            // Secondary sort for consistent ordering when active ones are mixed
-            query.addOrderBy("ingredients.is_active", "DESC")
+        // Secondary sort for consistent ordering when active ones are mixed
+        query.addOrderBy("ingredients.is_active", "DESC");
 
-            return query.getMany()
-        } catch (error) {
-            throw error
-        }
+        return query.getMany();
     }
 
     async findOne(id: string): Promise<Ingredients | null> {

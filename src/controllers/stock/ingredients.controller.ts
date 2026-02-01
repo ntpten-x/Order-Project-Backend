@@ -1,61 +1,58 @@
 import { Request, Response } from "express";
 import { IngredientsService } from "../../services/stock/ingredients.service";
+import { catchAsync } from "../../utils/catchAsync";
+import { AppError } from "../../utils/AppError";
+import { ApiResponses } from "../../utils/ApiResponse";
 
+/**
+ * Ingredients Controller
+ * Following supabase-postgres-best-practices:
+ * - Standardized API responses
+ * - Consistent error handling with catchAsync
+ * - Proper error codes
+ */
 export class IngredientsController {
     constructor(private ingredientsService: IngredientsService) { }
 
-    findAll = async (req: Request, res: Response) => {
-        try {
-            const active = req.query.active === 'true' ? true : req.query.active === 'false' ? false : undefined;
-            const ingredients = await this.ingredientsService.findAll(active !== undefined ? { is_active: active } : undefined)
-            res.status(200).json(ingredients)
-        } catch (error: any) {
-            res.status(500).json({ error: error.message })
-        }
-    }
+    findAll = catchAsync(async (req: Request, res: Response) => {
+        const active = req.query.active === 'true' ? true : req.query.active === 'false' ? false : undefined;
+        const ingredients = await this.ingredientsService.findAll(
+            active !== undefined ? { is_active: active } : undefined
+        );
+        return ApiResponses.ok(res, ingredients);
+    });
 
-    findOne = async (req: Request, res: Response) => {
-        try {
-            const ingredients = await this.ingredientsService.findOne(req.params.id)
-            res.status(200).json(ingredients)
-        } catch (error: any) {
-            res.status(500).json({ error: error.message })
+    findOne = catchAsync(async (req: Request, res: Response) => {
+        const ingredient = await this.ingredientsService.findOne(req.params.id);
+        if (!ingredient) {
+            throw AppError.notFound("วัตถุดิบ");
         }
-    }
+        return ApiResponses.ok(res, ingredient);
+    });
 
-    findOneByName = async (req: Request, res: Response) => {
-        try {
-            const ingredients = await this.ingredientsService.findOneByName(req.params.ingredient_name)
-            res.status(200).json(ingredients)
-        } catch (error: any) {
-            res.status(500).json({ error: error.message })
+    findOneByName = catchAsync(async (req: Request, res: Response) => {
+        const ingredient = await this.ingredientsService.findOneByName(req.params.ingredient_name);
+        if (!ingredient) {
+            throw AppError.notFound("วัตถุดิบ");
         }
-    }
+        return ApiResponses.ok(res, ingredient);
+    });
 
-    create = async (req: Request, res: Response) => {
-        try {
-            const ingredients = await this.ingredientsService.create(req.body)
-            res.status(201).json(ingredients)
-        } catch (error: any) {
-            res.status(500).json({ error: error.message })
-        }
-    }
+    create = catchAsync(async (req: Request, res: Response) => {
+        const ingredient = await this.ingredientsService.create(req.body);
+        return ApiResponses.created(res, ingredient);
+    });
 
-    update = async (req: Request, res: Response) => {
-        try {
-            const ingredients = await this.ingredientsService.update(req.params.id, req.body)
-            res.status(200).json(ingredients)
-        } catch (error: any) {
-            res.status(500).json({ error: error.message })
+    update = catchAsync(async (req: Request, res: Response) => {
+        const ingredient = await this.ingredientsService.update(req.params.id, req.body);
+        if (!ingredient) {
+            throw AppError.notFound("วัตถุดิบ");
         }
-    }
+        return ApiResponses.ok(res, ingredient);
+    });
 
-    delete = async (req: Request, res: Response) => {
-        try {
-            await this.ingredientsService.delete(req.params.id)
-            res.status(200).json({ message: "วัตถุดิบลบสำเร็จ" })
-        } catch (error: any) {
-            res.status(500).json({ error: error.message })
-        }
-    }
+    delete = catchAsync(async (req: Request, res: Response) => {
+        await this.ingredientsService.delete(req.params.id);
+        return ApiResponses.ok(res, { message: "วัตถุดิบลบสำเร็จ" });
+    });
 }

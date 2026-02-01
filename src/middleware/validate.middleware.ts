@@ -1,6 +1,13 @@
 import { Request, Response, NextFunction } from "express";
 import { z, ZodError } from "zod";
+import { ApiResponses, ErrorCodes } from "../utils/ApiResponse";
 
+/**
+ * Validation Middleware
+ * Following supabase-postgres-best-practices:
+ * - Standardized error responses
+ * - Consistent validation error format
+ */
 export const validate = (schema: z.Schema) => (req: Request, res: Response, next: NextFunction) => {
     try {
         schema.parse({
@@ -11,14 +18,18 @@ export const validate = (schema: z.Schema) => (req: Request, res: Response, next
         next();
     } catch (error) {
         if (error instanceof ZodError) {
-            return res.status(400).json({
-                message: "Validation failed",
-                errors: error.issues.map((err: any) => ({
-                    field: err.path.join('.'),
-                    message: err.message
-                }))
-            });
+            // Format validation errors
+            const fields: Record<string, string[]> = {};
+            for (const issue of error.issues) {
+                const path = issue.path.join('.') || 'value';
+                if (!fields[path]) {
+                    fields[path] = [];
+                }
+                fields[path].push(issue.message);
+            }
+            
+            return ApiResponses.validationError(res, fields);
         }
-        return res.status(400).json({ message: "Invalid request data" });
+        return ApiResponses.badRequest(res, "Invalid request data");
     }
 };

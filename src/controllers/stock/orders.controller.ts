@@ -1,133 +1,123 @@
 import { Request, Response } from "express";
 import { OrdersService } from "../../services/stock/orders.service";
 import { PurchaseOrderStatus } from "../../entity/stock/PurchaseOrder";
-
 import { StockOrdersModel } from "../../models/stock/orders.model";
+import { catchAsync } from "../../utils/catchAsync";
+import { AppError } from "../../utils/AppError";
+import { ApiResponses } from "../../utils/ApiResponse";
 
+/**
+ * Stock Orders Controller
+ * Following supabase-postgres-best-practices:
+ * - Standardized API responses
+ * - Consistent error handling
+ * - Input validation
+ */
 export class OrdersController {
     private ordersModel = new StockOrdersModel();
     private ordersService = new OrdersService(this.ordersModel);
 
-    createOrder = async (req: Request, res: Response) => {
-        try {
-            const { ordered_by_id, items, remark } = req.body;
-            const branch_id = (req as any).user?.branch_id;
-            // Validate input
-            if (!ordered_by_id || !items || !Array.isArray(items) || items.length === 0) {
-                return res.status(400).json({ message: "ไม่พบข้อมูลการสั่งซื้อ" });
-            }
-
-            const order = await this.ordersService.createOrder(ordered_by_id, items, remark, branch_id);
-            return res.status(201).json(order);
-        } catch (error: any) {
-            console.error("Error creating order:", error);
-            return res.status(500).json({ message: "Internal server error", error: error.message });
+    createOrder = catchAsync(async (req: Request, res: Response) => {
+        const { ordered_by_id, items, remark } = req.body;
+        const branch_id = (req as any).user?.branch_id;
+        
+        // Validate input
+        if (!ordered_by_id || !items || !Array.isArray(items) || items.length === 0) {
+            throw AppError.badRequest("ไม่พบข้อมูลการสั่งซื้อ");
         }
-    }
 
-    getAllOrders = async (req: Request, res: Response) => {
-        try {
-            const statusParam = req.query.status as string;
-            const page = parseInt(req.query.page as string) || 1;
-            const limit = parseInt(req.query.limit as string) || 50;
+        const order = await this.ordersService.createOrder(ordered_by_id, items, remark, branch_id);
+        return ApiResponses.created(res, order);
+    });
 
-            let statusFilter: PurchaseOrderStatus | PurchaseOrderStatus[] | undefined;
+    getAllOrders = catchAsync(async (req: Request, res: Response) => {
+        const statusParam = req.query.status as string;
+        const page = Math.max(parseInt(req.query.page as string) || 1, 1);
+        const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 50, 1), 200);
+        
+        let statusFilter: PurchaseOrderStatus | PurchaseOrderStatus[] | undefined;
 
-            if (statusParam) {
-                const statuses = statusParam.split(',') as PurchaseOrderStatus[];
-                // Optional: Validate statuses against PurchaseOrderStatus enum
-                statusFilter = statuses.length > 1 ? statuses : statuses[0];
+        if (statusParam) {
+            const statuses = statusParam.split(',') as PurchaseOrderStatus[];
+            // Validate statuses
+            const validStatuses = statuses.filter(s => Object.values(PurchaseOrderStatus).includes(s));
+            if (validStatuses.length === 0) {
+                throw AppError.badRequest("สถานะไม่ถูกต้อง");
             }
-
-            const branch_id = (req as any).user?.branch_id;
-            const orders = await this.ordersService.getAllOrders(statusFilter ? { status: statusFilter } : undefined, page, limit, branch_id);
-            return res.status(200).json(orders);
-        } catch (error: any) {
-            console.error("Error fetching orders:", error);
-            return res.status(500).json({ message: "Internal server error", error: error.message });
+            statusFilter = validStatuses.length > 1 ? validStatuses : validStatuses[0];
         }
-    }
 
-    getOrderById = async (req: Request, res: Response) => {
-        try {
-            const { id } = req.params;
-            const order = await this.ordersService.getOrderById(id);
-            if (!order) {
-                return res.status(404).json({ message: "ไม่พบข้อมูลการสั่งซื้อ" });
-            }
-            return res.status(200).json(order);
-        } catch (error: any) {
-            console.error("Error fetching order:", error);
-            return res.status(500).json({ message: "Internal server error", error: error.message });
+        const branch_id = (req as any).user?.branch_id;
+        const result = await this.ordersService.getAllOrders(
+            statusFilter ? { status: statusFilter } : undefined, 
+            page, 
+            limit, 
+            branch_id
+        );
+        
+        return ApiResponses.paginated(res, result.data, {
+            page: result.page,
+            limit: result.limit,
+            total: result.total,
+        });
+    });
+
+    getOrderById = catchAsync(async (req: Request, res: Response) => {
+        const { id } = req.params;
+        const order = await this.ordersService.getOrderById(id);
+        if (!order) {
+            throw AppError.notFound("การสั่งซื้อ");
         }
-    }
+        return ApiResponses.ok(res, order);
+    });
 
-    updateOrder = async (req: Request, res: Response) => {
-        try {
-            const { id } = req.params;
-            const { items } = req.body;
+    updateOrder = catchAsync(async (req: Request, res: Response) => {
+        const { id } = req.params;
+        const { items } = req.body;
 
-            if (!items || !Array.isArray(items)) {
-                return res.status(400).json({ message: "ไม่พบข้อมูลสินค้า" });
-            }
-
-            const updatedOrder = await this.ordersService.updateOrder(id, items);
-            return res.status(200).json(updatedOrder);
-        } catch (error: any) {
-            console.error("Error updating order:", error);
-            return res.status(500).json({ message: "Internal server error", error: error.message });
+        if (!items || !Array.isArray(items) || items.length === 0) {
+            throw AppError.badRequest("ไม่พบข้อมูลสินค้า");
         }
-    }
 
-    updateStatus = async (req: Request, res: Response) => {
-        try {
-            const { id } = req.params;
-            const { status } = req.body;
+        const updatedOrder = await this.ordersService.updateOrder(id, items);
+        return ApiResponses.ok(res, updatedOrder);
+    });
 
-            if (!Object.values(PurchaseOrderStatus).includes(status)) {
-                return res.status(400).json({ message: "ไม่พบข้อมูลสถานะ" });
-            }
+    updateStatus = catchAsync(async (req: Request, res: Response) => {
+        const { id } = req.params;
+        const { status } = req.body;
 
-            const updatedOrder = await this.ordersService.updateStatus(id, status);
-            return res.status(200).json(updatedOrder);
-        } catch (error: any) {
-            console.error("Error updating order status:", error);
-            return res.status(500).json({ message: "Internal server error", error: error.message });
+        if (!status || !Object.values(PurchaseOrderStatus).includes(status)) {
+            throw AppError.badRequest("สถานะไม่ถูกต้อง");
         }
-    }
 
-    deleteOrder = async (req: Request, res: Response) => {
-        try {
-            const { id } = req.params;
-            await this.ordersService.deleteOrder(id);
-            return res.status(200).json({ message: "การสั่งซื้อลบสำเร็จ" });
-        } catch (error: any) {
-            console.error("Error deleting order:", error);
-            return res.status(500).json({ message: "Internal server error", error: error.message });
+        const updatedOrder = await this.ordersService.updateStatus(id, status);
+        return ApiResponses.ok(res, updatedOrder);
+    });
+
+    deleteOrder = catchAsync(async (req: Request, res: Response) => {
+        const { id } = req.params;
+        const result = await this.ordersService.deleteOrder(id);
+        if (!result || result.affected === 0) {
+            throw AppError.notFound("การสั่งซื้อ");
         }
-    }
-    confirmPurchase = async (req: Request, res: Response) => {
-        try {
-            const { id } = req.params;
-            const { items } = req.body;
-            // Assuming user id is available in req.user from auth middleware, but for now getting from body or header if not strict
-            // Adjust based on your Auth implementation. Providing default or extracting from req if available.
-            // Check if req.user exists (from middleware)
-            const purchased_by_id = (req as any).user?.userId || req.body.purchased_by_id;
+        return ApiResponses.ok(res, { message: "การสั่งซื้อลบสำเร็จ" });
+    });
 
-            if (!items || !Array.isArray(items)) {
-                return res.status(400).json({ message: "ไม่พบข้อมูลสินค้า" });
-            }
+    confirmPurchase = catchAsync(async (req: Request, res: Response) => {
+        const { id } = req.params;
+        const { items } = req.body;
+        const purchased_by_id = (req as any).user?.id || (req as any).user?.userId || req.body.purchased_by_id;
 
-            if (!purchased_by_id) {
-                return res.status(400).json({ message: "ไม่พบข้อมูลผู้สั่งซื้อ" });
-            }
-
-            const updatedOrder = await this.ordersService.confirmPurchase(id, items, purchased_by_id);
-            return res.status(200).json(updatedOrder);
-        } catch (error: any) {
-            console.error("เกิดข้อผิดพลาดในการยืนยันการสั่งซื้อ:", error);
-            return res.status(500).json({ message: "เกิดข้อผิดพลาดในการยืนยันการสั่งซื้อ", error: error.message });
+        if (!items || !Array.isArray(items) || items.length === 0) {
+            throw AppError.badRequest("ไม่พบข้อมูลสินค้า");
         }
-    }
+
+        if (!purchased_by_id) {
+            throw AppError.badRequest("ไม่พบข้อมูลผู้สั่งซื้อ");
+        }
+
+        const updatedOrder = await this.ordersService.confirmPurchase(id, items, purchased_by_id);
+        return ApiResponses.ok(res, updatedOrder);
+    });
 }

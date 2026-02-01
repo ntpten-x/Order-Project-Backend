@@ -1,66 +1,66 @@
-
 import { Request, Response } from "express";
 import { ProductsService } from "../../services/pos/products.service";
+import { catchAsync } from "../../utils/catchAsync";
+import { AppError } from "../../utils/AppError";
+import { ApiResponses } from "../../utils/ApiResponse";
 
+/**
+ * Products Controller
+ * Following supabase-postgres-best-practices:
+ * - Standardized API responses
+ * - Consistent error handling
+ * - Pagination support
+ */
 export class ProductsController {
     constructor(private productsService: ProductsService) { }
 
-    findAll = async (req: Request, res: Response) => {
-        try {
-            const page = parseInt(req.query.page as string) || 1;
-            const rawLimit = parseInt(req.query.limit as string);
-            const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
-            const category_id = req.query.category_id as string;
-            const q = (req.query.q as string | undefined) || undefined;
-            const result = await this.productsService.findAll(page, limit, category_id, q)
-            res.status(200).json(result)
-        } catch (error: any) {
-            res.status(500).json({ error: error.message })
-        }
-    }
+    findAll = catchAsync(async (req: Request, res: Response) => {
+        const page = Math.max(parseInt(req.query.page as string) || 1, 1);
+        const rawLimit = parseInt(req.query.limit as string);
+        const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
+        const category_id = req.query.category_id as string;
+        const q = (req.query.q as string | undefined) || undefined;
+        
+        const result = await this.productsService.findAll(page, limit, category_id, q);
+        
+        return ApiResponses.paginated(res, result.data, {
+            page: result.page,
+            limit: limit,
+            total: result.total,
+        });
+    });
 
-    findOne = async (req: Request, res: Response) => {
-        try {
-            const product = await this.productsService.findOne(req.params.id)
-            res.status(200).json(product)
-        } catch (error: any) {
-            res.status(500).json({ error: error.message })
+    findOne = catchAsync(async (req: Request, res: Response) => {
+        const product = await this.productsService.findOne(req.params.id);
+        if (!product) {
+            throw AppError.notFound("สินค้า");
         }
-    }
+        return ApiResponses.ok(res, product);
+    });
 
-    findOneByName = async (req: Request, res: Response) => {
-        try {
-            const product = await this.productsService.findOneByName(req.params.product_name)
-            res.status(200).json(product)
-        } catch (error: any) {
-            res.status(500).json({ error: error.message })
+    findOneByName = catchAsync(async (req: Request, res: Response) => {
+        const product = await this.productsService.findOneByName(req.params.product_name);
+        if (!product) {
+            throw AppError.notFound("สินค้า");
         }
-    }
+        return ApiResponses.ok(res, product);
+    });
 
-    create = async (req: Request, res: Response) => {
-        try {
-            const product = await this.productsService.create(req.body)
-            res.status(201).json(product)
-        } catch (error: any) {
-            res.status(500).json({ error: error.message })
-        }
-    }
+    create = catchAsync(async (req: Request, res: Response) => {
+        const product = await this.productsService.create(req.body);
+        return ApiResponses.created(res, product);
+    });
 
-    update = async (req: Request, res: Response) => {
-        try {
-            const product = await this.productsService.update(req.params.id, req.body)
-            res.status(200).json(product)
-        } catch (error: any) {
-            res.status(500).json({ error: error.message })
+    update = catchAsync(async (req: Request, res: Response) => {
+        const product = await this.productsService.update(req.params.id, req.body);
+        if (!product) {
+            throw AppError.notFound("สินค้า");
         }
-    }
+        return ApiResponses.ok(res, product);
+    });
 
-    delete = async (req: Request, res: Response) => {
-        try {
-            await this.productsService.delete(req.params.id)
-            res.status(200).json({ message: "สินค้าลบสำเร็จ" })
-        } catch (error: any) {
-            res.status(500).json({ error: error.message })
-        }
-    }
+    delete = catchAsync(async (req: Request, res: Response) => {
+        await this.productsService.delete(req.params.id);
+        return ApiResponses.ok(res, { message: "สินค้าลบสำเร็จ" });
+    });
 }   

@@ -1,60 +1,54 @@
 import { Request, Response } from "express";
 import { CategoryService } from "../../services/pos/category.service";
+import { catchAsync } from "../../utils/catchAsync";
+import { AppError } from "../../utils/AppError";
+import { ApiResponses } from "../../utils/ApiResponse";
 
+/**
+ * Category Controller
+ * Following supabase-postgres-best-practices:
+ * - Standardized API responses
+ * - Consistent error handling
+ */
 export class CategoryController {
     constructor(private categoryService: CategoryService) { }
 
-    findAll = async (req: Request, res: Response) => {
-        try {
-            const categories = await this.categoryService.findAll()
-            res.status(200).json(categories)
-        } catch (error: any) {
-            res.status(500).json({ error: error.message })
-        }
-    }
+    findAll = catchAsync(async (req: Request, res: Response) => {
+        const categories = await this.categoryService.findAll();
+        return ApiResponses.ok(res, categories);
+    });
 
-    findOne = async (req: Request, res: Response) => {
-        try {
-            const category = await this.categoryService.findOne(req.params.id)
-            res.status(200).json(category)
-        } catch (error: any) {
-            res.status(500).json({ error: error.message })
+    findOne = catchAsync(async (req: Request, res: Response) => {
+        const category = await this.categoryService.findOne(req.params.id);
+        if (!category) {
+            throw AppError.notFound("หมวดหมู่");
         }
-    }
+        return ApiResponses.ok(res, category);
+    });
 
-    findOneByName = async (req: Request, res: Response) => {
-        try {
-            const category = await this.categoryService.findOneByName(req.params.category_name)
-            res.status(200).json(category)
-        } catch (error: any) {
-            res.status(500).json({ error: error.message })
+    findOneByName = catchAsync(async (req: Request, res: Response) => {
+        const category = await this.categoryService.findOneByName(req.params.category_name);
+        if (!category) {
+            throw AppError.notFound("หมวดหมู่");
         }
-    }
+        return ApiResponses.ok(res, category);
+    });
 
-    create = async (req: Request, res: Response) => {
-        try {
-            const category = await this.categoryService.create(req.body)
-            res.status(201).json(category)
-        } catch (error: any) {
-            res.status(500).json({ error: error.message })
-        }
-    }
+    create = catchAsync(async (req: Request, res: Response) => {
+        const category = await this.categoryService.create(req.body);
+        return ApiResponses.created(res, category);
+    });
 
-    update = async (req: Request, res: Response) => {
-        try {
-            const category = await this.categoryService.update(req.params.id, req.body)
-            res.status(200).json(category)
-        } catch (error: any) {
-            res.status(500).json({ error: error.message })
+    update = catchAsync(async (req: Request, res: Response) => {
+        const category = await this.categoryService.update(req.params.id, req.body);
+        if (!category) {
+            throw AppError.notFound("หมวดหมู่");
         }
-    }
+        return ApiResponses.ok(res, category);
+    });
 
-    delete = async (req: Request, res: Response) => {
-        try {
-            await this.categoryService.delete(req.params.id)
-            res.status(200).json({ message: "หมวดหมู่ลบสำเร็จ" })
-        } catch (error: any) {
-            res.status(500).json({ error: error.message })
-        }
-    }
+    delete = catchAsync(async (req: Request, res: Response) => {
+        await this.categoryService.delete(req.params.id);
+        return ApiResponses.ok(res, { message: "หมวดหมู่ลบสำเร็จ" });
+    });
 }

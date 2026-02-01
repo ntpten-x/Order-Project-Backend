@@ -1,61 +1,57 @@
 import { Request, Response } from "express";
 import { IngredientsUnitService } from "../../services/stock/ingredientsUnit.service";
+import { catchAsync } from "../../utils/catchAsync";
+import { AppError } from "../../utils/AppError";
+import { ApiResponses } from "../../utils/ApiResponse";
 
+/**
+ * Ingredients Unit Controller
+ * Following supabase-postgres-best-practices:
+ * - Standardized API responses
+ * - Consistent error handling
+ */
 export class IngredientsUnitController {
     constructor(private ingredientsUnitService: IngredientsUnitService) { }
 
-    findAll = async (req: Request, res: Response) => {
-        try {
-            const active = req.query.active === 'true' ? true : req.query.active === 'false' ? false : undefined;
-            const ingredientsUnit = await this.ingredientsUnitService.findAll(active !== undefined ? { is_active: active } : undefined)
-            res.status(200).json(ingredientsUnit)
-        } catch (error: any) {
-            res.status(500).json({ error: error.message })
-        }
-    }
+    findAll = catchAsync(async (req: Request, res: Response) => {
+        const active = req.query.active === 'true' ? true : req.query.active === 'false' ? false : undefined;
+        const ingredientsUnit = await this.ingredientsUnitService.findAll(
+            active !== undefined ? { is_active: active } : undefined
+        );
+        return ApiResponses.ok(res, ingredientsUnit);
+    });
 
-    findOne = async (req: Request, res: Response) => {
-        try {
-            const ingredientsUnit = await this.ingredientsUnitService.findOne(req.params.id)
-            res.status(200).json(ingredientsUnit)
-        } catch (error: any) {
-            res.status(500).json({ error: error.message })
+    findOne = catchAsync(async (req: Request, res: Response) => {
+        const ingredientsUnit = await this.ingredientsUnitService.findOne(req.params.id);
+        if (!ingredientsUnit) {
+            throw AppError.notFound("หน่วยนับวัตถุดิบ");
         }
-    }
+        return ApiResponses.ok(res, ingredientsUnit);
+    });
 
-    findOneByUnitName = async (req: Request, res: Response) => {
-        try {
-            const ingredientsUnit = await this.ingredientsUnitService.findOneByUnitName(req.params.unit_name)
-            res.status(200).json(ingredientsUnit)
-        } catch (error: any) {
-            res.status(500).json({ error: error.message })
+    findOneByUnitName = catchAsync(async (req: Request, res: Response) => {
+        const ingredientsUnit = await this.ingredientsUnitService.findOneByUnitName(req.params.unit_name);
+        if (!ingredientsUnit) {
+            throw AppError.notFound("หน่วยนับวัตถุดิบ");
         }
-    }
+        return ApiResponses.ok(res, ingredientsUnit);
+    });
 
-    create = async (req: Request, res: Response) => {
-        try {
-            const ingredientsUnit = await this.ingredientsUnitService.create(req.body)
-            res.status(201).json(ingredientsUnit)
-        } catch (error: any) {
-            res.status(500).json({ error: error.message })
-        }
-    }
+    create = catchAsync(async (req: Request, res: Response) => {
+        const ingredientsUnit = await this.ingredientsUnitService.create(req.body);
+        return ApiResponses.created(res, ingredientsUnit);
+    });
 
-    update = async (req: Request, res: Response) => {
-        try {
-            const ingredientsUnit = await this.ingredientsUnitService.update(req.params.id, req.body)
-            res.status(200).json(ingredientsUnit)
-        } catch (error: any) {
-            res.status(500).json({ error: error.message })
+    update = catchAsync(async (req: Request, res: Response) => {
+        const ingredientsUnit = await this.ingredientsUnitService.update(req.params.id, req.body);
+        if (!ingredientsUnit) {
+            throw AppError.notFound("หน่วยนับวัตถุดิบ");
         }
-    }
+        return ApiResponses.ok(res, ingredientsUnit);
+    });
 
-    delete = async (req: Request, res: Response) => {
-        try {
-            await this.ingredientsUnitService.delete(req.params.id)
-            res.status(200).json({ message: "หน่วยนับวัตถุดิบลบสำเร็จ" })
-        } catch (error: any) {
-            res.status(500).json({ error: error.message })
-        }
-    }
+    delete = catchAsync(async (req: Request, res: Response) => {
+        await this.ingredientsUnitService.delete(req.params.id);
+        return ApiResponses.ok(res, { message: "หน่วยนับวัตถุดิบลบสำเร็จ" });
+    });
 }

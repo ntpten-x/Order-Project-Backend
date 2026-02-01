@@ -1,9 +1,16 @@
 import { ProductsModels } from "../../models/pos/products.model";
 import { SocketService } from "../socket.service";
 import { Products } from "../../entity/pos/Products";
+import { invalidateCache } from "../../utils/cache";
 
+/**
+ * Products Service
+ * Note: Caching is handled in ProductsModel
+ * This service handles cache invalidation on mutations
+ */
 export class ProductsService {
     private socketService = SocketService.getInstance();
+    private readonly CACHE_PREFIX = 'products';
 
     constructor(private productsModel: ProductsModels) { }
 
@@ -13,64 +20,49 @@ export class ProductsService {
         category_id?: string,
         q?: string
     ): Promise<{ data: Products[], total: number, page: number, last_page: number }> {
-        try {
-            return this.productsModel.findAll(page, limit, category_id, q)
-        } catch (error) {
-            throw error
-        }
+        // Caching is handled in ProductsModel
+        return this.productsModel.findAll(page, limit, category_id, q);
     }
 
     async findOne(id: string): Promise<Products | null> {
-        try {
-            return this.productsModel.findOne(id)
-        } catch (error) {
-            throw error
-        }
+        // Caching is handled in ProductsModel
+        return this.productsModel.findOne(id);
     }
 
     async findOneByName(product_name: string): Promise<Products | null> {
-        try {
-            return this.productsModel.findOneByName(product_name)
-        } catch (error) {
-            throw error
-        }
+        // Caching is handled in ProductsModel
+        return this.productsModel.findOneByName(product_name);
     }
 
     async create(products: Products): Promise<Products> {
-        try {
-            // @ts-ignore
-            const savedProducts = await this.productsModel.create(products)
-            const createdProducts = await this.productsModel.findOne(savedProducts.id)
-            if (createdProducts) {
-                this.socketService.emit('products:create', createdProducts)
-                return createdProducts
-            }
-            return savedProducts
-        } catch (error) {
-            throw error
+        const savedProducts = await this.productsModel.create(products);
+        const createdProducts = await this.productsModel.findOne(savedProducts.id);
+        
+        if (createdProducts) {
+            // Cache invalidation is handled in ProductsModel
+            this.socketService.emit('products:create', createdProducts);
+            return createdProducts;
         }
+        
+        return savedProducts;
     }
 
     async update(id: string, products: Products): Promise<Products> {
-        try {
-            await this.productsModel.update(id, products)
-            const updatedProducts = await this.productsModel.findOne(id)
-            if (updatedProducts) {
-                this.socketService.emit('products:update', updatedProducts)
-                return updatedProducts
-            }
-            throw new Error("พบข้อผิดพลาดในการอัปเดตสินค้า")
-        } catch (error) {
-            throw error
+        await this.productsModel.update(id, products);
+        const updatedProducts = await this.productsModel.findOne(id);
+        
+        if (updatedProducts) {
+            // Cache invalidation is handled in ProductsModel
+            this.socketService.emit('products:update', updatedProducts);
+            return updatedProducts;
         }
+        
+        throw new Error("พบข้อผิดพลาดในการอัปเดตสินค้า");
     }
 
     async delete(id: string): Promise<void> {
-        try {
-            await this.productsModel.delete(id)
-            this.socketService.emit('products:delete', { id })
-        } catch (error) {
-            throw error
-        }
+        await this.productsModel.delete(id);
+        // Cache invalidation is handled in ProductsModel
+        this.socketService.emit('products:delete', { id });
     }
 }
