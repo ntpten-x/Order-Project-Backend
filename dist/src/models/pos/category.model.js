@@ -16,30 +16,45 @@ class CategoryModels {
     constructor() {
         this.categoryRepository = database_1.AppDataSource.getRepository(Category_1.Category);
     }
-    findAll() {
+    findAll(branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.categoryRepository.createQueryBuilder("category").orderBy("category.create_date", "ASC").getMany();
+                const query = this.categoryRepository.createQueryBuilder("category")
+                    .orderBy("category.create_date", "ASC");
+                if (branchId) {
+                    query.andWhere("category.branch_id = :branchId", { branchId });
+                }
+                return query.getMany();
             }
             catch (error) {
                 throw error;
             }
         });
     }
-    findOne(id) {
+    findOne(id, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.categoryRepository.createQueryBuilder("category").where("category.id = :id", { id }).getOne();
+                const query = this.categoryRepository.createQueryBuilder("category")
+                    .where("category.id = :id", { id });
+                if (branchId) {
+                    query.andWhere("category.branch_id = :branchId", { branchId });
+                }
+                return query.getOne();
             }
             catch (error) {
                 throw error;
             }
         });
     }
-    findOneByName(category_name) {
+    findOneByName(category_name, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.categoryRepository.createQueryBuilder("category").where("category.category_name = :category_name", { category_name }).getOne();
+                const query = this.categoryRepository.createQueryBuilder("category")
+                    .where("category.category_name = :category_name", { category_name });
+                if (branchId) {
+                    query.andWhere("category.branch_id = :branchId", { branchId });
+                }
+                return query.getOne();
             }
             catch (error) {
                 throw error;

@@ -11,6 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Discounts = exports.DiscountType = void 0;
 const typeorm_1 = require("typeorm");
+const Branch_1 = require("../Branch");
 var DiscountType;
 (function (DiscountType) {
     DiscountType["Fixed"] = "Fixed";
@@ -24,13 +25,23 @@ __decorate([
     __metadata("design:type", String)
 ], Discounts.prototype, "id", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: "varchar", length: 100, unique: true }),
+    (0, typeorm_1.Column)({ type: "varchar", length: 100 }),
     __metadata("design:type", String)
 ], Discounts.prototype, "discount_name", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: "varchar", length: 100, unique: true }),
+    (0, typeorm_1.Column)({ type: "varchar", length: 100 }),
     __metadata("design:type", String)
 ], Discounts.prototype, "display_name", void 0);
+__decorate([
+    (0, typeorm_1.Index)(),
+    (0, typeorm_1.Column)({ name: "branch_id", type: "uuid", nullable: true }),
+    __metadata("design:type", String)
+], Discounts.prototype, "branch_id", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)(() => Branch_1.Branch),
+    (0, typeorm_1.JoinColumn)({ name: "branch_id" }),
+    __metadata("design:type", Branch_1.Branch)
+], Discounts.prototype, "branch", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: "text", nullable: true }),
     __metadata("design:type", String)
@@ -53,5 +64,7 @@ __decorate([
     )
 ], Discounts.prototype, "create_date", void 0);
 exports.Discounts = Discounts = __decorate([
-    (0, typeorm_1.Entity)()
+    (0, typeorm_1.Entity)(),
+    (0, typeorm_1.Index)(["discount_name", "branch_id"], { unique: true }),
+    (0, typeorm_1.Index)(["display_name", "branch_id"], { unique: true })
 ], Discounts);

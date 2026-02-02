@@ -17,13 +17,16 @@ class DeliveryModels {
         this.deliveryRepository = database_1.AppDataSource.getRepository(Delivery_1.Delivery);
     }
     findAll() {
-        return __awaiter(this, arguments, void 0, function* (page = 1, limit = 50, q) {
+        return __awaiter(this, arguments, void 0, function* (page = 1, limit = 50, q, branchId) {
             try {
                 const skip = (page - 1) * limit;
                 const query = this.deliveryRepository.createQueryBuilder("delivery")
                     .orderBy("delivery.create_date", "ASC");
+                if (branchId) {
+                    query.andWhere("delivery.branch_id = :branchId", { branchId });
+                }
                 if (q && q.trim()) {
-                    query.where("delivery.delivery_name ILIKE :q", { q: `%${q.trim()}%` });
+                    query.andWhere("delivery.delivery_name ILIKE :q", { q: `%${q.trim()}%` });
                 }
                 const [data, total] = yield query.skip(skip).take(limit).getManyAndCount();
                 return {
@@ -38,20 +41,28 @@ class DeliveryModels {
             }
         });
     }
-    findOne(id) {
+    findOne(id, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.deliveryRepository.findOneBy({ id });
+                const where = { id };
+                if (branchId) {
+                    where.branch_id = branchId;
+                }
+                return this.deliveryRepository.findOneBy(where);
             }
             catch (error) {
                 throw error;
             }
         });
     }
-    findOneByName(delivery_name) {
+    findOneByName(delivery_name, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.deliveryRepository.findOneBy({ delivery_name });
+                const where = { delivery_name };
+                if (branchId) {
+                    where.branch_id = branchId;
+                }
+                return this.deliveryRepository.findOneBy(where);
             }
             catch (error) {
                 throw error;

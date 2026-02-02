@@ -16,30 +16,30 @@ class CategoryService {
         this.categoryModel = categoryModel;
         this.socketService = socket_service_1.SocketService.getInstance();
     }
-    findAll() {
+    findAll(branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.categoryModel.findAll();
+                return this.categoryModel.findAll(branchId);
             }
             catch (error) {
                 throw error;
             }
         });
     }
-    findOne(id) {
+    findOne(id, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.categoryModel.findOne(id);
+                return this.categoryModel.findOne(id, branchId);
             }
             catch (error) {
                 throw error;
             }
         });
     }
-    findOneByName(category_name) {
+    findOneByName(category_name, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.categoryModel.findOneByName(category_name);
+                return this.categoryModel.findOneByName(category_name, branchId);
             }
             catch (error) {
                 throw error;
@@ -49,6 +49,13 @@ class CategoryService {
     create(category) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
+                // Check for duplicate name within the same branch
+                if (category.category_name && category.branch_id) {
+                    const existing = yield this.categoryModel.findOneByName(category.category_name, category.branch_id);
+                    if (existing) {
+                        throw new Error("ชื่อหมวดหมู่นี้มีอยู่ในระบบแล้ว");
+                    }
+                }
                 const savedCategory = yield this.categoryModel.create(category);
                 const createdCategory = yield this.categoryModel.findOne(savedCategory.id);
                 if (createdCategory) {

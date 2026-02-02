@@ -17,21 +17,40 @@ const database_1 = require("../database/database");
 const Users_1 = require("../entity/Users");
 const bcrypt_1 = __importDefault(require("bcrypt"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
+const securityLogger_1 = require("../utils/securityLogger");
 class AuthController {
     static login(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
             const { username, password } = req.body;
             const userRepository = database_1.AppDataSource.getRepository(Users_1.Users);
+            const ip = (0, securityLogger_1.getClientIp)(req);
             try {
                 const user = yield userRepository.findOne({
                     where: { username },
-                    relations: ["roles"]
+                    relations: ["roles", "branch"]
                 });
                 if (!user) {
+                    securityLogger_1.securityLogger.log({
+                        type: 'AUTH_FAILURE',
+                        ip,
+                        userAgent: req.headers['user-agent'],
+                        path: req.path,
+                        method: req.method,
+                        details: { reason: 'User not found', username }
+                    });
                     return res.status(401).json({ message: "ไม่พบข้อมูลผู้ใช้" });
                 }
                 // Check if user is disabled
                 if (user.is_use === false) {
+                    securityLogger_1.securityLogger.log({
+                        type: 'UNAUTHORIZED_ACCESS',
+                        userId: user.id,
+                        ip,
+                        userAgent: req.headers['user-agent'],
+                        path: req.path,
+                        method: req.method,
+                        details: { reason: 'Account disabled' }
+                    });
                     return res.status(403).json({ message: "บัญชีถูกปิด" });
                 }
                 // Compare password
@@ -41,8 +60,29 @@ class AuthController {
                 // For safety, I'll try bcrypt.compare, invalid if not hashed.
                 const isMatch = yield bcrypt_1.default.compare(password, user.password);
                 if (!isMatch) {
+                    securityLogger_1.securityLogger.log({
+                        type: 'AUTH_FAILURE',
+                        userId: user.id,
+                        ip,
+                        userAgent: req.headers['user-agent'],
+                        path: req.path,
+                        method: req.method,
+                        details: { reason: 'Invalid password', username }
+                    });
+                    // Check for suspicious activity
+                    securityLogger_1.securityLogger.checkSuspiciousActivity(user.id, ip);
                     return res.status(401).json({ message: "ไม่พบข้อมูลผู้ใช้" });
                 }
+                // Log successful login
+                securityLogger_1.securityLogger.log({
+                    type: 'AUTH_SUCCESS',
+                    userId: user.id,
+                    ip,
+                    userAgent: req.headers['user-agent'],
+                    path: req.path,
+                    method: req.method,
+                    details: { username }
+                });
                 // Generate Token
                 const secret = process.env.JWT_SECRET;
                 if (!secret) {
@@ -71,7 +111,16 @@ class AuthController {
                         id: user.id,
                         username: user.username,
                         role: user.roles.roles_name,
-                        display_name: user.roles.display_name
+                        display_name: user.roles.display_name,
+                        branch_id: user.branch_id,
+                        branch: user.branch ? {
+                            id: user.branch.id,
+                            branch_name: user.branch.branch_name,
+                            branch_code: user.branch.branch_code,
+                            address: user.branch.address,
+                            phone: user.branch.phone,
+                            is_active: user.branch.is_active
+                        } : undefined
                     }
                 });
             }
@@ -135,7 +184,16 @@ class AuthController {
                 role: user.roles ? user.roles.roles_name : "unknown",
                 display_name: user.roles ? user.roles.display_name : user.username,
                 is_active: user.is_active,
-                is_use: user.is_use
+                is_use: user.is_use,
+                branch_id: user.branch_id,
+                branch: user.branch ? {
+                    id: user.branch.id,
+                    branch_name: user.branch.branch_name,
+                    branch_code: user.branch.branch_code,
+                    address: user.branch.address,
+                    phone: user.branch.phone,
+                    is_active: user.branch.is_active
+                } : undefined
             });
         });
     }

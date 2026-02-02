@@ -16,13 +16,16 @@ class DiscountsModels {
     constructor() {
         this.discountsRepository = database_1.AppDataSource.getRepository(Discounts_1.Discounts);
     }
-    findAll(q) {
+    findAll(q, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 const query = this.discountsRepository.createQueryBuilder("discounts")
                     .orderBy("discounts.create_date", "ASC");
+                if (branchId) {
+                    query.andWhere("discounts.branch_id = :branchId", { branchId });
+                }
                 if (q && q.trim()) {
-                    query.where("(discounts.discount_name ILIKE :q OR discounts.display_name ILIKE :q OR discounts.description ILIKE :q)", { q: `%${q.trim()}%` });
+                    query.andWhere("(discounts.discount_name ILIKE :q OR discounts.display_name ILIKE :q OR discounts.description ILIKE :q)", { q: `%${q.trim()}%` });
                 }
                 return query.getMany();
             }
@@ -31,20 +34,28 @@ class DiscountsModels {
             }
         });
     }
-    findOne(id) {
+    findOne(id, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.discountsRepository.findOneBy({ id });
+                const where = { id };
+                if (branchId) {
+                    where.branch_id = branchId;
+                }
+                return this.discountsRepository.findOneBy(where);
             }
             catch (error) {
                 throw error;
             }
         });
     }
-    findOneByName(discount_name) {
+    findOneByName(discount_name, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.discountsRepository.findOneBy({ discount_name });
+                const where = { discount_name };
+                if (branchId) {
+                    where.branch_id = branchId;
+                }
+                return this.discountsRepository.findOneBy(where);
             }
             catch (error) {
                 throw error;

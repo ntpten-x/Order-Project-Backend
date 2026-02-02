@@ -16,30 +16,30 @@ class IngredientsUnitService {
         this.ingredientsUnitModel = ingredientsUnitModel;
         this.socketService = socket_service_1.SocketService.getInstance();
     }
-    findAll(filters) {
+    findAll(filters, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.ingredientsUnitModel.findAll(filters);
+                return this.ingredientsUnitModel.findAll(filters, branchId);
             }
             catch (error) {
                 throw error;
             }
         });
     }
-    findOne(id) {
+    findOne(id, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.ingredientsUnitModel.findOne(id);
+                return this.ingredientsUnitModel.findOne(id, branchId);
             }
             catch (error) {
                 throw error;
             }
         });
     }
-    findOneByUnitName(unit_name) {
+    findOneByUnitName(unit_name, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.ingredientsUnitModel.findOneByUnitName(unit_name);
+                return this.ingredientsUnitModel.findOneByUnitName(unit_name, branchId);
             }
             catch (error) {
                 throw error;
@@ -49,6 +49,13 @@ class IngredientsUnitService {
     create(ingredientsUnit) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
+                // Check for duplicate name within the same branch
+                if (ingredientsUnit.unit_name && ingredientsUnit.branch_id) {
+                    const existing = yield this.ingredientsUnitModel.findOneByUnitName(ingredientsUnit.unit_name, ingredientsUnit.branch_id);
+                    if (existing) {
+                        throw new Error("ชื่อหน่วยนับนี้มีอยู่ในระบบแล้ว");
+                    }
+                }
                 // @ts-ignore - model returns {id} essentially
                 const savedIngredientsUnit = yield this.ingredientsUnitModel.create(ingredientsUnit);
                 const createdIngredientsUnit = yield this.ingredientsUnitModel.findOne(savedIngredientsUnit.id);

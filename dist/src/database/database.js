@@ -76,6 +76,8 @@ const ShopPaymentAccount_1 = require("../entity/pos/ShopPaymentAccount");
 const SalesSummaryView_1 = require("../entity/pos/views/SalesSummaryView");
 const TopSellingItemsView_1 = require("../entity/pos/views/TopSellingItemsView");
 const Shifts_1 = require("../entity/pos/Shifts");
+const OrderQueue_1 = require("../entity/pos/OrderQueue");
+const Promotions_1 = require("../entity/pos/Promotions");
 const dotenv = __importStar(require("dotenv"));
 dotenv.config();
 const isProd = process.env.NODE_ENV === "production";
@@ -86,9 +88,12 @@ const useSsl = process.env.DATABASE_SSL === "true" || process.env.DATABASE_SSL =
 const sslOptions = useSsl
     ? { rejectUnauthorized: process.env.DATABASE_SSL_REJECT_UNAUTHORIZED === "true" }
     : false;
-const poolSize = Number(process.env.DATABASE_POOL_MAX || 10);
+// Enhanced Database Connection Pooling Configuration
+const poolSize = Number(process.env.DATABASE_POOL_MAX || 20); // Increased default pool size
+const minPoolSize = Number(process.env.DATABASE_POOL_MIN || 5); // Minimum connections
 const connectionTimeoutMillis = Number(process.env.DATABASE_CONNECTION_TIMEOUT_MS || 30000);
 const statementTimeout = Number(process.env.STATEMENT_TIMEOUT_MS || 30000);
+const idleTimeoutMillis = Number(process.env.DATABASE_IDLE_TIMEOUT_MS || 30000); // Close idle connections after 30s
 const migrationsDir = path_1.default.join(__dirname, "../migrations/*.{ts,js}");
 exports.AppDataSource = new typeorm_1.DataSource({
     type: "postgres",
@@ -97,17 +102,45 @@ exports.AppDataSource = new typeorm_1.DataSource({
     username: process.env.DATABASE_USER,
     password: process.env.DATABASE_PASSWORD,
     database: process.env.DATABASE_NAME,
-    entities: [Users_1.Users, Roles_1.Roles, Branch_1.Branch, IngredientsUnit_1.IngredientsUnit, Ingredients_1.Ingredients, PurchaseOrder_1.PurchaseOrder, OrdersItem_1.StockOrdersItem, OrdersDetail_1.StockOrdersDetail, SalesOrder_1.SalesOrder, SalesOrderItem_1.SalesOrderItem, SalesOrderDetail_1.SalesOrderDetail, Category_1.Category, Products_1.Products, ProductsUnit_1.ProductsUnit, Tables_1.Tables, Delivery_1.Delivery, Discounts_1.Discounts, Payments_1.Payments, PaymentMethod_1.PaymentMethod, Shifts_1.Shifts, ShopProfile_1.ShopProfile, ShopPaymentAccount_1.ShopPaymentAccount, SalesSummaryView_1.SalesSummaryView, TopSellingItemsView_1.TopSellingItemsView],
+    entities: [Users_1.Users, Roles_1.Roles, Branch_1.Branch, IngredientsUnit_1.IngredientsUnit, Ingredients_1.Ingredients, PurchaseOrder_1.PurchaseOrder, OrdersItem_1.StockOrdersItem, OrdersDetail_1.StockOrdersDetail, SalesOrder_1.SalesOrder, SalesOrderItem_1.SalesOrderItem, SalesOrderDetail_1.SalesOrderDetail, Category_1.Category, Products_1.Products, ProductsUnit_1.ProductsUnit, Tables_1.Tables, Delivery_1.Delivery, Discounts_1.Discounts, Payments_1.Payments, PaymentMethod_1.PaymentMethod, Shifts_1.Shifts, ShopProfile_1.ShopProfile, ShopPaymentAccount_1.ShopPaymentAccount, SalesSummaryView_1.SalesSummaryView, TopSellingItemsView_1.TopSellingItemsView, OrderQueue_1.OrderQueue, Promotions_1.Promotions],
     synchronize: synchronize,
-    logging: true,
+    logging: isProd ? ["error"] : true,
     ssl: sslOptions,
     migrations: [migrationsDir],
     poolSize,
     extra: {
         max: poolSize,
+        min: minPoolSize,
         connectionTimeoutMillis,
+        idleTimeoutMillis,
         statement_timeout: statementTimeout,
-        application_name: "order-project-backend"
+        application_name: "order-project-backend",
+        // Connection pool optimization
+        keepAlive: true,
+        keepAliveInitialDelayMillis: 10000,
+        // Query optimization
+        query_timeout: statementTimeout,
+        // Connection retry
+        retry: {
+            max: 3,
+            match: [
+                /ETIMEDOUT/,
+                /EHOSTUNREACH/,
+                /ECONNRESET/,
+                /ECONNREFUSED/,
+                /ETIMEDOUT/,
+                /ESOCKETTIMEDOUT/,
+                /EHOSTUNREACH/,
+                /EPIPE/,
+                /EAI_AGAIN/,
+                /SequelizeConnectionError/,
+                /SequelizeConnectionRefusedError/,
+                /SequelizeHostNotFoundError/,
+                /SequelizeHostNotReachableError/,
+                /SequelizeInvalidConnectionError/,
+                /SequelizeConnectionTimedOutError/
+            ]
+        }
     }
 });
 const connectDatabase = () => __awaiter(void 0, void 0, void 0, function* () {

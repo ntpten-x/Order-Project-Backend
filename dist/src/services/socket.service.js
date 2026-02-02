@@ -84,8 +84,12 @@ class SocketService {
             var _a;
             const user = socket.user;
             const userId = user.id;
-            // Join a room with the user's ID
+            const branchId = user.branch_id;
+            // Join rooms: user-specific and branch-specific
             yield socket.join(userId);
+            if (branchId) {
+                yield socket.join(`branch:${branchId}`);
+            }
             // Count sockets in this room
             const sockets = yield ((_a = this.io) === null || _a === void 0 ? void 0 : _a.in(userId).fetchSockets());
             const count = (sockets === null || sockets === void 0 ? void 0 : sockets.length) || 0;
@@ -95,12 +99,21 @@ class SocketService {
                 yield this.updateUserStatus(userId, true);
                 this.emit('users:update-status', { id: userId, is_active: true });
             }
-            socket.on('disconnect', () => __awaiter(this, void 0, void 0, function* () {
+            // Handle reconnection
+            socket.on('reconnect', (attemptNumber) => __awaiter(this, void 0, void 0, function* () {
+                console.log(`User reconnected: ${user.username} (${userId}). Attempt: ${attemptNumber}`);
+                // Rejoin rooms on reconnect
+                yield socket.join(userId);
+                if (branchId) {
+                    yield socket.join(`branch:${branchId}`);
+                }
+            }));
+            socket.on('disconnect', (reason) => __awaiter(this, void 0, void 0, function* () {
                 var _a;
                 // Check remaining sockets in the room
                 const sockets = yield ((_a = this.io) === null || _a === void 0 ? void 0 : _a.in(userId).fetchSockets());
                 const count = (sockets === null || sockets === void 0 ? void 0 : sockets.length) || 0;
-                console.log(`User disconnected: ${user.username} (${userId}). Remaining connections: ${count}`);
+                console.log(`User disconnected: ${user.username} (${userId}). Reason: ${reason}. Remaining connections: ${count}`);
                 if (count === 0) {
                     yield this.updateUserStatus(userId, false);
                     this.emit('users:update-status', { id: userId, is_active: false });
@@ -121,9 +134,47 @@ class SocketService {
             }
         });
     }
+    /**
+     * Emit event to all connected clients
+     */
     emit(event, data) {
         if (this.io) {
             this.io.emit(event, data);
+        }
+        else {
+            console.warn("Socket.IO not initialized! Event missed:", event);
+        }
+    }
+    /**
+     * Emit event to a specific user
+     */
+    emitToUser(userId, event, data) {
+        if (this.io) {
+            this.io.to(userId).emit(event, data);
+        }
+        else {
+            console.warn("Socket.IO not initialized! Event missed:", event);
+        }
+    }
+    /**
+     * Emit event to all users in a specific branch (room-based broadcasting)
+     */
+    emitToBranch(branchId, event, data) {
+        if (this.io) {
+            this.io.to(`branch:${branchId}`).emit(event, data);
+        }
+        else {
+            console.warn("Socket.IO not initialized! Event missed:", event);
+        }
+    }
+    /**
+     * Emit event to multiple users
+     */
+    emitToUsers(userIds, event, data) {
+        if (this.io) {
+            userIds.forEach(userId => {
+                this.io.to(userId).emit(event, data);
+            });
         }
         else {
             console.warn("Socket.IO not initialized! Event missed:", event);

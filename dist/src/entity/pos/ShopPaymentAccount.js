@@ -12,6 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ShopPaymentAccount = exports.AccountType = void 0;
 const typeorm_1 = require("typeorm");
 const ShopProfile_1 = require("./ShopProfile");
+const Branch_1 = require("../Branch");
 var AccountType;
 (function (AccountType) {
     AccountType["PROMPTPAY"] = "PromptPay";
@@ -24,6 +25,15 @@ __decorate([
     (0, typeorm_1.PrimaryGeneratedColumn)("uuid"),
     __metadata("design:type", String)
 ], ShopPaymentAccount.prototype, "id", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: "branch_id", type: "uuid", nullable: true }),
+    __metadata("design:type", String)
+], ShopPaymentAccount.prototype, "branch_id", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)(() => Branch_1.Branch),
+    (0, typeorm_1.JoinColumn)({ name: "branch_id" }),
+    __metadata("design:type", Branch_1.Branch)
+], ShopPaymentAccount.prototype, "branch", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: "uuid" }),
     __metadata("design:type", String)
@@ -70,5 +80,6 @@ __decorate([
     __metadata("design:type", Date)
 ], ShopPaymentAccount.prototype, "updated_at", void 0);
 exports.ShopPaymentAccount = ShopPaymentAccount = __decorate([
-    (0, typeorm_1.Entity)()
+    (0, typeorm_1.Entity)(),
+    (0, typeorm_1.Index)(["branch_id"])
 ], ShopPaymentAccount);

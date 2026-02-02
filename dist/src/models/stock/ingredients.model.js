@@ -12,48 +12,60 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.IngredientsModel = void 0;
 const database_1 = require("../../database/database");
 const Ingredients_1 = require("../../entity/stock/Ingredients");
+const dbHelpers_1 = require("../../utils/dbHelpers");
+/**
+ * Ingredients Model
+ * Following supabase-postgres-best-practices:
+ * - Uses dbHelpers for consistent query patterns
+ * - Optimized queries with proper joins
+ * - Branch-based data isolation support
+ */
 class IngredientsModel {
     constructor() {
         this.ingredientsRepository = database_1.AppDataSource.getRepository(Ingredients_1.Ingredients);
     }
-    findAll(filters) {
+    findAll(filters, branchId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            let query = this.ingredientsRepository.createQueryBuilder("ingredients")
+                .leftJoinAndSelect("ingredients.unit", "unit")
+                .orderBy("ingredients.create_date", "ASC");
+            // Filter by branch for data isolation
+            if (branchId) {
+                query.andWhere("ingredients.branch_id = :branchId", { branchId });
+            }
+            // Use dbHelpers for consistent filtering
+            query = (0, dbHelpers_1.addBooleanFilter)(query, filters === null || filters === void 0 ? void 0 : filters.is_active, "is_active", "ingredients");
+            // Secondary sort for consistent ordering when active ones are mixed
+            query.addOrderBy("ingredients.is_active", "DESC");
+            return query.getMany();
+        });
+    }
+    findOne(id, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 const query = this.ingredientsRepository.createQueryBuilder("ingredients")
                     .leftJoinAndSelect("ingredients.unit", "unit")
-                    .orderBy("ingredients.create_date", "ASC");
-                if ((filters === null || filters === void 0 ? void 0 : filters.is_active) !== undefined) {
-                    query.andWhere("ingredients.is_active = :is_active", { is_active: filters.is_active });
+                    .where("ingredients.id = :id", { id });
+                if (branchId) {
+                    query.andWhere("ingredients.branch_id = :branchId", { branchId });
                 }
-                // Secondary sort for consistent ordering when active ones are mixed
-                query.addOrderBy("ingredients.is_active", "DESC");
-                return query.getMany();
+                return query.getOne();
             }
             catch (error) {
                 throw error;
             }
         });
     }
-    findOne(id) {
+    findOneByName(ingredient_name, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.ingredientsRepository.createQueryBuilder("ingredients")
+                const query = this.ingredientsRepository.createQueryBuilder("ingredients")
                     .leftJoinAndSelect("ingredients.unit", "unit")
-                    .where("ingredients.id = :id", { id })
-                    .getOne();
-            }
-            catch (error) {
-                throw error;
-            }
-        });
-    }
-    findOneByName(ingredient_name) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                return this.ingredientsRepository.createQueryBuilder("ingredients")
-                    .leftJoinAndSelect("ingredients.unit", "unit")
-                    .where("ingredients.ingredient_name = :ingredient_name", { ingredient_name })
-                    .getOne();
+                    .where("ingredients.ingredient_name = :ingredient_name", { ingredient_name });
+                if (branchId) {
+                    query.andWhere("ingredients.branch_id = :branchId", { branchId });
+                }
+                return query.getOne();
             }
             catch (error) {
                 throw error;

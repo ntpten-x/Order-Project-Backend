@@ -12,6 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ProductsUnit = void 0;
 const typeorm_1 = require("typeorm");
 const Products_1 = require("./Products");
+const Branch_1 = require("../Branch");
 let ProductsUnit = class ProductsUnit {
 };
 exports.ProductsUnit = ProductsUnit;
@@ -20,13 +21,23 @@ __decorate([
     __metadata("design:type", String)
 ], ProductsUnit.prototype, "id", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: "varchar", length: 100, unique: true }),
+    (0, typeorm_1.Column)({ type: "varchar", length: 100 }),
     __metadata("design:type", String)
 ], ProductsUnit.prototype, "unit_name", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: "varchar", length: 100, unique: true }),
+    (0, typeorm_1.Column)({ type: "varchar", length: 100 }),
     __metadata("design:type", String)
 ], ProductsUnit.prototype, "display_name", void 0);
+__decorate([
+    (0, typeorm_1.Index)(),
+    (0, typeorm_1.Column)({ name: "branch_id", type: "uuid", nullable: true }),
+    __metadata("design:type", String)
+], ProductsUnit.prototype, "branch_id", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)(() => Branch_1.Branch),
+    (0, typeorm_1.JoinColumn)({ name: "branch_id" }),
+    __metadata("design:type", Branch_1.Branch)
+], ProductsUnit.prototype, "branch", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: "timestamptz", default: () => "CURRENT_TIMESTAMP" }),
     __metadata("design:type", Date // วันที่สร้าง
@@ -47,5 +58,7 @@ __decorate([
     __metadata("design:type", Array)
 ], ProductsUnit.prototype, "products", void 0);
 exports.ProductsUnit = ProductsUnit = __decorate([
-    (0, typeorm_1.Entity)()
+    (0, typeorm_1.Entity)(),
+    (0, typeorm_1.Index)(["unit_name", "branch_id"], { unique: true }),
+    (0, typeorm_1.Index)(["display_name", "branch_id"], { unique: true })
 ], ProductsUnit);

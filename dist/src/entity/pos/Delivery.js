@@ -11,6 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Delivery = void 0;
 const typeorm_1 = require("typeorm");
+const Branch_1 = require("../Branch");
 let Delivery = class Delivery {
 };
 exports.Delivery = Delivery;
@@ -18,6 +19,15 @@ __decorate([
     (0, typeorm_1.PrimaryGeneratedColumn)("uuid"),
     __metadata("design:type", String)
 ], Delivery.prototype, "id", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: "branch_id", type: "uuid", nullable: true }),
+    __metadata("design:type", String)
+], Delivery.prototype, "branch_id", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)(() => Branch_1.Branch),
+    (0, typeorm_1.JoinColumn)({ name: "branch_id" }),
+    __metadata("design:type", Branch_1.Branch)
+], Delivery.prototype, "branch", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: 'varchar', length: 255 }),
     __metadata("design:type", String)
@@ -43,5 +53,6 @@ __decorate([
     __metadata("design:type", Boolean)
 ], Delivery.prototype, "is_active", void 0);
 exports.Delivery = Delivery = __decorate([
-    (0, typeorm_1.Entity)()
+    (0, typeorm_1.Entity)(),
+    (0, typeorm_1.Index)(["branch_id"])
 ], Delivery);

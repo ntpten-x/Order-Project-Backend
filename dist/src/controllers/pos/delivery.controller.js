@@ -10,6 +10,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DeliveryController = void 0;
+const branch_middleware_1 = require("../../middleware/branch.middleware");
 class DeliveryController {
     constructor(deliveryService) {
         this.deliveryService = deliveryService;
@@ -19,7 +20,8 @@ class DeliveryController {
                 const rawLimit = parseInt(req.query.limit);
                 const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
                 const q = req.query.q || undefined;
-                const delivery = yield this.deliveryService.findAll(page, limit, q);
+                const branchId = (0, branch_middleware_1.getBranchId)(req);
+                const delivery = yield this.deliveryService.findAll(page, limit, q, branchId);
                 res.status(200).json(delivery);
             }
             catch (error) {
@@ -28,7 +30,8 @@ class DeliveryController {
         });
         this.findOne = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {
-                const delivery = yield this.deliveryService.findOne(req.params.id);
+                const branchId = (0, branch_middleware_1.getBranchId)(req);
+                const delivery = yield this.deliveryService.findOne(req.params.id, branchId);
                 res.status(200).json(delivery);
             }
             catch (error) {
@@ -37,7 +40,8 @@ class DeliveryController {
         });
         this.findByName = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {
-                const delivery = yield this.deliveryService.findOneByName(req.params.name);
+                const branchId = (0, branch_middleware_1.getBranchId)(req);
+                const delivery = yield this.deliveryService.findOneByName(req.params.name, branchId);
                 res.status(200).json(delivery);
             }
             catch (error) {
@@ -46,6 +50,10 @@ class DeliveryController {
         });
         this.create = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {
+                const branchId = (0, branch_middleware_1.getBranchId)(req);
+                if (branchId && !req.body.branch_id) {
+                    req.body.branch_id = branchId;
+                }
                 const delivery = yield this.deliveryService.create(req.body);
                 res.status(201).json(delivery);
             }

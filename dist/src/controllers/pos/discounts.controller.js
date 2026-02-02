@@ -10,64 +10,54 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DiscountsController = void 0;
+const catchAsync_1 = require("../../utils/catchAsync");
+const AppError_1 = require("../../utils/AppError");
+const ApiResponse_1 = require("../../utils/ApiResponse");
+const branch_middleware_1 = require("../../middleware/branch.middleware");
 class DiscountsController {
     constructor(discountsService) {
         this.discountsService = discountsService;
-        this.findAll = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                const q = req.query.q || undefined;
-                const discounts = yield this.discountsService.findAll(q);
-                res.status(200).json(discounts);
+        this.findAll = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            const q = req.query.q || undefined;
+            const branchId = (0, branch_middleware_1.getBranchId)(req);
+            const discounts = yield this.discountsService.findAll(q, branchId);
+            return ApiResponse_1.ApiResponses.ok(res, discounts);
+        }));
+        this.findOne = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            const branchId = (0, branch_middleware_1.getBranchId)(req);
+            const discount = yield this.discountsService.findOne(req.params.id, branchId);
+            if (!discount) {
+                throw AppError_1.AppError.notFound("ส่วนลด");
             }
-            catch (error) {
-                res.status(500).json({ error: error.message });
+            return ApiResponse_1.ApiResponses.ok(res, discount);
+        }));
+        this.findByName = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            const branchId = (0, branch_middleware_1.getBranchId)(req);
+            const discount = yield this.discountsService.findOneByName(req.params.name, branchId);
+            if (!discount) {
+                throw AppError_1.AppError.notFound("ส่วนลด");
             }
-        });
-        this.findOne = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                const discount = yield this.discountsService.findOne(req.params.id);
-                res.status(200).json(discount);
+            return ApiResponse_1.ApiResponses.ok(res, discount);
+        }));
+        this.create = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            const branchId = (0, branch_middleware_1.getBranchId)(req);
+            if (branchId && !req.body.branch_id) {
+                req.body.branch_id = branchId;
             }
-            catch (error) {
-                res.status(500).json({ error: error.message });
+            const discount = yield this.discountsService.create(req.body);
+            return ApiResponse_1.ApiResponses.created(res, discount);
+        }));
+        this.update = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            const discount = yield this.discountsService.update(req.params.id, req.body);
+            if (!discount) {
+                throw AppError_1.AppError.notFound("ส่วนลด");
             }
-        });
-        this.findByName = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                const discount = yield this.discountsService.findOneByName(req.params.name);
-                res.status(200).json(discount);
-            }
-            catch (error) {
-                res.status(500).json({ error: error.message });
-            }
-        });
-        this.create = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                const discount = yield this.discountsService.create(req.body);
-                res.status(201).json(discount);
-            }
-            catch (error) {
-                res.status(500).json({ error: error.message });
-            }
-        });
-        this.update = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                const discount = yield this.discountsService.update(req.params.id, req.body);
-                res.status(200).json(discount);
-            }
-            catch (error) {
-                res.status(500).json({ error: error.message });
-            }
-        });
-        this.delete = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                yield this.discountsService.delete(req.params.id);
-                res.status(200).json({ message: "ลบข้อมูลส่วนลดสำเร็จ" });
-            }
-            catch (error) {
-                res.status(500).json({ error: error.message });
-            }
-        });
+            return ApiResponse_1.ApiResponses.ok(res, discount);
+        }));
+        this.delete = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            yield this.discountsService.delete(req.params.id);
+            return ApiResponse_1.ApiResponses.ok(res, { message: "ลบข้อมูลส่วนลดสำเร็จ" });
+        }));
     }
 }
 exports.DiscountsController = DiscountsController;

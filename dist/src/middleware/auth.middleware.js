@@ -16,6 +16,9 @@ exports.authorizeRole = exports.authenticateToken = void 0;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const database_1 = require("../database/database");
 const Users_1 = require("../entity/Users");
+const securityLogger_1 = require("../utils/securityLogger");
+// Session timeout in milliseconds (default: 8 hours)
+const SESSION_TIMEOUT = Number(process.env.SESSION_TIMEOUT_MS) || 8 * 60 * 60 * 1000;
 const authenticateToken = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
     // 1. Get token from cookies
@@ -27,7 +30,15 @@ const authenticateToken = (req, res, next) => __awaiter(void 0, void 0, void 0, 
         }
     }
     if (!token) {
-        // Allow public access or just fail? Usually middleware blocks.
+        const ip = (0, securityLogger_1.getClientIp)(req);
+        securityLogger_1.securityLogger.log({
+            type: 'UNAUTHORIZED_ACCESS',
+            ip,
+            userAgent: req.headers['user-agent'],
+            path: req.path,
+            method: req.method,
+            details: { reason: 'No token provided' }
+        });
         return res.status(401).json({ message: "Authentication required" });
     }
     try {
@@ -37,26 +48,92 @@ const authenticateToken = (req, res, next) => __awaiter(void 0, void 0, void 0, 
             return res.status(500).json({ message: "Server misconfiguration: JWT_SECRET missing" });
         }
         const decoded = jsonwebtoken_1.default.verify(token, secret);
-        // 3. Attach user to request
+        // Check token expiry (session timeout)
+        const now = Date.now();
+        const tokenIssuedAt = decoded.iat ? decoded.iat * 1000 : now;
+        const tokenAge = now - tokenIssuedAt;
+        if (tokenAge > SESSION_TIMEOUT) {
+            const ip = (0, securityLogger_1.getClientIp)(req);
+            securityLogger_1.securityLogger.log({
+                type: 'TOKEN_EXPIRED',
+                userId: decoded.id,
+                ip,
+                userAgent: req.headers['user-agent'],
+                path: req.path,
+                method: req.method,
+                details: { tokenAge, sessionTimeout: SESSION_TIMEOUT }
+            });
+            return res.status(401).json({ message: "Session expired. Please login again." });
+        }
+        // 3. Attach user to request (including branch relation for branch-based filtering)
         const userRepository = database_1.AppDataSource.getRepository(Users_1.Users);
         const user = yield userRepository.findOne({
             where: { id: decoded.id },
-            relations: ["roles"]
+            relations: ["roles", "branch"]
         });
         if (!user) {
+            const ip = (0, securityLogger_1.getClientIp)(req);
+            securityLogger_1.securityLogger.log({
+                type: 'AUTH_FAILURE',
+                userId: decoded.id,
+                ip,
+                userAgent: req.headers['user-agent'],
+                path: req.path,
+                method: req.method,
+                details: { reason: 'User not found' }
+            });
             return res.status(401).json({ message: "User not found" });
         }
         if (!user.is_use) {
+            const ip = (0, securityLogger_1.getClientIp)(req);
+            securityLogger_1.securityLogger.log({
+                type: 'UNAUTHORIZED_ACCESS',
+                userId: user.id,
+                ip,
+                userAgent: req.headers['user-agent'],
+                path: req.path,
+                method: req.method,
+                details: { reason: 'Account disabled' }
+            });
             return res.status(403).json({ message: "Account disabled" });
         }
         req.user = user;
+        req.tokenExpiry = tokenIssuedAt + SESSION_TIMEOUT;
         next();
     }
     catch (err) {
-        if (err instanceof jsonwebtoken_1.default.JsonWebTokenError || err instanceof jsonwebtoken_1.default.TokenExpiredError) {
+        const ip = (0, securityLogger_1.getClientIp)(req);
+        if (err instanceof jsonwebtoken_1.default.JsonWebTokenError) {
+            securityLogger_1.securityLogger.log({
+                type: 'AUTH_FAILURE',
+                ip,
+                userAgent: req.headers['user-agent'],
+                path: req.path,
+                method: req.method,
+                details: { reason: 'Invalid token', error: err.message }
+            });
             return res.status(403).json({ message: "Invalid or expired token" });
         }
+        if (err instanceof jsonwebtoken_1.default.TokenExpiredError) {
+            securityLogger_1.securityLogger.log({
+                type: 'TOKEN_EXPIRED',
+                ip,
+                userAgent: req.headers['user-agent'],
+                path: req.path,
+                method: req.method,
+                details: { reason: 'Token expired' }
+            });
+            return res.status(403).json({ message: "Token expired" });
+        }
         console.error("Authentication Error (System):", err);
+        securityLogger_1.securityLogger.log({
+            type: 'AUTH_FAILURE',
+            ip,
+            userAgent: req.headers['user-agent'],
+            path: req.path,
+            method: req.method,
+            details: { reason: 'System error', error: err.message }
+        });
         return res.status(500).json({ message: "Authentication system error", error: err.message });
     }
 });

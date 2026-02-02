@@ -16,30 +16,30 @@ class PaymentMethodService {
         this.paymentMethodModel = paymentMethodModel;
         this.socketService = socket_service_1.SocketService.getInstance();
     }
-    findAll(page, limit, q) {
+    findAll(page, limit, q, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.paymentMethodModel.findAll(page, limit, q);
+                return this.paymentMethodModel.findAll(page, limit, q, branchId);
             }
             catch (error) {
                 throw error;
             }
         });
     }
-    findOne(id) {
+    findOne(id, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.paymentMethodModel.findOne(id);
+                return this.paymentMethodModel.findOne(id, branchId);
             }
             catch (error) {
                 throw error;
             }
         });
     }
-    findOneByName(payment_method_name) {
+    findOneByName(payment_method_name, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.paymentMethodModel.findOneByName(payment_method_name);
+                return this.paymentMethodModel.findOneByName(payment_method_name, branchId);
             }
             catch (error) {
                 throw error;
@@ -52,7 +52,7 @@ class PaymentMethodService {
                 if (!paymentMethod.payment_method_name) {
                     throw new Error("กรุณาระบุชื่อวิธีการชำระเงิน");
                 }
-                const existingPaymentMethod = yield this.paymentMethodModel.findOneByName(paymentMethod.payment_method_name);
+                const existingPaymentMethod = yield this.paymentMethodModel.findOneByName(paymentMethod.payment_method_name, paymentMethod.branch_id);
                 if (existingPaymentMethod) {
                     throw new Error("ชื่อวิธีการชำระเงินนี้มีอยู่ในระบบแล้ว");
                 }
@@ -73,7 +73,7 @@ class PaymentMethodService {
                     throw new Error("ไม่พบข้อมูลวิธีการชำระเงินที่ต้องการแก้ไข");
                 }
                 if (paymentMethod.payment_method_name && paymentMethod.payment_method_name !== paymentMethodToUpdate.payment_method_name) {
-                    const existingPaymentMethod = yield this.paymentMethodModel.findOneByName(paymentMethod.payment_method_name);
+                    const existingPaymentMethod = yield this.paymentMethodModel.findOneByName(paymentMethod.payment_method_name, paymentMethod.branch_id || paymentMethodToUpdate.branch_id);
                     if (existingPaymentMethod) {
                         throw new Error("ชื่อวิธีการชำระเงินนี้มีอยู่ในระบบแล้ว");
                     }

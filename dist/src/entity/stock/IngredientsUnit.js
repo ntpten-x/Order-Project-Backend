@@ -12,6 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.IngredientsUnit = void 0;
 const typeorm_1 = require("typeorm");
 const Ingredients_1 = require("./Ingredients");
+const Branch_1 = require("../Branch");
 let IngredientsUnit = class IngredientsUnit {
 };
 exports.IngredientsUnit = IngredientsUnit;
@@ -20,13 +21,23 @@ __decorate([
     __metadata("design:type", String)
 ], IngredientsUnit.prototype, "id", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: "varchar", length: 100, unique: true }),
+    (0, typeorm_1.Column)({ type: "varchar", length: 100 }),
     __metadata("design:type", String)
 ], IngredientsUnit.prototype, "unit_name", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: "varchar", length: 100, unique: true }),
+    (0, typeorm_1.Column)({ type: "varchar", length: 100 }),
     __metadata("design:type", String)
 ], IngredientsUnit.prototype, "display_name", void 0);
+__decorate([
+    (0, typeorm_1.Index)(),
+    (0, typeorm_1.Column)({ name: "branch_id", type: "uuid", nullable: true }),
+    __metadata("design:type", String)
+], IngredientsUnit.prototype, "branch_id", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)(() => Branch_1.Branch),
+    (0, typeorm_1.JoinColumn)({ name: "branch_id" }),
+    __metadata("design:type", Branch_1.Branch)
+], IngredientsUnit.prototype, "branch", void 0);
 __decorate([
     (0, typeorm_1.Index)(),
     (0, typeorm_1.Column)({ type: "boolean", default: true }),
@@ -41,5 +52,7 @@ __decorate([
     __metadata("design:type", Array)
 ], IngredientsUnit.prototype, "ingredients", void 0);
 exports.IngredientsUnit = IngredientsUnit = __decorate([
-    (0, typeorm_1.Entity)("stock_ingredients_unit")
+    (0, typeorm_1.Entity)("stock_ingredients_unit"),
+    (0, typeorm_1.Index)(["unit_name", "branch_id"], { unique: true }),
+    (0, typeorm_1.Index)(["display_name", "branch_id"], { unique: true })
 ], IngredientsUnit);

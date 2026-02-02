@@ -16,12 +16,15 @@ class IngredientsUnitModel {
     constructor() {
         this.ingredientsUnitRepository = database_1.AppDataSource.getRepository(IngredientsUnit_1.IngredientsUnit);
     }
-    findAll(filters) {
+    findAll(filters, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 const query = this.ingredientsUnitRepository.createQueryBuilder("ingredientsUnit")
-                    // .leftJoinAndSelect("ingredientsUnit.ingredients", "ingredients")
                     .orderBy("ingredientsUnit.create_date", "ASC");
+                // Filter by branch for data isolation
+                if (branchId) {
+                    query.andWhere("ingredientsUnit.branch_id = :branchId", { branchId });
+                }
                 if ((filters === null || filters === void 0 ? void 0 : filters.is_active) !== undefined) {
                     query.andWhere("ingredientsUnit.is_active = :is_active", { is_active: filters.is_active });
                 }
@@ -34,26 +37,30 @@ class IngredientsUnitModel {
             }
         });
     }
-    findOne(id) {
+    findOne(id, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.ingredientsUnitRepository.createQueryBuilder("ingredientsUnit")
-                    // .leftJoinAndSelect("ingredientsUnit.ingredients", "ingredients")
-                    .where("ingredientsUnit.id = :id", { id })
-                    .getOne();
+                const query = this.ingredientsUnitRepository.createQueryBuilder("ingredientsUnit")
+                    .where("ingredientsUnit.id = :id", { id });
+                if (branchId) {
+                    query.andWhere("ingredientsUnit.branch_id = :branchId", { branchId });
+                }
+                return query.getOne();
             }
             catch (error) {
                 throw error;
             }
         });
     }
-    findOneByUnitName(unit_name) {
+    findOneByUnitName(unit_name, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.ingredientsUnitRepository.createQueryBuilder("ingredientsUnit")
-                    // .leftJoinAndSelect("ingredientsUnit.ingredients", "ingredients")
-                    .where("ingredientsUnit.unit_name = :unit_name", { unit_name })
-                    .getOne();
+                const query = this.ingredientsUnitRepository.createQueryBuilder("ingredientsUnit")
+                    .where("ingredientsUnit.unit_name = :unit_name", { unit_name });
+                if (branchId) {
+                    query.andWhere("ingredientsUnit.branch_id = :branchId", { branchId });
+                }
+                return query.getOne();
             }
             catch (error) {
                 throw error;

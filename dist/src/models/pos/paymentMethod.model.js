@@ -17,13 +17,16 @@ class PaymentMethodModels {
         this.paymentMethodRepository = database_1.AppDataSource.getRepository(PaymentMethod_1.PaymentMethod);
     }
     findAll() {
-        return __awaiter(this, arguments, void 0, function* (page = 1, limit = 50, q) {
+        return __awaiter(this, arguments, void 0, function* (page = 1, limit = 50, q, branchId) {
             try {
                 const skip = (page - 1) * limit;
                 const query = this.paymentMethodRepository.createQueryBuilder("paymentMethod")
                     .orderBy("paymentMethod.create_date", "ASC");
+                if (branchId) {
+                    query.andWhere("paymentMethod.branch_id = :branchId", { branchId });
+                }
                 if (q && q.trim()) {
-                    query.where("(paymentMethod.payment_method_name ILIKE :q OR paymentMethod.display_name ILIKE :q)", { q: `%${q.trim()}%` });
+                    query.andWhere("(paymentMethod.payment_method_name ILIKE :q OR paymentMethod.display_name ILIKE :q)", { q: `%${q.trim()}%` });
                 }
                 const [data, total] = yield query.skip(skip).take(limit).getManyAndCount();
                 return {
@@ -38,20 +41,28 @@ class PaymentMethodModels {
             }
         });
     }
-    findOne(id) {
+    findOne(id, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.paymentMethodRepository.findOneBy({ id });
+                const where = { id };
+                if (branchId) {
+                    where.branch_id = branchId;
+                }
+                return this.paymentMethodRepository.findOneBy(where);
             }
             catch (error) {
                 throw error;
             }
         });
     }
-    findOneByName(payment_method_name) {
+    findOneByName(payment_method_name, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.paymentMethodRepository.findOneBy({ payment_method_name });
+                const where = { payment_method_name };
+                if (branchId) {
+                    where.branch_id = branchId;
+                }
+                return this.paymentMethodRepository.findOneBy(where);
             }
             catch (error) {
                 throw error;

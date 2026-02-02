@@ -14,10 +14,11 @@ const socket_io_1 = require("socket.io");
 const socket_service_1 = require("./src/services/socket.service");
 const cookie_parser_1 = __importDefault(require("cookie-parser"));
 const helmet_1 = __importDefault(require("helmet"));
-const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const csurf_1 = __importDefault(require("csurf"));
 const compression_1 = __importDefault(require("compression"));
 const crypto_1 = require("crypto");
+const rateLimit_middleware_1 = require("./src/middleware/rateLimit.middleware");
+const sanitize_1 = require("./src/utils/sanitize");
 const ingredientsUnit_route_1 = __importDefault(require("./src/routes/stock/ingredientsUnit.route"));
 const ingredients_route_1 = __importDefault(require("./src/routes/stock/ingredients.route"));
 const orders_route_1 = __importDefault(require("./src/routes/stock/orders.route"));
@@ -38,8 +39,11 @@ const shopProfile_route_1 = __importDefault(require("./src/routes/pos/shopProfil
 const paymentAccount_routes_1 = __importDefault(require("./src/routes/pos/paymentAccount.routes"));
 const dashboard_route_1 = __importDefault(require("./src/routes/pos/dashboard.route"));
 const branch_route_1 = __importDefault(require("./src/routes/branch.route"));
+const orderQueue_route_1 = __importDefault(require("./src/routes/pos/orderQueue.route"));
+const promotions_route_1 = __importDefault(require("./src/routes/pos/promotions.route"));
 const error_middleware_1 = require("./src/middleware/error.middleware");
 const AppError_1 = require("./src/utils/AppError");
+const monitoring_middleware_1 = require("./src/middleware/monitoring.middleware");
 const app = (0, express_1.default)();
 const httpServer = (0, http_1.createServer)(app); // Wrap express with HTTP server
 const port = process.env.PORT || 3000;
@@ -49,6 +53,8 @@ const enablePerfLogs = process.env.ENABLE_PERF_LOG === "true" || process.env.NOD
 app.set("trust proxy", 1);
 // Reduce information leakage
 app.disable("x-powered-by");
+// Performance monitoring (always enabled)
+app.use(monitoring_middleware_1.performanceMonitoring);
 // Basic performance logging (disabled in prod unless ENABLE_PERF_LOG=true)
 if (enablePerfLogs) {
     app.use((req, res, next) => {
@@ -79,23 +85,11 @@ if (!process.env.JWT_SECRET) {
 app.use((0, helmet_1.default)());
 app.use((0, cookie_parser_1.default)());
 app.use((0, compression_1.default)());
-// Rate Limiting
-const limiter = (0, express_rate_limit_1.default)({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 1000, // limit each IP to 1000 requests per windowMs
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: "Too many requests from this IP, please try again after 15 minutes"
-});
-const loginLimiter = (0, express_rate_limit_1.default)({
-    windowMs: 15 * 60 * 1000,
-    max: 20, // tighter limit for auth brute-force
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: "Too many login attempts, please try again shortly"
-});
-app.use(limiter);
-app.use("/auth/login", loginLimiter);
+// Rate Limiting - Enhanced with specific limiters
+app.use(rateLimit_middleware_1.apiLimiter);
+app.use("/auth/login", rateLimit_middleware_1.authLimiter);
+app.use("/pos/orders", rateLimit_middleware_1.orderCreateLimiter); // Stricter limit for order creation
+app.use("/pos/payments", rateLimit_middleware_1.paymentLimiter); // Stricter limit for payments
 // CORS
 // Update origin to match your frontend URL.
 // For dev, we might assume localhost:3000 or 3001.
@@ -113,6 +107,31 @@ app.use((0, cors_1.default)({
 }));
 app.use(express_1.default.json({ limit: `${bodyLimitMb}mb` }));
 app.use(express_1.default.urlencoded({ limit: `${bodyLimitMb}mb`, extended: true }));
+// Input Sanitization Middleware
+app.use((req, res, next) => {
+    // Sanitize request body
+    if (req.body && typeof req.body === 'object') {
+        req.body = (0, sanitize_1.sanitizeObject)(req.body);
+    }
+    // Sanitize query parameters
+    // NOTE: req.query is read-only, so we sanitize in-place
+    if (req.query && typeof req.query === 'object') {
+        const query = req.query;
+        for (const key in query) {
+            if (Object.prototype.hasOwnProperty.call(query, key)) {
+                if (typeof query[key] === 'string') {
+                    // Sanitize string values in query
+                    query[key] = (0, sanitize_1.sanitizeString)(query[key]);
+                }
+                else if (Array.isArray(query[key])) {
+                    // Sanitize array values
+                    query[key] = query[key].map((item) => typeof item === 'string' ? (0, sanitize_1.sanitizeString)(item) : item);
+                }
+            }
+        }
+    }
+    next();
+});
 // Initialize Socket.IO
 const io = new socket_io_1.Server(httpServer, {
     cors: {
@@ -132,36 +151,146 @@ socket_service_1.SocketService.getInstance().init(io);
 // Conditional CSRF for now to avoid breaking existing API instantly without frontend changes.
 // Uncomment below to enable strict CSRF.
 // Initialize CSRF protection
+// Using cookie-based CSRF tokens (no session required)
 const csrfProtection = (0, csurf_1.default)({
     cookie: {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
-        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax"
-    }
+        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+        key: '_csrf', // Cookie name for CSRF secret
+        path: '/' // Cookie path
+    },
+    ignoreMethods: ['GET', 'HEAD', 'OPTIONS'] // Don't enforce for these methods
 });
 // Apply CSRF protection to cookie-authenticated requests except explicit public endpoints
 const csrfExcludedPaths = new Set([
     "/auth/login",
     "/auth/logout",
-    "/health"
+    "/health",
+    "/csrf-token"
 ]);
+// CSRF token endpoint - must be defined before CSRF middleware
+// This endpoint needs to initialize CSRF token generation
+// IMPORTANT: This endpoint must always work to ensure security
+// NOTE: This endpoint is excluded from global error handler to return custom format
+app.get('/csrf-token', (req, res, next) => {
+    // Wrap in try-catch to handle any unexpected errors
+    try {
+        // Use csrfProtection middleware to generate token
+        // csurf uses cookie-based tokens, so it should work even without explicit session
+        // The cookie will be set automatically by csurf
+        csrfProtection(req, res, (err) => {
+            var _a;
+            if (err) {
+                // If CSRF initialization fails, log and return error
+                console.error('CSRF token generation error:', err);
+                console.error('Error details:', {
+                    code: err.code,
+                    message: err.message,
+                    name: err.name
+                });
+                // Check if it's a missing secret error (first request)
+                if (err.code === 'EBADCSRFTOKEN' || ((_a = err.message) === null || _a === void 0 ? void 0 : _a.includes('secret'))) {
+                    // This might be the first request - try to generate token anyway
+                    // csurf should create the secret cookie on first call
+                    console.log('First CSRF request - attempting to generate secret...');
+                }
+                // Return error in consistent format (bypass global error handler)
+                return res.status(500).json({
+                    success: false,
+                    error: {
+                        code: 'CSRF_TOKEN_ERROR',
+                        message: 'Failed to generate CSRF token. Please try again.'
+                    }
+                });
+            }
+            // Success - get the generated token
+            try {
+                const token = req.csrfToken ? req.csrfToken() : '';
+                if (!token) {
+                    console.warn('CSRF token is empty after generation');
+                    return res.status(500).json({
+                        success: false,
+                        error: {
+                            code: 'CSRF_TOKEN_EMPTY',
+                            message: 'CSRF token not generated. Please try again.'
+                        }
+                    });
+                }
+                // Return token in expected format
+                return res.json({
+                    success: true,
+                    csrfToken: token
+                });
+            }
+            catch (tokenError) {
+                console.error('Error getting CSRF token:', tokenError);
+                return res.status(500).json({
+                    success: false,
+                    error: {
+                        code: 'CSRF_TOKEN_ERROR',
+                        message: 'Failed to retrieve CSRF token. Please try again.'
+                    }
+                });
+            }
+        });
+    }
+    catch (error) {
+        // Catch any unexpected errors
+        console.error('Unexpected error in CSRF token endpoint:', error);
+        return res.status(500).json({
+            success: false,
+            error: {
+                code: 'INTERNAL_ERROR',
+                message: 'Something went wrong while generating CSRF token.'
+            }
+        });
+    }
+});
 app.use((req, res, next) => {
     var _a;
     // Skip CSRF when using pure Bearer header (non-cookie flows) or explicitly excluded paths.
     const usesCookieAuth = Boolean((_a = req.cookies) === null || _a === void 0 ? void 0 : _a.token);
     const bearerOnly = req.headers.authorization && !usesCookieAuth;
-    if (req.path.startsWith("/pos/payment-accounts")) {
-        console.log(`[DEBUG Backend] CSRF Check for ${req.method} ${req.path}`);
-        console.log(`- Cookie: ${req.headers.cookie ? 'Present' : 'Missing'}`);
-        console.log(`- Token: ${req.headers['x-csrf-token'] ? 'Present' : 'Missing'}`);
-    }
-    if (csrfExcludedPaths.has(req.path) || bearerOnly) {
+    // Skip CSRF for excluded paths
+    if (csrfExcludedPaths.has(req.path)) {
         return next();
     }
-    return csrfProtection(req, res, next);
-});
-app.get('/csrf-token', (req, res) => {
-    res.json({ csrfToken: req.csrfToken() });
+    // Skip CSRF for Bearer token only requests (no cookie)
+    if (bearerOnly) {
+        return next();
+    }
+    // For cookie-based authentication, enforce CSRF protection
+    // This prevents CSRF attacks where malicious sites make requests with user's cookies
+    if (usesCookieAuth) {
+        // Only enforce for state-changing methods (POST, PUT, DELETE, PATCH)
+        const stateChangingMethods = ['POST', 'PUT', 'DELETE', 'PATCH'];
+        if (stateChangingMethods.includes(req.method)) {
+            // STRICT: Reject requests without CSRF token for state-changing methods
+            return csrfProtection(req, res, (err) => {
+                if (err) {
+                    // CSRF token missing or invalid
+                    console.warn(`[CSRF] Rejected ${req.method} ${req.path} - Missing or invalid CSRF token`);
+                    return res.status(403).json({
+                        error: 'CSRF token required',
+                        message: 'Please refresh the page and try again'
+                    });
+                }
+                return next();
+            });
+        }
+        // For GET requests, still initialize CSRF but don't enforce
+        // This allows CSRF token generation for subsequent requests
+        return csrfProtection(req, res, (err) => {
+            if (err && err.code !== 'EBADCSRFTOKEN') {
+                return next(err);
+            }
+            // Allow GET requests even if CSRF token is missing
+            return next();
+        });
+    }
+    // No authentication - allow through
+    return next();
 });
 app.get('/health', (req, res) => {
     res.status(200).json({ status: 'ok', uptime: process.uptime() });
@@ -188,11 +317,15 @@ app.use("/pos/shifts", shifts_route_1.default);
 app.use("/pos/shopProfile", shopProfile_route_1.default);
 app.use("/pos/payment-accounts", paymentAccount_routes_1.default);
 app.use("/pos/dashboard", dashboard_route_1.default);
+app.use("/pos/queue", orderQueue_route_1.default);
+app.use("/pos/promotions", promotions_route_1.default);
 app.use("/branches", branch_route_1.default);
 // Handle Unhandled Routes
 app.use((req, res, next) => {
     next(new AppError_1.AppError(`Can't find ${req.originalUrl} on this server!`, 404));
 });
+// Error Tracking Middleware (before global error handler)
+app.use(monitoring_middleware_1.errorTracking);
 // Global Error Handler
 app.use(error_middleware_1.globalErrorHandler);
 (0, database_1.connectDatabase)().then(() => {

@@ -10,68 +10,70 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ProductsController = void 0;
+const catchAsync_1 = require("../../utils/catchAsync");
+const AppError_1 = require("../../utils/AppError");
+const ApiResponse_1 = require("../../utils/ApiResponse");
+const branch_middleware_1 = require("../../middleware/branch.middleware");
+/**
+ * Products Controller
+ * Following supabase-postgres-best-practices:
+ * - Standardized API responses
+ * - Consistent error handling
+ * - Pagination support
+ * - Branch-based data isolation
+ */
 class ProductsController {
     constructor(productsService) {
         this.productsService = productsService;
-        this.findAll = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                const page = parseInt(req.query.page) || 1;
-                const rawLimit = parseInt(req.query.limit);
-                const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
-                const category_id = req.query.category_id;
-                const q = req.query.q || undefined;
-                const result = yield this.productsService.findAll(page, limit, category_id, q);
-                res.status(200).json(result);
+        this.findAll = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            const page = Math.max(parseInt(req.query.page) || 1, 1);
+            const rawLimit = parseInt(req.query.limit);
+            const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
+            const category_id = req.query.category_id;
+            const q = req.query.q || undefined;
+            const branchId = (0, branch_middleware_1.getBranchId)(req);
+            const result = yield this.productsService.findAll(page, limit, category_id, q, branchId);
+            return ApiResponse_1.ApiResponses.paginated(res, result.data, {
+                page: result.page,
+                limit: limit,
+                total: result.total,
+            });
+        }));
+        this.findOne = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            const branchId = (0, branch_middleware_1.getBranchId)(req);
+            const product = yield this.productsService.findOne(req.params.id, branchId);
+            if (!product) {
+                throw AppError_1.AppError.notFound("สินค้า");
             }
-            catch (error) {
-                res.status(500).json({ error: error.message });
+            return ApiResponse_1.ApiResponses.ok(res, product);
+        }));
+        this.findOneByName = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            const branchId = (0, branch_middleware_1.getBranchId)(req);
+            const product = yield this.productsService.findOneByName(req.params.product_name, branchId);
+            if (!product) {
+                throw AppError_1.AppError.notFound("สินค้า");
             }
-        });
-        this.findOne = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                const product = yield this.productsService.findOne(req.params.id);
-                res.status(200).json(product);
+            return ApiResponse_1.ApiResponses.ok(res, product);
+        }));
+        this.create = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            const branchId = (0, branch_middleware_1.getBranchId)(req);
+            if (branchId && !req.body.branch_id) {
+                req.body.branch_id = branchId;
             }
-            catch (error) {
-                res.status(500).json({ error: error.message });
+            const product = yield this.productsService.create(req.body);
+            return ApiResponse_1.ApiResponses.created(res, product);
+        }));
+        this.update = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            const product = yield this.productsService.update(req.params.id, req.body);
+            if (!product) {
+                throw AppError_1.AppError.notFound("สินค้า");
             }
-        });
-        this.findOneByName = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                const product = yield this.productsService.findOneByName(req.params.product_name);
-                res.status(200).json(product);
-            }
-            catch (error) {
-                res.status(500).json({ error: error.message });
-            }
-        });
-        this.create = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                const product = yield this.productsService.create(req.body);
-                res.status(201).json(product);
-            }
-            catch (error) {
-                res.status(500).json({ error: error.message });
-            }
-        });
-        this.update = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                const product = yield this.productsService.update(req.params.id, req.body);
-                res.status(200).json(product);
-            }
-            catch (error) {
-                res.status(500).json({ error: error.message });
-            }
-        });
-        this.delete = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                yield this.productsService.delete(req.params.id);
-                res.status(200).json({ message: "สินค้าลบสำเร็จ" });
-            }
-            catch (error) {
-                res.status(500).json({ error: error.message });
-            }
-        });
+            return ApiResponse_1.ApiResponses.ok(res, product);
+        }));
+        this.delete = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            yield this.productsService.delete(req.params.id);
+            return ApiResponse_1.ApiResponses.ok(res, { message: "สินค้าลบสำเร็จ" });
+        }));
     }
 }
 exports.ProductsController = ProductsController;

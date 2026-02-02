@@ -16,30 +16,30 @@ class DiscountsService {
         this.discountsModel = discountsModel;
         this.socketService = socket_service_1.SocketService.getInstance();
     }
-    findAll(q) {
+    findAll(q, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.discountsModel.findAll(q);
+                return this.discountsModel.findAll(q, branchId);
             }
             catch (error) {
                 throw error;
             }
         });
     }
-    findOne(id) {
+    findOne(id, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.discountsModel.findOne(id);
+                return this.discountsModel.findOne(id, branchId);
             }
             catch (error) {
                 throw error;
             }
         });
     }
-    findOneByName(discount_name) {
+    findOneByName(discount_name, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.discountsModel.findOneByName(discount_name);
+                return this.discountsModel.findOneByName(discount_name, branchId);
             }
             catch (error) {
                 throw error;
@@ -52,7 +52,7 @@ class DiscountsService {
                 if (!discounts.discount_name) {
                     throw new Error("กรุณาระบุชื่อส่วนลด");
                 }
-                const existingDiscount = yield this.discountsModel.findOneByName(discounts.discount_name);
+                const existingDiscount = yield this.discountsModel.findOneByName(discounts.discount_name, discounts.branch_id);
                 if (existingDiscount) {
                     throw new Error("ชื่อส่วนลดนี้มีอยู่ในระบบแล้ว");
                 }
@@ -73,7 +73,7 @@ class DiscountsService {
                     throw new Error("ไม่พบข้อมูลส่วนลดที่ต้องการแก้ไข");
                 }
                 if (discounts.discount_name && discounts.discount_name !== discountToUpdate.discount_name) {
-                    const existingDiscount = yield this.discountsModel.findOneByName(discounts.discount_name);
+                    const existingDiscount = yield this.discountsModel.findOneByName(discounts.discount_name, discounts.branch_id || discountToUpdate.branch_id);
                     if (existingDiscount) {
                         throw new Error("ชื่อส่วนลดนี้มีอยู่ในระบบแล้ว");
                     }

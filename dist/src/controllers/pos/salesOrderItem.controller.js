@@ -10,54 +10,44 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SalesOrderItemController = void 0;
+const catchAsync_1 = require("../../utils/catchAsync");
+const AppError_1 = require("../../utils/AppError");
+const ApiResponse_1 = require("../../utils/ApiResponse");
+/**
+ * Sales Order Item Controller
+ * Following supabase-postgres-best-practices:
+ * - Standardized API responses
+ * - Consistent error handling
+ */
 class SalesOrderItemController {
     constructor(salesOrderItemService) {
         this.salesOrderItemService = salesOrderItemService;
-        this.findAll = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                const items = yield this.salesOrderItemService.findAll();
-                res.status(200).json(items);
+        this.findAll = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            const items = yield this.salesOrderItemService.findAll();
+            return ApiResponse_1.ApiResponses.ok(res, items);
+        }));
+        this.findOne = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            const item = yield this.salesOrderItemService.findOne(req.params.id);
+            if (!item) {
+                throw AppError_1.AppError.notFound("รายการสินค้า");
             }
-            catch (error) {
-                res.status(500).json({ error: error.message });
+            return ApiResponse_1.ApiResponses.ok(res, item);
+        }));
+        this.create = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            const item = yield this.salesOrderItemService.create(req.body);
+            return ApiResponse_1.ApiResponses.created(res, item);
+        }));
+        this.update = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            const item = yield this.salesOrderItemService.update(req.params.id, req.body);
+            if (!item) {
+                throw AppError_1.AppError.notFound("รายการสินค้า");
             }
-        });
-        this.findOne = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                const item = yield this.salesOrderItemService.findOne(req.params.id);
-                res.status(200).json(item);
-            }
-            catch (error) {
-                res.status(500).json({ error: error.message });
-            }
-        });
-        this.create = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                const item = yield this.salesOrderItemService.create(req.body);
-                res.status(201).json(item);
-            }
-            catch (error) {
-                res.status(500).json({ error: error.message });
-            }
-        });
-        this.update = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                const item = yield this.salesOrderItemService.update(req.params.id, req.body);
-                res.status(200).json(item);
-            }
-            catch (error) {
-                res.status(500).json({ error: error.message });
-            }
-        });
-        this.delete = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                yield this.salesOrderItemService.delete(req.params.id);
-                res.status(200).json({ message: "ลบรายการสินค้าในออเดอร์สำเร็จ" });
-            }
-            catch (error) {
-                res.status(500).json({ error: error.message });
-            }
-        });
+            return ApiResponse_1.ApiResponses.ok(res, item);
+        }));
+        this.delete = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            yield this.salesOrderItemService.delete(req.params.id);
+            return ApiResponse_1.ApiResponses.ok(res, { message: "ลบรายการสินค้าในออเดอร์สำเร็จ" });
+        }));
     }
 }
 exports.SalesOrderItemController = SalesOrderItemController;

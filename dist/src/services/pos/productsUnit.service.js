@@ -16,30 +16,30 @@ class ProductsUnitService {
         this.productsUnitModel = productsUnitModel;
         this.socketService = socket_service_1.SocketService.getInstance();
     }
-    findAll() {
+    findAll(branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.productsUnitModel.findAll();
+                return this.productsUnitModel.findAll(branchId);
             }
             catch (error) {
                 throw error;
             }
         });
     }
-    findOne(id) {
+    findOne(id, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.productsUnitModel.findOne(id);
+                return this.productsUnitModel.findOne(id, branchId);
             }
             catch (error) {
                 throw error;
             }
         });
     }
-    findOneByName(products_unit_name) {
+    findOneByName(products_unit_name, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.productsUnitModel.findOneByName(products_unit_name);
+                return this.productsUnitModel.findOneByName(products_unit_name, branchId);
             }
             catch (error) {
                 throw error;
@@ -49,7 +49,7 @@ class ProductsUnitService {
     create(productsUnit) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const findProductsUnit = yield this.productsUnitModel.findOneByName(productsUnit.unit_name);
+                const findProductsUnit = yield this.productsUnitModel.findOneByName(productsUnit.unit_name, productsUnit.branch_id);
                 if (findProductsUnit) {
                     throw new Error("หน่วยนี้มีอยู่ในระบบแล้ว");
                 }
@@ -70,7 +70,7 @@ class ProductsUnitService {
     update(id, productsUnit) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const findProductsUnit = yield this.productsUnitModel.findOneByName(productsUnit.unit_name);
+                const findProductsUnit = yield this.productsUnitModel.findOneByName(productsUnit.unit_name, productsUnit.branch_id);
                 if (findProductsUnit && findProductsUnit.id !== id) {
                     throw new Error("หน่วยนี้มีอยู่ในระบบแล้ว");
                 }

@@ -11,6 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ShopProfile = void 0;
 const typeorm_1 = require("typeorm");
+const Branch_1 = require("../Branch");
 let ShopProfile = class ShopProfile {
 };
 exports.ShopProfile = ShopProfile;
@@ -18,6 +19,15 @@ __decorate([
     (0, typeorm_1.PrimaryGeneratedColumn)("uuid"),
     __metadata("design:type", String)
 ], ShopProfile.prototype, "id", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: "branch_id", type: "uuid", nullable: true }),
+    __metadata("design:type", String)
+], ShopProfile.prototype, "branch_id", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)(() => Branch_1.Branch),
+    (0, typeorm_1.JoinColumn)({ name: "branch_id" }),
+    __metadata("design:type", Branch_1.Branch)
+], ShopProfile.prototype, "branch", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: "varchar", length: 200, default: "My Shop" }),
     __metadata("design:type", String)
@@ -51,5 +61,6 @@ __decorate([
     __metadata("design:type", Date)
 ], ShopProfile.prototype, "update_date", void 0);
 exports.ShopProfile = ShopProfile = __decorate([
-    (0, typeorm_1.Entity)()
+    (0, typeorm_1.Entity)(),
+    (0, typeorm_1.Index)(["branch_id"])
 ], ShopProfile);

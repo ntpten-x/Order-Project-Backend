@@ -12,6 +12,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.PaymentsController = void 0;
 const catchAsync_1 = require("../../utils/catchAsync");
 const AppError_1 = require("../../utils/AppError");
+const auditLogger_1 = require("../../utils/auditLogger");
+const securityLogger_1 = require("../../utils/securityLogger");
 class PaymentsController {
     constructor(paymentsService) {
         this.paymentsService = paymentsService;
@@ -32,6 +34,26 @@ class PaymentsController {
                 throw new AppError_1.AppError("Authentication required (User ID missing)", 401);
             }
             const payment = yield this.paymentsService.create(req.body, user.id);
+            // Audit log - CRITICAL for payment tracking
+            yield auditLogger_1.auditLogger.log({
+                action_type: auditLogger_1.AuditActionType.PAYMENT_CREATE,
+                user_id: user.id,
+                username: user.username,
+                ip_address: (0, securityLogger_1.getClientIp)(req),
+                user_agent: req.headers['user-agent'],
+                entity_type: 'Payments',
+                entity_id: payment.id,
+                branch_id: user.branch_id,
+                new_values: {
+                    order_id: payment.order_id,
+                    amount: payment.amount,
+                    payment_method_id: payment.payment_method_id,
+                    status: payment.status
+                },
+                description: `Created payment for order ${payment.order_id} - Amount: ${payment.amount}`,
+                path: req.path,
+                method: req.method,
+            });
             res.status(201).json(payment);
         }));
         this.update = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {

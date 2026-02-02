@@ -16,30 +16,30 @@ class DeliveryService {
         this.deliveryModel = deliveryModel;
         this.socketService = socket_service_1.SocketService.getInstance();
     }
-    findAll(page, limit, q) {
+    findAll(page, limit, q, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.deliveryModel.findAll(page, limit, q);
+                return this.deliveryModel.findAll(page, limit, q, branchId);
             }
             catch (error) {
                 throw error;
             }
         });
     }
-    findOne(id) {
+    findOne(id, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.deliveryModel.findOne(id);
+                return this.deliveryModel.findOne(id, branchId);
             }
             catch (error) {
                 throw error;
             }
         });
     }
-    findOneByName(delivery_name) {
+    findOneByName(delivery_name, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.deliveryModel.findOneByName(delivery_name);
+                return this.deliveryModel.findOneByName(delivery_name, branchId);
             }
             catch (error) {
                 throw error;
@@ -52,7 +52,7 @@ class DeliveryService {
                 if (!delivery.delivery_name) {
                     throw new Error("กรุณาระบุชื่อบริการส่ง");
                 }
-                const existingDelivery = yield this.deliveryModel.findOneByName(delivery.delivery_name);
+                const existingDelivery = yield this.deliveryModel.findOneByName(delivery.delivery_name, delivery.branch_id);
                 if (existingDelivery) {
                     throw new Error("ชื่อบริการส่งนี้มีอยู่ในระบบแล้ว");
                 }
@@ -73,7 +73,7 @@ class DeliveryService {
                     throw new Error("ไม่พบข้อมูลบริการส่งที่ต้องการแก้ไข");
                 }
                 if (delivery.delivery_name && delivery.delivery_name !== deliveryToUpdate.delivery_name) {
-                    const existingDelivery = yield this.deliveryModel.findOneByName(delivery.delivery_name);
+                    const existingDelivery = yield this.deliveryModel.findOneByName(delivery.delivery_name, delivery.branch_id || deliveryToUpdate.branch_id);
                     if (existingDelivery) {
                         throw new Error("ชื่อบริการส่งนี้มีอยู่ในระบบแล้ว");
                     }

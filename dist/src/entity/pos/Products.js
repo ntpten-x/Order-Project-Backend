@@ -13,6 +13,7 @@ exports.Products = void 0;
 const typeorm_1 = require("typeorm");
 const Category_1 = require("./Category");
 const ProductsUnit_1 = require("./ProductsUnit");
+const Branch_1 = require("../Branch");
 let Products = class Products {
 };
 exports.Products = Products;
@@ -20,6 +21,15 @@ __decorate([
     (0, typeorm_1.PrimaryGeneratedColumn)("uuid"),
     __metadata("design:type", String)
 ], Products.prototype, "id", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: "branch_id", type: "uuid", nullable: true }),
+    __metadata("design:type", String)
+], Products.prototype, "branch_id", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)(() => Branch_1.Branch),
+    (0, typeorm_1.JoinColumn)({ name: "branch_id" }),
+    __metadata("design:type", Branch_1.Branch)
+], Products.prototype, "branch", void 0);
 __decorate([
     (0, typeorm_1.Index)(),
     (0, typeorm_1.Column)({ type: "varchar", length: 100 }),
@@ -83,5 +93,6 @@ __decorate([
     )
 ], Products.prototype, "unit", void 0);
 exports.Products = Products = __decorate([
-    (0, typeorm_1.Entity)()
+    (0, typeorm_1.Entity)(),
+    (0, typeorm_1.Index)(["branch_id"])
 ], Products);

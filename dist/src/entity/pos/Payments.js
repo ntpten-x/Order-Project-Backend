@@ -14,6 +14,7 @@ const typeorm_1 = require("typeorm");
 const SalesOrder_1 = require("./SalesOrder");
 const PaymentMethod_1 = require("./PaymentMethod");
 const Shifts_1 = require("./Shifts");
+const Branch_1 = require("../Branch");
 var PaymentStatus;
 (function (PaymentStatus) {
     PaymentStatus["Pending"] = "Pending";
@@ -76,6 +77,16 @@ __decorate([
     (0, typeorm_1.Column)({ type: "timestamptz", default: () => "CURRENT_TIMESTAMP" }),
     __metadata("design:type", Date)
 ], Payments.prototype, "payment_date", void 0);
+__decorate([
+    (0, typeorm_1.Index)(),
+    (0, typeorm_1.Column)({ name: "branch_id", type: "uuid", nullable: true }),
+    __metadata("design:type", String)
+], Payments.prototype, "branch_id", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)(() => Branch_1.Branch),
+    (0, typeorm_1.JoinColumn)({ name: "branch_id" }),
+    __metadata("design:type", Branch_1.Branch)
+], Payments.prototype, "branch", void 0);
 exports.Payments = Payments = __decorate([
     (0, typeorm_1.Index)(["payment_date"]),
     (0, typeorm_1.Entity)()

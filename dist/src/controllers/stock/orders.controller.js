@@ -13,126 +13,102 @@ exports.OrdersController = void 0;
 const orders_service_1 = require("../../services/stock/orders.service");
 const PurchaseOrder_1 = require("../../entity/stock/PurchaseOrder");
 const orders_model_1 = require("../../models/stock/orders.model");
+const catchAsync_1 = require("../../utils/catchAsync");
+const AppError_1 = require("../../utils/AppError");
+const ApiResponse_1 = require("../../utils/ApiResponse");
+/**
+ * Stock Orders Controller
+ * Following supabase-postgres-best-practices:
+ * - Standardized API responses
+ * - Consistent error handling
+ * - Input validation
+ */
 class OrdersController {
     constructor() {
         this.ordersModel = new orders_model_1.StockOrdersModel();
         this.ordersService = new orders_service_1.OrdersService(this.ordersModel);
-        this.createOrder = (req, res) => __awaiter(this, void 0, void 0, function* () {
+        this.createOrder = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
             var _a;
-            try {
-                const { ordered_by_id, items, remark } = req.body;
-                const branch_id = (_a = req.user) === null || _a === void 0 ? void 0 : _a.branch_id;
-                // Validate input
-                if (!ordered_by_id || !items || !Array.isArray(items) || items.length === 0) {
-                    return res.status(400).json({ message: "ไม่พบข้อมูลการสั่งซื้อ" });
-                }
-                const order = yield this.ordersService.createOrder(ordered_by_id, items, remark, branch_id);
-                return res.status(201).json(order);
+            const { ordered_by_id, items, remark } = req.body;
+            const branch_id = (_a = req.user) === null || _a === void 0 ? void 0 : _a.branch_id;
+            // Validate input
+            if (!ordered_by_id || !items || !Array.isArray(items) || items.length === 0) {
+                throw AppError_1.AppError.badRequest("ไม่พบข้อมูลการสั่งซื้อ");
             }
-            catch (error) {
-                console.error("Error creating order:", error);
-                return res.status(500).json({ message: "Internal server error", error: error.message });
-            }
-        });
-        this.getAllOrders = (req, res) => __awaiter(this, void 0, void 0, function* () {
+            const order = yield this.ordersService.createOrder(ordered_by_id, items, remark, branch_id);
+            return ApiResponse_1.ApiResponses.created(res, order);
+        }));
+        this.getAllOrders = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
             var _a;
-            try {
-                const statusParam = req.query.status;
-                const page = parseInt(req.query.page) || 1;
-                const limit = parseInt(req.query.limit) || 50;
-                let statusFilter;
-                if (statusParam) {
-                    const statuses = statusParam.split(',');
-                    // Optional: Validate statuses against PurchaseOrderStatus enum
-                    statusFilter = statuses.length > 1 ? statuses : statuses[0];
+            const statusParam = req.query.status;
+            const page = Math.max(parseInt(req.query.page) || 1, 1);
+            const limit = Math.min(Math.max(parseInt(req.query.limit) || 50, 1), 200);
+            let statusFilter;
+            if (statusParam) {
+                const statuses = statusParam.split(',');
+                // Validate statuses
+                const validStatuses = statuses.filter(s => Object.values(PurchaseOrder_1.PurchaseOrderStatus).includes(s));
+                if (validStatuses.length === 0) {
+                    throw AppError_1.AppError.badRequest("สถานะไม่ถูกต้อง");
                 }
-                const branch_id = (_a = req.user) === null || _a === void 0 ? void 0 : _a.branch_id;
-                const orders = yield this.ordersService.getAllOrders(statusFilter ? { status: statusFilter } : undefined, page, limit, branch_id);
-                return res.status(200).json(orders);
+                statusFilter = validStatuses.length > 1 ? validStatuses : validStatuses[0];
             }
-            catch (error) {
-                console.error("Error fetching orders:", error);
-                return res.status(500).json({ message: "Internal server error", error: error.message });
+            const branch_id = (_a = req.user) === null || _a === void 0 ? void 0 : _a.branch_id;
+            const result = yield this.ordersService.getAllOrders(statusFilter ? { status: statusFilter } : undefined, page, limit, branch_id);
+            return ApiResponse_1.ApiResponses.paginated(res, result.data, {
+                page: result.page,
+                limit: result.limit,
+                total: result.total,
+            });
+        }));
+        this.getOrderById = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            const { id } = req.params;
+            const order = yield this.ordersService.getOrderById(id);
+            if (!order) {
+                throw AppError_1.AppError.notFound("การสั่งซื้อ");
             }
-        });
-        this.getOrderById = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                const { id } = req.params;
-                const order = yield this.ordersService.getOrderById(id);
-                if (!order) {
-                    return res.status(404).json({ message: "ไม่พบข้อมูลการสั่งซื้อ" });
-                }
-                return res.status(200).json(order);
+            return ApiResponse_1.ApiResponses.ok(res, order);
+        }));
+        this.updateOrder = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            const { id } = req.params;
+            const { items } = req.body;
+            if (!items || !Array.isArray(items) || items.length === 0) {
+                throw AppError_1.AppError.badRequest("ไม่พบข้อมูลสินค้า");
             }
-            catch (error) {
-                console.error("Error fetching order:", error);
-                return res.status(500).json({ message: "Internal server error", error: error.message });
+            const updatedOrder = yield this.ordersService.updateOrder(id, items);
+            return ApiResponse_1.ApiResponses.ok(res, updatedOrder);
+        }));
+        this.updateStatus = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            const { id } = req.params;
+            const { status } = req.body;
+            if (!status || !Object.values(PurchaseOrder_1.PurchaseOrderStatus).includes(status)) {
+                throw AppError_1.AppError.badRequest("สถานะไม่ถูกต้อง");
             }
-        });
-        this.updateOrder = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                const { id } = req.params;
-                const { items } = req.body;
-                if (!items || !Array.isArray(items)) {
-                    return res.status(400).json({ message: "ไม่พบข้อมูลสินค้า" });
-                }
-                const updatedOrder = yield this.ordersService.updateOrder(id, items);
-                return res.status(200).json(updatedOrder);
+            const updatedOrder = yield this.ordersService.updateStatus(id, status);
+            return ApiResponse_1.ApiResponses.ok(res, updatedOrder);
+        }));
+        this.deleteOrder = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            const { id } = req.params;
+            const result = yield this.ordersService.deleteOrder(id);
+            if (!result || result.affected === 0) {
+                throw AppError_1.AppError.notFound("การสั่งซื้อ");
             }
-            catch (error) {
-                console.error("Error updating order:", error);
-                return res.status(500).json({ message: "Internal server error", error: error.message });
+            return ApiResponse_1.ApiResponses.ok(res, { message: "การสั่งซื้อลบสำเร็จ" });
+        }));
+        this.confirmPurchase = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            var _a, _b;
+            const { id } = req.params;
+            const { items } = req.body;
+            const purchased_by_id = ((_a = req.user) === null || _a === void 0 ? void 0 : _a.id) || ((_b = req.user) === null || _b === void 0 ? void 0 : _b.userId) || req.body.purchased_by_id;
+            if (!items || !Array.isArray(items) || items.length === 0) {
+                throw AppError_1.AppError.badRequest("ไม่พบข้อมูลสินค้า");
             }
-        });
-        this.updateStatus = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                const { id } = req.params;
-                const { status } = req.body;
-                if (!Object.values(PurchaseOrder_1.PurchaseOrderStatus).includes(status)) {
-                    return res.status(400).json({ message: "ไม่พบข้อมูลสถานะ" });
-                }
-                const updatedOrder = yield this.ordersService.updateStatus(id, status);
-                return res.status(200).json(updatedOrder);
+            if (!purchased_by_id) {
+                throw AppError_1.AppError.badRequest("ไม่พบข้อมูลผู้สั่งซื้อ");
             }
-            catch (error) {
-                console.error("Error updating order status:", error);
-                return res.status(500).json({ message: "Internal server error", error: error.message });
-            }
-        });
-        this.deleteOrder = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                const { id } = req.params;
-                yield this.ordersService.deleteOrder(id);
-                return res.status(200).json({ message: "การสั่งซื้อลบสำเร็จ" });
-            }
-            catch (error) {
-                console.error("Error deleting order:", error);
-                return res.status(500).json({ message: "Internal server error", error: error.message });
-            }
-        });
-        this.confirmPurchase = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            var _a;
-            try {
-                const { id } = req.params;
-                const { items } = req.body;
-                // Assuming user id is available in req.user from auth middleware, but for now getting from body or header if not strict
-                // Adjust based on your Auth implementation. Providing default or extracting from req if available.
-                // Check if req.user exists (from middleware)
-                const purchased_by_id = ((_a = req.user) === null || _a === void 0 ? void 0 : _a.userId) || req.body.purchased_by_id;
-                if (!items || !Array.isArray(items)) {
-                    return res.status(400).json({ message: "ไม่พบข้อมูลสินค้า" });
-                }
-                if (!purchased_by_id) {
-                    return res.status(400).json({ message: "ไม่พบข้อมูลผู้สั่งซื้อ" });
-                }
-                const updatedOrder = yield this.ordersService.confirmPurchase(id, items, purchased_by_id);
-                return res.status(200).json(updatedOrder);
-            }
-            catch (error) {
-                console.error("เกิดข้อผิดพลาดในการยืนยันการสั่งซื้อ:", error);
-                return res.status(500).json({ message: "เกิดข้อผิดพลาดในการยืนยันการสั่งซื้อ", error: error.message });
-            }
-        });
+            const updatedOrder = yield this.ordersService.confirmPurchase(id, items, purchased_by_id);
+            return ApiResponse_1.ApiResponses.ok(res, updatedOrder);
+        }));
     }
 }
 exports.OrdersController = OrdersController;

@@ -10,6 +10,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PaymentMethodController = void 0;
+const branch_middleware_1 = require("../../middleware/branch.middleware");
 class PaymentMethodController {
     constructor(paymentMethodService) {
         this.paymentMethodService = paymentMethodService;
@@ -19,7 +20,8 @@ class PaymentMethodController {
                 const rawLimit = parseInt(req.query.limit);
                 const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
                 const q = req.query.q || undefined;
-                const paymentMethods = yield this.paymentMethodService.findAll(page, limit, q);
+                const branchId = (0, branch_middleware_1.getBranchId)(req);
+                const paymentMethods = yield this.paymentMethodService.findAll(page, limit, q, branchId);
                 res.status(200).json(paymentMethods);
             }
             catch (error) {
@@ -28,7 +30,8 @@ class PaymentMethodController {
         });
         this.findOne = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {
-                const paymentMethod = yield this.paymentMethodService.findOne(req.params.id);
+                const branchId = (0, branch_middleware_1.getBranchId)(req);
+                const paymentMethod = yield this.paymentMethodService.findOne(req.params.id, branchId);
                 res.status(200).json(paymentMethod);
             }
             catch (error) {
@@ -37,7 +40,8 @@ class PaymentMethodController {
         });
         this.findByName = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {
-                const paymentMethod = yield this.paymentMethodService.findOneByName(req.params.name);
+                const branchId = (0, branch_middleware_1.getBranchId)(req);
+                const paymentMethod = yield this.paymentMethodService.findOneByName(req.params.name, branchId);
                 res.status(200).json(paymentMethod);
             }
             catch (error) {
@@ -46,6 +50,10 @@ class PaymentMethodController {
         });
         this.create = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {
+                const branchId = (0, branch_middleware_1.getBranchId)(req);
+                if (branchId && !req.body.branch_id) {
+                    req.body.branch_id = branchId;
+                }
                 const paymentMethod = yield this.paymentMethodService.create(req.body);
                 res.status(201).json(paymentMethod);
             }

@@ -55,38 +55,33 @@ class StockOrdersModel {
     }
     findAll(filters_1) {
         return __awaiter(this, arguments, void 0, function* (filters, page = 1, limit = 50, branchId) {
-            // To support "IN" query with TypeORM find options, we need the "In" operator
-            // Importing In from typeorm
+            // Use QueryBuilder for better control and optimization
             const { In } = require("typeorm");
-            const skip = (page - 1) * limit;
-            const findOptions = {
-                relations: {
-                    ordered_by: true,
-                    ordersItems: {
-                        ingredient: {
-                            unit: true
-                        },
-                        ordersDetail: true
-                    }
-                },
-                order: {
-                    create_date: "DESC"
-                },
-                take: limit,
-                skip: skip
-            };
+            let query = this.ordersRepository.createQueryBuilder("order")
+                .leftJoinAndSelect("order.ordered_by", "ordered_by")
+                .leftJoinAndSelect("order.ordersItems", "ordersItems")
+                .leftJoinAndSelect("ordersItems.ingredient", "ingredient")
+                .leftJoinAndSelect("ingredient.unit", "unit")
+                .leftJoinAndSelect("ordersItems.ordersDetail", "ordersDetail")
+                .orderBy("order.create_date", "DESC");
+            // Apply filters using dbHelpers pattern
             if (filters === null || filters === void 0 ? void 0 : filters.status) {
                 if (Array.isArray(filters.status)) {
-                    findOptions.where = { status: In(filters.status) };
+                    query.andWhere("order.status IN (:...statuses)", { statuses: filters.status });
                 }
                 else {
-                    findOptions.where = { status: filters.status };
+                    query.andWhere("order.status = :status", { status: filters.status });
                 }
             }
             if (branchId) {
-                findOptions.where = Object.assign(Object.assign({}, findOptions.where), { branch_id: branchId });
+                query.andWhere("order.branch_id = :branchId", { branchId });
             }
-            const [data, total] = yield this.ordersRepository.findAndCount(findOptions);
+            // Use paginate helper for consistent pagination
+            const skip = (page - 1) * limit;
+            const [data, total] = yield query
+                .skip(skip)
+                .take(limit)
+                .getManyAndCount();
             return {
                 data,
                 total,

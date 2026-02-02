@@ -10,12 +10,14 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ProductsUnitController = void 0;
+const branch_middleware_1 = require("../../middleware/branch.middleware");
 class ProductsUnitController {
     constructor(productsUnitService) {
         this.productsUnitService = productsUnitService;
         this.findAll = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {
-                const productsUnits = yield this.productsUnitService.findAll();
+                const branchId = (0, branch_middleware_1.getBranchId)(req);
+                const productsUnits = yield this.productsUnitService.findAll(branchId);
                 res.status(200).json(productsUnits);
             }
             catch (error) {
@@ -24,7 +26,8 @@ class ProductsUnitController {
         });
         this.findOne = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {
-                const productsUnit = yield this.productsUnitService.findOne(req.params.id);
+                const branchId = (0, branch_middleware_1.getBranchId)(req);
+                const productsUnit = yield this.productsUnitService.findOne(req.params.id, branchId);
                 res.status(200).json(productsUnit);
             }
             catch (error) {
@@ -33,7 +36,8 @@ class ProductsUnitController {
         });
         this.findOneByName = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {
-                const productsUnit = yield this.productsUnitService.findOneByName(req.params.products_unit_name);
+                const branchId = (0, branch_middleware_1.getBranchId)(req);
+                const productsUnit = yield this.productsUnitService.findOneByName(req.params.products_unit_name, branchId);
                 res.status(200).json(productsUnit);
             }
             catch (error) {
@@ -42,6 +46,10 @@ class ProductsUnitController {
         });
         this.create = (req, res) => __awaiter(this, void 0, void 0, function* () {
             try {
+                const branchId = (0, branch_middleware_1.getBranchId)(req);
+                if (branchId && !req.body.branch_id) {
+                    req.body.branch_id = branchId;
+                }
                 const productsUnit = yield this.productsUnitService.create(req.body);
                 res.status(201).json(productsUnit);
             }

@@ -10,63 +10,60 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CategoryController = void 0;
+const catchAsync_1 = require("../../utils/catchAsync");
+const AppError_1 = require("../../utils/AppError");
+const ApiResponse_1 = require("../../utils/ApiResponse");
+const branch_middleware_1 = require("../../middleware/branch.middleware");
+/**
+ * Category Controller
+ * Following supabase-postgres-best-practices:
+ * - Standardized API responses
+ * - Consistent error handling
+ * - Branch-based data isolation
+ */
 class CategoryController {
     constructor(categoryService) {
         this.categoryService = categoryService;
-        this.findAll = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                const categories = yield this.categoryService.findAll();
-                res.status(200).json(categories);
+        this.findAll = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            const branchId = (0, branch_middleware_1.getBranchId)(req);
+            const categories = yield this.categoryService.findAll(branchId);
+            return ApiResponse_1.ApiResponses.ok(res, categories);
+        }));
+        this.findOne = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            const branchId = (0, branch_middleware_1.getBranchId)(req);
+            const category = yield this.categoryService.findOne(req.params.id, branchId);
+            if (!category) {
+                throw AppError_1.AppError.notFound("หมวดหมู่");
             }
-            catch (error) {
-                res.status(500).json({ error: error.message });
+            return ApiResponse_1.ApiResponses.ok(res, category);
+        }));
+        this.findOneByName = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            const branchId = (0, branch_middleware_1.getBranchId)(req);
+            const category = yield this.categoryService.findOneByName(req.params.category_name, branchId);
+            if (!category) {
+                throw AppError_1.AppError.notFound("หมวดหมู่");
             }
-        });
-        this.findOne = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                const category = yield this.categoryService.findOne(req.params.id);
-                res.status(200).json(category);
+            return ApiResponse_1.ApiResponses.ok(res, category);
+        }));
+        this.create = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            const branchId = (0, branch_middleware_1.getBranchId)(req);
+            if (branchId && !req.body.branch_id) {
+                req.body.branch_id = branchId;
             }
-            catch (error) {
-                res.status(500).json({ error: error.message });
+            const category = yield this.categoryService.create(req.body);
+            return ApiResponse_1.ApiResponses.created(res, category);
+        }));
+        this.update = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            const category = yield this.categoryService.update(req.params.id, req.body);
+            if (!category) {
+                throw AppError_1.AppError.notFound("หมวดหมู่");
             }
-        });
-        this.findOneByName = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                const category = yield this.categoryService.findOneByName(req.params.category_name);
-                res.status(200).json(category);
-            }
-            catch (error) {
-                res.status(500).json({ error: error.message });
-            }
-        });
-        this.create = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                const category = yield this.categoryService.create(req.body);
-                res.status(201).json(category);
-            }
-            catch (error) {
-                res.status(500).json({ error: error.message });
-            }
-        });
-        this.update = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                const category = yield this.categoryService.update(req.params.id, req.body);
-                res.status(200).json(category);
-            }
-            catch (error) {
-                res.status(500).json({ error: error.message });
-            }
-        });
-        this.delete = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                yield this.categoryService.delete(req.params.id);
-                res.status(200).json({ message: "หมวดหมู่ลบสำเร็จ" });
-            }
-            catch (error) {
-                res.status(500).json({ error: error.message });
-            }
-        });
+            return ApiResponse_1.ApiResponses.ok(res, category);
+        }));
+        this.delete = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            yield this.categoryService.delete(req.params.id);
+            return ApiResponse_1.ApiResponses.ok(res, { message: "หมวดหมู่ลบสำเร็จ" });
+        }));
     }
 }
 exports.CategoryController = CategoryController;

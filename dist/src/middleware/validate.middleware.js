@@ -2,6 +2,13 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.validate = void 0;
 const zod_1 = require("zod");
+const ApiResponse_1 = require("../utils/ApiResponse");
+/**
+ * Validation Middleware
+ * Following supabase-postgres-best-practices:
+ * - Standardized error responses
+ * - Consistent validation error format
+ */
 const validate = (schema) => (req, res, next) => {
     try {
         schema.parse({
@@ -13,15 +20,18 @@ const validate = (schema) => (req, res, next) => {
     }
     catch (error) {
         if (error instanceof zod_1.ZodError) {
-            return res.status(400).json({
-                message: "Validation failed",
-                errors: error.issues.map((err) => ({
-                    field: err.path.join('.'),
-                    message: err.message
-                }))
-            });
+            // Format validation errors
+            const fields = {};
+            for (const issue of error.issues) {
+                const path = issue.path.join('.') || 'value';
+                if (!fields[path]) {
+                    fields[path] = [];
+                }
+                fields[path].push(issue.message);
+            }
+            return ApiResponse_1.ApiResponses.validationError(res, fields);
         }
-        return res.status(400).json({ message: "Invalid request data" });
+        return ApiResponse_1.ApiResponses.badRequest(res, "Invalid request data");
     }
 };
 exports.validate = validate;

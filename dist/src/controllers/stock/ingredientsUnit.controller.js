@@ -10,64 +10,61 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.IngredientsUnitController = void 0;
+const catchAsync_1 = require("../../utils/catchAsync");
+const AppError_1 = require("../../utils/AppError");
+const ApiResponse_1 = require("../../utils/ApiResponse");
+const branch_middleware_1 = require("../../middleware/branch.middleware");
+/**
+ * Ingredients Unit Controller
+ * Following supabase-postgres-best-practices:
+ * - Standardized API responses
+ * - Consistent error handling
+ * - Branch-based data isolation
+ */
 class IngredientsUnitController {
     constructor(ingredientsUnitService) {
         this.ingredientsUnitService = ingredientsUnitService;
-        this.findAll = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                const active = req.query.active === 'true' ? true : req.query.active === 'false' ? false : undefined;
-                const ingredientsUnit = yield this.ingredientsUnitService.findAll(active !== undefined ? { is_active: active } : undefined);
-                res.status(200).json(ingredientsUnit);
+        this.findAll = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            const active = req.query.active === 'true' ? true : req.query.active === 'false' ? false : undefined;
+            const branchId = (0, branch_middleware_1.getBranchId)(req);
+            const ingredientsUnit = yield this.ingredientsUnitService.findAll(active !== undefined ? { is_active: active } : undefined, branchId);
+            return ApiResponse_1.ApiResponses.ok(res, ingredientsUnit);
+        }));
+        this.findOne = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            const branchId = (0, branch_middleware_1.getBranchId)(req);
+            const ingredientsUnit = yield this.ingredientsUnitService.findOne(req.params.id, branchId);
+            if (!ingredientsUnit) {
+                throw AppError_1.AppError.notFound("หน่วยนับวัตถุดิบ");
             }
-            catch (error) {
-                res.status(500).json({ error: error.message });
+            return ApiResponse_1.ApiResponses.ok(res, ingredientsUnit);
+        }));
+        this.findOneByUnitName = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            const branchId = (0, branch_middleware_1.getBranchId)(req);
+            const ingredientsUnit = yield this.ingredientsUnitService.findOneByUnitName(req.params.unit_name, branchId);
+            if (!ingredientsUnit) {
+                throw AppError_1.AppError.notFound("หน่วยนับวัตถุดิบ");
             }
-        });
-        this.findOne = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                const ingredientsUnit = yield this.ingredientsUnitService.findOne(req.params.id);
-                res.status(200).json(ingredientsUnit);
+            return ApiResponse_1.ApiResponses.ok(res, ingredientsUnit);
+        }));
+        this.create = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            const branchId = (0, branch_middleware_1.getBranchId)(req);
+            if (branchId && !req.body.branch_id) {
+                req.body.branch_id = branchId;
             }
-            catch (error) {
-                res.status(500).json({ error: error.message });
+            const ingredientsUnit = yield this.ingredientsUnitService.create(req.body);
+            return ApiResponse_1.ApiResponses.created(res, ingredientsUnit);
+        }));
+        this.update = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            const ingredientsUnit = yield this.ingredientsUnitService.update(req.params.id, req.body);
+            if (!ingredientsUnit) {
+                throw AppError_1.AppError.notFound("หน่วยนับวัตถุดิบ");
             }
-        });
-        this.findOneByUnitName = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                const ingredientsUnit = yield this.ingredientsUnitService.findOneByUnitName(req.params.unit_name);
-                res.status(200).json(ingredientsUnit);
-            }
-            catch (error) {
-                res.status(500).json({ error: error.message });
-            }
-        });
-        this.create = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                const ingredientsUnit = yield this.ingredientsUnitService.create(req.body);
-                res.status(201).json(ingredientsUnit);
-            }
-            catch (error) {
-                res.status(500).json({ error: error.message });
-            }
-        });
-        this.update = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                const ingredientsUnit = yield this.ingredientsUnitService.update(req.params.id, req.body);
-                res.status(200).json(ingredientsUnit);
-            }
-            catch (error) {
-                res.status(500).json({ error: error.message });
-            }
-        });
-        this.delete = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                yield this.ingredientsUnitService.delete(req.params.id);
-                res.status(200).json({ message: "หน่วยนับวัตถุดิบลบสำเร็จ" });
-            }
-            catch (error) {
-                res.status(500).json({ error: error.message });
-            }
-        });
+            return ApiResponse_1.ApiResponses.ok(res, ingredientsUnit);
+        }));
+        this.delete = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            yield this.ingredientsUnitService.delete(req.params.id);
+            return ApiResponse_1.ApiResponses.ok(res, { message: "หน่วยนับวัตถุดิบลบสำเร็จ" });
+        }));
     }
 }
 exports.IngredientsUnitController = IngredientsUnitController;

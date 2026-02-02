@@ -10,74 +10,71 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TablesController = void 0;
+const catchAsync_1 = require("../../utils/catchAsync");
+const AppError_1 = require("../../utils/AppError");
+const ApiResponse_1 = require("../../utils/ApiResponse");
+/**
+ * Tables Controller
+ * Following supabase-postgres-best-practices:
+ * - Standardized API responses
+ * - Consistent error handling
+ * - Pagination support
+ */
 class TablesController {
     constructor(tablesService) {
         this.tablesService = tablesService;
-        this.findAll = (req, res) => __awaiter(this, void 0, void 0, function* () {
+        this.findAll = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
             var _a;
-            try {
-                const page = parseInt(req.query.page) || 1;
-                const rawLimit = parseInt(req.query.limit);
-                const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
-                const q = req.query.q || undefined;
-                const branchId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.branch_id;
-                const tables = yield this.tablesService.findAll(page, limit, q, branchId);
-                res.status(200).json(tables);
+            const page = Math.max(parseInt(req.query.page) || 1, 1);
+            const rawLimit = parseInt(req.query.limit);
+            const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
+            const q = req.query.q || undefined;
+            const branchId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.branch_id;
+            const result = yield this.tablesService.findAll(page, limit, q, branchId);
+            // Check if result has pagination structure
+            if (result.data && result.total !== undefined) {
+                return ApiResponse_1.ApiResponses.paginated(res, result.data, {
+                    page: result.page || page,
+                    limit: limit,
+                    total: result.total,
+                });
             }
-            catch (error) {
-                res.status(500).json({ error: error.message });
+            return ApiResponse_1.ApiResponses.ok(res, result);
+        }));
+        this.findOne = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            const table = yield this.tablesService.findOne(req.params.id);
+            if (!table) {
+                throw AppError_1.AppError.notFound("โต๊ะ");
             }
-        });
-        this.findOne = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                const table = yield this.tablesService.findOne(req.params.id);
-                res.status(200).json(table);
+            return ApiResponse_1.ApiResponses.ok(res, table);
+        }));
+        this.findByName = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            const table = yield this.tablesService.findOneByName(req.params.name);
+            if (!table) {
+                throw AppError_1.AppError.notFound("โต๊ะ");
             }
-            catch (error) {
-                res.status(500).json({ error: error.message });
-            }
-        });
-        this.findByName = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                const table = yield this.tablesService.findOneByName(req.params.name);
-                res.status(200).json(table);
-            }
-            catch (error) {
-                res.status(500).json({ error: error.message });
-            }
-        });
-        this.create = (req, res) => __awaiter(this, void 0, void 0, function* () {
+            return ApiResponse_1.ApiResponses.ok(res, table);
+        }));
+        this.create = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
             var _a;
-            try {
-                const branchId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.branch_id;
-                if (branchId && !req.body.branch_id) {
-                    req.body.branch_id = branchId;
-                }
-                const table = yield this.tablesService.create(req.body);
-                res.status(201).json(table);
+            const branchId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.branch_id;
+            if (branchId && !req.body.branch_id) {
+                req.body.branch_id = branchId;
             }
-            catch (error) {
-                res.status(500).json({ error: error.message });
+            const table = yield this.tablesService.create(req.body);
+            return ApiResponse_1.ApiResponses.created(res, table);
+        }));
+        this.update = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            const table = yield this.tablesService.update(req.params.id, req.body);
+            if (!table) {
+                throw AppError_1.AppError.notFound("โต๊ะ");
             }
-        });
-        this.update = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                const table = yield this.tablesService.update(req.params.id, req.body);
-                res.status(200).json(table);
-            }
-            catch (error) {
-                res.status(500).json({ error: error.message });
-            }
-        });
-        this.delete = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                yield this.tablesService.delete(req.params.id);
-                res.status(200).json({ message: "ลบข้อมูลโต๊ะสำเร็จ" });
-            }
-            catch (error) {
-                res.status(500).json({ error: error.message });
-            }
-        });
+            return ApiResponse_1.ApiResponses.ok(res, table);
+        }));
+        this.delete = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            yield this.tablesService.delete(req.params.id);
+            return ApiResponse_1.ApiResponses.ok(res, { message: "ลบข้อมูลโต๊ะสำเร็จ" });
+        }));
     }
 }
 exports.TablesController = TablesController;

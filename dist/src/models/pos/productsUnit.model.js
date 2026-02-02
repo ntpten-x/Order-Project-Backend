@@ -16,10 +16,15 @@ class ProductsUnitModels {
     constructor() {
         this.productsUnitRepository = database_1.AppDataSource.getRepository(ProductsUnit_1.ProductsUnit);
     }
-    findAll() {
+    findAll(branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
+                const where = {};
+                if (branchId) {
+                    where.branch_id = branchId;
+                }
                 return this.productsUnitRepository.find({
+                    where,
                     order: {
                         create_date: "ASC"
                     }
@@ -30,11 +35,15 @@ class ProductsUnitModels {
             }
         });
     }
-    findOne(id) {
+    findOne(id, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
+                const where = { id };
+                if (branchId) {
+                    where.branch_id = branchId;
+                }
                 return this.productsUnitRepository.findOne({
-                    where: { id }
+                    where
                 });
             }
             catch (error) {
@@ -42,11 +51,15 @@ class ProductsUnitModels {
             }
         });
     }
-    findOneByName(name) {
+    findOneByName(name, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
+                const where = { unit_name: name };
+                if (branchId) {
+                    where.branch_id = branchId;
+                }
                 return this.productsUnitRepository.findOne({
-                    where: { unit_name: name }
+                    where
                 });
             }
             catch (error) {
