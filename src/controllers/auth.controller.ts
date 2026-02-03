@@ -62,10 +62,10 @@ export class AuthController {
                     method: req.method,
                     details: { reason: 'Invalid password', username }
                 });
-                
+
                 // Check for suspicious activity
                 securityLogger.checkSuspiciousActivity(user.id, ip);
-                
+
                 return res.status(401).json({ message: "ไม่พบข้อมูลผู้ใช้" });
             }
 
@@ -114,6 +114,7 @@ export class AuthController {
                 user: {
                     id: user.id,
                     username: user.username,
+                    name: user.name,
                     role: user.roles.roles_name,
                     display_name: user.roles.display_name,
                     branch_id: user.branch_id,
@@ -185,6 +186,7 @@ export class AuthController {
         return res.json({
             id: user.id,
             username: user.username,
+            name: user.name,
             role: user.roles ? user.roles.roles_name : "unknown",
             display_name: user.roles ? user.roles.display_name : user.username,
             is_active: user.is_active,
