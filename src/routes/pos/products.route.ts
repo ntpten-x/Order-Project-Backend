@@ -25,8 +25,8 @@ router.get("/", validate(paginationQuerySchema), productsController.findAll)
 router.get("/:id", validate(productIdParamSchema), productsController.findOne)
 router.get("/name/:product_name", validate(productNameParamSchema), productsController.findOneByName)
 
-router.post("/", authorizeRole(["Admin"]), validate(createProductSchema), productsController.create)
-router.put("/:id", authorizeRole(["Admin"]), validate(updateProductSchema), productsController.update)
-router.delete("/:id", authorizeRole(["Admin"]), validate(productIdParamSchema), productsController.delete)
+router.post("/", authorizeRole(["Admin", "Manager"]), validate(createProductSchema), productsController.create)
+router.put("/:id", authorizeRole(["Admin", "Manager"]), validate(updateProductSchema), productsController.update)
+router.delete("/:id", authorizeRole(["Admin", "Manager"]), validate(productIdParamSchema), productsController.delete)
 
 export default router

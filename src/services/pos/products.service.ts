@@ -2,6 +2,7 @@ import { ProductsModels } from "../../models/pos/products.model";
 import { SocketService } from "../socket.service";
 import { Products } from "../../entity/pos/Products";
 import { invalidateCache } from "../../utils/cache";
+import { AppError } from "../../utils/AppError";
 
 /**
  * Products Service
@@ -39,27 +40,27 @@ export class ProductsService {
     async create(products: Products): Promise<Products> {
         const savedProducts = await this.productsModel.create(products);
         const createdProducts = await this.productsModel.findOne(savedProducts.id);
-        
+
         if (createdProducts) {
             // Cache invalidation is handled in ProductsModel
             this.socketService.emit('products:create', createdProducts);
             return createdProducts;
         }
-        
+
         return savedProducts;
     }
 
     async update(id: string, products: Products): Promise<Products> {
         await this.productsModel.update(id, products);
         const updatedProducts = await this.productsModel.findOne(id);
-        
+
         if (updatedProducts) {
             // Cache invalidation is handled in ProductsModel
             this.socketService.emit('products:update', updatedProducts);
             return updatedProducts;
         }
-        
-        throw new Error("พบข้อผิดพลาดในการอัปเดตสินค้า");
+
+        throw new AppError("พบข้อผิดพลาดในการอัปเดตสินค้า", 500);
     }
 
     async delete(id: string): Promise<void> {

@@ -26,8 +26,8 @@ router.get("/", authorizeRole(["Admin", "Manager", "Employee"]), paymentMethodCo
 router.get("/:id", authorizeRole(["Admin", "Manager", "Employee"]), validate(paymentMethodIdParamSchema), paymentMethodController.findOne)
 router.get("/getByName/:name", authorizeRole(["Admin", "Manager", "Employee"]), validate(paymentMethodNameParamSchema), paymentMethodController.findByName)
 
-router.post("/", authorizeRole(["Admin"]), validate(createPaymentMethodSchema), paymentMethodController.create)
-router.put("/:id", authorizeRole(["Admin"]), validate(updatePaymentMethodSchema), paymentMethodController.update)
-router.delete("/:id", authorizeRole(["Admin"]), validate(paymentMethodIdParamSchema), paymentMethodController.delete)
+router.post("/", authorizeRole(["Admin", "Manager"]), validate(createPaymentMethodSchema), paymentMethodController.create)
+router.put("/:id", authorizeRole(["Admin", "Manager"]), validate(updatePaymentMethodSchema), paymentMethodController.update)
+router.delete("/:id", authorizeRole(["Admin", "Manager"]), validate(paymentMethodIdParamSchema), paymentMethodController.delete)
 
 export default router

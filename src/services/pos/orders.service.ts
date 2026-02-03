@@ -207,7 +207,7 @@ export class OrdersService {
                     if (t) this.socketService.emit('tables:update', t)
                 })
             }
-            
+
             // Auto-add to queue if order is pending
             if (createdOrder.status === OrderStatus.Pending) {
                 try {
@@ -221,7 +221,7 @@ export class OrdersService {
                     console.warn('Failed to add order to queue:', error);
                 }
             }
-            
+
             return createdOrder
         })
     }
@@ -286,7 +286,7 @@ export class OrdersService {
                     const t = await tablesRepo.findOneBy({ id: fullOrder.table_id })
                     if (t) this.socketService.emit('tables:update', t)
                 }
-                
+
                 // Auto-add to queue if order is pending
                 if (fullOrder.status === OrderStatus.Pending) {
                     try {
@@ -300,7 +300,7 @@ export class OrdersService {
                         console.warn('Failed to add order to queue:', error);
                     }
                 }
-                
+
                 return fullOrder;
             }
             return savedOrder;
@@ -352,13 +352,13 @@ export class OrdersService {
             try {
                 const queueRepo = AppDataSource.getRepository(OrderQueue);
                 const queueItem = await queueRepo.findOne({ where: { order_id: result.id } });
-                
+
                 if (queueItem) {
                     if (finalStatus === OrderStatus.Cooking) {
                         await this.queueService.updateStatus(queueItem.id, QueueStatus.Processing);
                     } else if (finalStatus === OrderStatus.Completed || finalStatus === OrderStatus.Cancelled) {
-                        await this.queueService.updateStatus(queueItem.id, finalStatus === OrderStatus.Completed 
-                            ? QueueStatus.Completed 
+                        await this.queueService.updateStatus(queueItem.id, finalStatus === OrderStatus.Completed
+                            ? QueueStatus.Completed
                             : QueueStatus.Cancelled);
                     }
                 }
@@ -465,21 +465,21 @@ export class OrdersService {
                     }
                 }
 
+                // Refetch item with new details to get total price right
+                const updatedItemWithDetails = await this.ordersModel.findItemById(itemId, manager);
+                if (!updatedItemWithDetails) throw new Error("Item not found after detail update");
+
                 if (data.quantity !== undefined) {
                     const qty = Number(data.quantity);
                     if (!Number.isFinite(qty) || qty <= 0) {
                         throw new AppError("Invalid quantity", 400);
                     }
-                    item.quantity = qty;
+                    updatedItemWithDetails.quantity = qty;
                 }
 
                 if (data.notes !== undefined) {
-                    item.notes = data.notes;
+                    updatedItemWithDetails.notes = data.notes;
                 }
-
-                // Refetch item with new details to get total price right
-                const updatedItemWithDetails = await this.ordersModel.findItemById(itemId, manager);
-                if (!updatedItemWithDetails) throw new Error("Item not found after detail update");
 
                 const detailsTotal = updatedItemWithDetails.details ? updatedItemWithDetails.details.reduce((sum: number, d: any) => sum + (Number(d.extra_price) || 0), 0) : 0;
                 updatedItemWithDetails.total_price = Math.max(0, (Number(updatedItemWithDetails.price) + detailsTotal) * updatedItemWithDetails.quantity - Number(updatedItemWithDetails.discount_amount || 0));
