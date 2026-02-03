@@ -9,7 +9,7 @@ const router = express.Router();
 router.use(authenticateToken);
 
 router.get("/", authorizeRole(["Admin", "Manager", "Employee"]), getShopProfile);
-router.put("/", authorizeRole(["Admin"]), validate(updateShopProfileSchema), updateShopProfile);
-router.post("/", authorizeRole(["Admin"]), validate(updateShopProfileSchema), updateShopProfile); // Allow POST as update too
+router.put("/", authorizeRole(["Admin", "Manager"]), validate(updateShopProfileSchema), updateShopProfile);
+router.post("/", authorizeRole(["Admin", "Manager"]), validate(updateShopProfileSchema), updateShopProfile); // Allow POST as update too
 
 export default router;

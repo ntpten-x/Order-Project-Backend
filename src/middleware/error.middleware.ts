@@ -26,7 +26,7 @@ function getErrorCode(err: Error | AppError, statusCode: number): ErrorCode {
     if (err instanceof AppError && err.code) {
         return err.code as ErrorCode;
     }
-    
+
     // Map by status code
     switch (statusCode) {
         case 400: return ErrorCodes.VALIDATION_ERROR;
@@ -42,7 +42,7 @@ function getErrorCode(err: Error | AppError, statusCode: number): ErrorCode {
 // Handle Zod validation errors
 function handleZodError(err: ZodError): { message: string; details: unknown } {
     const fields: Record<string, string[]> = {};
-    
+
     for (const issue of err.issues) {
         const path = issue.path.join('.') || 'value';
         if (!fields[path]) {
@@ -50,7 +50,7 @@ function handleZodError(err: ZodError): { message: string; details: unknown } {
         }
         fields[path].push(issue.message);
     }
-    
+
     return {
         message: 'Validation failed',
         details: { fields },
@@ -60,7 +60,7 @@ function handleZodError(err: ZodError): { message: string; details: unknown } {
 // Handle database errors
 function handleDatabaseError(err: Error): { code: ErrorCode; message: string } {
     const errorMessage = err.message.toLowerCase();
-    
+
     // PostgreSQL duplicate key violation
     if (errorMessage.includes('duplicate key') || errorMessage.includes('unique constraint')) {
         return {
@@ -68,7 +68,7 @@ function handleDatabaseError(err: Error): { code: ErrorCode; message: string } {
             message: 'A record with this value already exists',
         };
     }
-    
+
     // PostgreSQL foreign key violation
     if (errorMessage.includes('foreign key constraint')) {
         return {
@@ -76,7 +76,7 @@ function handleDatabaseError(err: Error): { code: ErrorCode; message: string } {
             message: 'Referenced record does not exist',
         };
     }
-    
+
     return {
         code: ErrorCodes.DATABASE_ERROR,
         message: 'Database operation failed',
@@ -90,13 +90,13 @@ export const globalErrorHandler = (
     _next: NextFunction
 ) => {
     const isDev = process.env.NODE_ENV === 'development';
-    
+
     // Default values
     let statusCode = 500;
     let errorCode: ErrorCode = ErrorCodes.INTERNAL_ERROR;
     let message = 'Something went wrong!';
     let details: unknown = undefined;
-    
+
     // Handle AppError (our custom errors)
     if (err instanceof AppError) {
         statusCode = err.statusCode;
@@ -141,6 +141,10 @@ export const globalErrorHandler = (
         console.error(`[ERROR ${statusCode}] ${errorCode}:`, err.message);
         if (isDev) {
             console.error(err.stack);
+            // In development, show the real error message instead of generic one
+            if (message === 'Something went wrong!') {
+                message = err.message;
+            }
         }
     }
 
@@ -149,15 +153,15 @@ export const globalErrorHandler = (
         code: errorCode,
         message,
     };
-    
+
     if (details !== undefined) {
         errorResponse.details = details;
     }
-    
+
     if (isDev && err.stack) {
         errorResponse.stack = err.stack;
     }
-    
+
     const response: ErrorResponse = {
         success: false,
         error: errorResponse,

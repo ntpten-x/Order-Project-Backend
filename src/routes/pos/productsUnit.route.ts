@@ -24,8 +24,8 @@ router.get("/", productsUnitController.findAll)
 router.get("/:id", validate(productsUnitIdParamSchema), productsUnitController.findOne)
 router.get("/name/:unit_name", validate(productsUnitNameParamSchema), productsUnitController.findOneByName)
 
-router.post("/", authorizeRole(["Admin"]), validate(createProductsUnitSchema), productsUnitController.create)
-router.put("/:id", authorizeRole(["Admin"]), validate(updateProductsUnitSchema), productsUnitController.update)
-router.delete("/:id", authorizeRole(["Admin"]), validate(productsUnitIdParamSchema), productsUnitController.delete)
+router.post("/", authorizeRole(["Admin", "Manager"]), validate(createProductsUnitSchema), productsUnitController.create)
+router.put("/:id", authorizeRole(["Admin", "Manager"]), validate(updateProductsUnitSchema), productsUnitController.update)
+router.delete("/:id", authorizeRole(["Admin", "Manager"]), validate(productsUnitIdParamSchema), productsUnitController.delete)
 
 export default router
