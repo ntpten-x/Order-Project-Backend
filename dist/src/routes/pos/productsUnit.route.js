@@ -16,7 +16,7 @@ router.use((0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]
 router.get("/", productsUnitController.findAll);
 router.get("/:id", (0, validate_middleware_1.validate)(posMaster_schema_1.productsUnitIdParamSchema), productsUnitController.findOne);
 router.get("/name/:unit_name", (0, validate_middleware_1.validate)(posMaster_schema_1.productsUnitNameParamSchema), productsUnitController.findOneByName);
-router.post("/", (0, auth_middleware_1.authorizeRole)(["Admin"]), (0, validate_middleware_1.validate)(posMaster_schema_1.createProductsUnitSchema), productsUnitController.create);
-router.put("/:id", (0, auth_middleware_1.authorizeRole)(["Admin"]), (0, validate_middleware_1.validate)(posMaster_schema_1.updateProductsUnitSchema), productsUnitController.update);
-router.delete("/:id", (0, auth_middleware_1.authorizeRole)(["Admin"]), (0, validate_middleware_1.validate)(posMaster_schema_1.productsUnitIdParamSchema), productsUnitController.delete);
+router.post("/", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager"]), (0, validate_middleware_1.validate)(posMaster_schema_1.createProductsUnitSchema), productsUnitController.create);
+router.put("/:id", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager"]), (0, validate_middleware_1.validate)(posMaster_schema_1.updateProductsUnitSchema), productsUnitController.update);
+router.delete("/:id", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager"]), (0, validate_middleware_1.validate)(posMaster_schema_1.productsUnitIdParamSchema), productsUnitController.delete);
 exports.default = router;

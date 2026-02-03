@@ -18,7 +18,7 @@ router.use((0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]
 router.get("/", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), paymentMethodController.findAll);
 router.get("/:id", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), (0, validate_middleware_1.validate)(posMaster_schema_1.paymentMethodIdParamSchema), paymentMethodController.findOne);
 router.get("/getByName/:name", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), (0, validate_middleware_1.validate)(posMaster_schema_1.paymentMethodNameParamSchema), paymentMethodController.findByName);
-router.post("/", (0, auth_middleware_1.authorizeRole)(["Admin"]), (0, validate_middleware_1.validate)(posMaster_schema_1.createPaymentMethodSchema), paymentMethodController.create);
-router.put("/:id", (0, auth_middleware_1.authorizeRole)(["Admin"]), (0, validate_middleware_1.validate)(posMaster_schema_1.updatePaymentMethodSchema), paymentMethodController.update);
-router.delete("/:id", (0, auth_middleware_1.authorizeRole)(["Admin"]), (0, validate_middleware_1.validate)(posMaster_schema_1.paymentMethodIdParamSchema), paymentMethodController.delete);
+router.post("/", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager"]), (0, validate_middleware_1.validate)(posMaster_schema_1.createPaymentMethodSchema), paymentMethodController.create);
+router.put("/:id", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager"]), (0, validate_middleware_1.validate)(posMaster_schema_1.updatePaymentMethodSchema), paymentMethodController.update);
+router.delete("/:id", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager"]), (0, validate_middleware_1.validate)(posMaster_schema_1.paymentMethodIdParamSchema), paymentMethodController.delete);
 exports.default = router;

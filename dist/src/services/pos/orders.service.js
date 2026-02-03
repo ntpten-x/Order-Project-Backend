@@ -467,20 +467,20 @@ class OrdersService {
                             }
                         }
                     }
+                    // Refetch item with new details to get total price right
+                    const updatedItemWithDetails = yield this.ordersModel.findItemById(itemId, manager);
+                    if (!updatedItemWithDetails)
+                        throw new Error("Item not found after detail update");
                     if (data.quantity !== undefined) {
                         const qty = Number(data.quantity);
                         if (!Number.isFinite(qty) || qty <= 0) {
                             throw new AppError_1.AppError("Invalid quantity", 400);
                         }
-                        item.quantity = qty;
+                        updatedItemWithDetails.quantity = qty;
                     }
                     if (data.notes !== undefined) {
-                        item.notes = data.notes;
+                        updatedItemWithDetails.notes = data.notes;
                     }
-                    // Refetch item with new details to get total price right
-                    const updatedItemWithDetails = yield this.ordersModel.findItemById(itemId, manager);
-                    if (!updatedItemWithDetails)
-                        throw new Error("Item not found after detail update");
                     const detailsTotal = updatedItemWithDetails.details ? updatedItemWithDetails.details.reduce((sum, d) => sum + (Number(d.extra_price) || 0), 0) : 0;
                     updatedItemWithDetails.total_price = Math.max(0, (Number(updatedItemWithDetails.price) + detailsTotal) * updatedItemWithDetails.quantity - Number(updatedItemWithDetails.discount_amount || 0));
                     yield this.ordersModel.updateItem(itemId, {

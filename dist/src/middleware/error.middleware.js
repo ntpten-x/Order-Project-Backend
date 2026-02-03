@@ -108,6 +108,10 @@ const globalErrorHandler = (err, req, res, _next) => {
         console.error(`[ERROR ${statusCode}] ${errorCode}:`, err.message);
         if (isDev) {
             console.error(err.stack);
+            // In development, show the real error message instead of generic one
+            if (message === 'Something went wrong!') {
+                message = err.message;
+            }
         }
     }
     // Build response

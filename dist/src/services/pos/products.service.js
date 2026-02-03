@@ -11,6 +11,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ProductsService = void 0;
 const socket_service_1 = require("../socket.service");
+const AppError_1 = require("../../utils/AppError");
 /**
  * Products Service
  * Note: Caching is handled in ProductsModel
@@ -62,7 +63,7 @@ class ProductsService {
                 this.socketService.emit('products:update', updatedProducts);
                 return updatedProducts;
             }
-            throw new Error("พบข้อผิดพลาดในการอัปเดตสินค้า");
+            throw new AppError_1.AppError("พบข้อผิดพลาดในการอัปเดตสินค้า", 500);
         });
     }
     delete(id) {

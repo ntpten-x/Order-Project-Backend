@@ -16,7 +16,7 @@ router.use((0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]
 router.get("/", categoryController.findAll);
 router.get("/:id", (0, validate_middleware_1.validate)(posMaster_schema_1.categoryIdParamSchema), categoryController.findOne);
 router.get("/name/:category_name", (0, validate_middleware_1.validate)(posMaster_schema_1.categoryNameParamSchema), categoryController.findOneByName);
-router.post("/", (0, auth_middleware_1.authorizeRole)(["Admin"]), (0, validate_middleware_1.validate)(posMaster_schema_1.createCategorySchema), categoryController.create);
-router.put("/:id", (0, auth_middleware_1.authorizeRole)(["Admin"]), (0, validate_middleware_1.validate)(posMaster_schema_1.updateCategorySchema), categoryController.update);
-router.delete("/:id", (0, auth_middleware_1.authorizeRole)(["Admin"]), (0, validate_middleware_1.validate)(posMaster_schema_1.categoryIdParamSchema), categoryController.delete);
+router.post("/", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager"]), (0, validate_middleware_1.validate)(posMaster_schema_1.createCategorySchema), categoryController.create);
+router.put("/:id", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager"]), (0, validate_middleware_1.validate)(posMaster_schema_1.updateCategorySchema), categoryController.update);
+router.delete("/:id", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager"]), (0, validate_middleware_1.validate)(posMaster_schema_1.categoryIdParamSchema), categoryController.delete);
 exports.default = router;
