@@ -19,18 +19,20 @@ export class EnforceBranchIntegrityAndIndexes1770500000000 implements MigrationI
 
         if (!backfillBranchId) {
             if (branchCount === 0) {
-                throw new Error(
-                    'Migration requires at least one row in "branches". Create a branch first, then rerun migrations.'
+                // Auto-create a default branch if none exists
+                const result = await queryRunner.query(
+                    `INSERT INTO "branches" ("branch_name", "branch_code", "is_active") VALUES ('Main Branch', 'MAIN', true) RETURNING "id"`
                 );
-            }
-            if (branchCount > 1) {
+                backfillBranchId = result[0].id;
+                console.log(`[Migration] Created default branch with ID: ${backfillBranchId}`);
+            } else if (branchCount > 1) {
                 throw new Error(
                     'Multiple branches exist; set env BRANCH_BACKFILL_ID (uuid) to backfill NULL branch_id rows safely.'
                 );
+            } else {
+                const idRows = await queryRunner.query(`SELECT id FROM "branches" LIMIT 1`);
+                backfillBranchId = String(idRows?.[0]?.id ?? "").trim();
             }
-
-            const idRows = await queryRunner.query(`SELECT id FROM "branches" LIMIT 1`);
-            backfillBranchId = String(idRows?.[0]?.id ?? "").trim();
         }
 
         if (!backfillBranchId) {

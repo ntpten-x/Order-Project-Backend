@@ -19,7 +19,7 @@ import { Products } from "../Products";
             .leftJoin(Products, "p", "oi.product_id = p.id")
             .where("o.status IN ('Paid', 'Completed')")
             .addGroupBy("o.branch_id")
-            .groupBy("oi.product_id")
+            .addGroupBy("oi.product_id")
             .addGroupBy("p.display_name")
             .addGroupBy("p.img_url")
             .addGroupBy("p.category_id"),
