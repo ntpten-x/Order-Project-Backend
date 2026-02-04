@@ -74,6 +74,9 @@ export class ProductsController {
         if (branchId) {
             req.body.branch_id = branchId;
         }
+        if (req.body.price_delivery === undefined || req.body.price_delivery === null) {
+            req.body.price_delivery = req.body.price ?? 0;
+        }
         const product = await this.productsService.create(req.body);
 
         const userInfo = getUserInfoFromRequest(req as any);

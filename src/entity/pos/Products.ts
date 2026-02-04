@@ -32,6 +32,9 @@ export class Products {
     @Column({ type: "decimal", precision: 12, scale: 2, default: 0 })
     cost!: number // ต้นทุนสินค้า
 
+    @Column({ name: "price_delivery", type: "decimal", precision: 12, scale: 2, default: 0 })
+    price_delivery!: number // Delivery price
+
     @Index()
     @Column({ name: "category_id", type: "uuid" })
     category_id!: string // รหัสหมวดหมู่

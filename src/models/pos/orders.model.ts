@@ -2,6 +2,7 @@ import { SalesOrder } from "../../entity/pos/SalesOrder";
 import { SalesOrderItem } from "../../entity/pos/SalesOrderItem";
 import { SalesOrderDetail } from "../../entity/pos/SalesOrderDetail";
 import { Products } from "../../entity/pos/Products";
+import { OrderType } from "../../entity/pos/OrderEnums";
 import { EntityManager, In } from "typeorm";
 import { getDbManager, getRepository, runInTransaction } from "../../database/dbContext";
 
@@ -310,7 +311,10 @@ export class OrdersModels {
                         ? itemData.details.reduce((sum: number, d: any) => sum + (Number(d.extra_price) || 0), 0)
                         : 0;
 
-                    item.price = Number(product.price);
+                    item.price =
+                        data.order_type === OrderType.Delivery
+                            ? Number((product as any).price_delivery ?? product.price)
+                            : Number(product.price);
                     item.discount_amount = itemData.discount_amount || 0;
                     item.total_price = Math.max(0, (item.price + detailsTotal) * item.quantity - Number(item.discount_amount || 0));
                     item.notes = itemData.notes;

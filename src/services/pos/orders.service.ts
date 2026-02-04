@@ -7,7 +7,7 @@ import { Delivery } from "../../entity/pos/Delivery";
 import { Discounts } from "../../entity/pos/Discounts";
 import { SalesOrderItem } from "../../entity/pos/SalesOrderItem";
 import { SalesOrderDetail } from "../../entity/pos/SalesOrderDetail";
-import { OrderStatus } from "../../entity/pos/OrderEnums";
+import { OrderStatus, OrderType } from "../../entity/pos/OrderEnums";
 import { Products } from "../../entity/pos/Products";
 import { EntityManager, In } from "typeorm";
 import { recalculateOrderTotal } from "./orderTotals.service";
@@ -59,7 +59,12 @@ export class OrdersService {
         throw new AppError("Unable to generate order number", 500);
     }
 
-    private async prepareItems(items: any[], manager: EntityManager, branchId?: string): Promise<Array<{ item: SalesOrderItem; details: SalesOrderDetail[] }>> {
+    private async prepareItems(
+        items: any[],
+        manager: EntityManager,
+        branchId?: string,
+        orderType?: OrderType
+    ): Promise<Array<{ item: SalesOrderItem; details: SalesOrderDetail[] }>> {
         const productRepo = manager.getRepository(Products);
 
         // 1. Collect all product IDs
@@ -114,7 +119,10 @@ export class OrdersService {
             const detailsData = Array.isArray(itemData.details) ? itemData.details : [];
             const detailsTotal = detailsData.reduce((sum: number, d: any) => sum + (Number(d?.extra_price) || 0), 0);
 
-            const unitPrice = Number(product.price);
+            const unitPrice =
+                orderType === OrderType.Delivery
+                    ? Number((product as any).price_delivery ?? product.price)
+                    : Number(product.price);
             const lineTotal = (unitPrice + detailsTotal) * quantity - discount;
 
             const item = new SalesOrderItem();
@@ -333,7 +341,7 @@ export class OrdersService {
                 }
             }
 
-            const preparedItems = await this.prepareItems(items, manager, branchId);
+            const preparedItems = await this.prepareItems(items, manager, branchId, orderData.order_type);
 
             const orderRepo = manager.getRepository(SalesOrder);
             const itemRepo = manager.getRepository(SalesOrderItem);
@@ -547,7 +555,7 @@ export class OrdersService {
                 const order = await orderRepo.findOneBy(branchId ? ({ id: orderId, branch_id: branchId } as any) : { id: orderId });
                 if (!order) throw new AppError("Order not found", 404);
 
-                const prepared = await this.prepareItems([itemData], manager, branchId);
+                const prepared = await this.prepareItems([itemData], manager, branchId, order.order_type);
                 const { item, details } = prepared[0];
                 item.order_id = orderId;
 
