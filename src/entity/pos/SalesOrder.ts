@@ -22,7 +22,7 @@ export class SalesOrder {
     @Column({ type: "varchar", unique: true, nullable: true })
     order_no!: string; // เลขที่ออเดอร์ (เช่น ORD-20240501-001)
 
-    @Column({ name: "branch_id", type: "uuid", nullable: true })
+    @Column({ name: "branch_id", type: "uuid" })
     branch_id?: string;
 
     @ManyToOne(() => Branch)

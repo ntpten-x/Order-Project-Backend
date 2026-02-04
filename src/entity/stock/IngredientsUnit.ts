@@ -16,7 +16,7 @@ export class IngredientsUnit {
     display_name!: string
 
     @Index()
-    @Column({ name: "branch_id", type: "uuid", nullable: true })
+    @Column({ name: "branch_id", type: "uuid" })
     branch_id?: string
 
     @ManyToOne(() => Branch)

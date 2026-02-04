@@ -16,7 +16,7 @@ export class Tables {
     table_name!: string; // ชื่อโต๊ะ (เช่น T1, A10)
 
     @Index()
-    @Column({ name: "branch_id", type: "uuid", nullable: true })
+    @Column({ name: "branch_id", type: "uuid" })
     branch_id?: string;
 
     @ManyToOne(() => Branch)

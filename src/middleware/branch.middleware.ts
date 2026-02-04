@@ -18,7 +18,14 @@ export interface BranchRequest extends AuthRequest {
  */
 export const extractBranch = (req: BranchRequest, res: Response, next: NextFunction) => {
     const ctx = getDbContext();
-    req.branchId = ctx?.branchId || req.user?.branch_id;
+
+    // Admin branch context is controlled by explicit "active branch" selection (cookie -> DB context).
+    // Do not fall back to the user's assigned branch_id for admins, or branch switching would be ignored.
+    if (ctx?.isAdmin) {
+        req.branchId = ctx.branchId;
+    } else {
+        req.branchId = ctx?.branchId || req.user?.branch_id;
+    }
     next();
 };
 
@@ -29,7 +36,7 @@ export const extractBranch = (req: BranchRequest, res: Response, next: NextFunct
  */
 export const requireBranch = (req: BranchRequest, res: Response, next: NextFunction) => {
     const ctx = getDbContext();
-    const effectiveBranchId = ctx?.branchId || req.user?.branch_id;
+    const effectiveBranchId = ctx?.isAdmin ? ctx?.branchId : ctx?.branchId || req.user?.branch_id;
 
     // Allow admin to read across branches without selecting one (GET only).
     if (!effectiveBranchId) {
@@ -49,6 +56,12 @@ export const requireBranch = (req: BranchRequest, res: Response, next: NextFunct
  */
 export const getBranchId = (req: BranchRequest): string | undefined => {
     const ctx = getDbContext();
+
+    // Admin branch is only the explicitly selected context.
+    if (ctx?.isAdmin) {
+        return ctx?.branchId || req.branchId;
+    }
+
     return ctx?.branchId || req.branchId || req.user?.branch_id;
 };
 

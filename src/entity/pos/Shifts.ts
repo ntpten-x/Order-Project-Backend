@@ -19,7 +19,7 @@ export class Shifts {
     @Column({ name: "user_id", type: "uuid" })
     user_id!: string;
 
-    @Column({ name: "branch_id", type: "uuid", nullable: true })
+    @Column({ name: "branch_id", type: "uuid" })
     branch_id?: string;
 
     @ManyToOne(() => Branch)

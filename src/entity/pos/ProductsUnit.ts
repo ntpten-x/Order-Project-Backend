@@ -16,7 +16,7 @@ export class ProductsUnit {
     display_name!: string // ชื่อหน่วย (แสดงผล)
 
     @Index()
-    @Column({ name: "branch_id", type: "uuid", nullable: true })
+    @Column({ name: "branch_id", type: "uuid" })
     branch_id?: string
 
     @ManyToOne(() => Branch)

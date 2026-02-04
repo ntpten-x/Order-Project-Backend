@@ -20,7 +20,7 @@ export class Discounts {
     display_name!: string // ชื่อส่วนลดที่แสดงให้ลูกค้าเห็น
 
     @Index()
-    @Column({ name: "branch_id", type: "uuid", nullable: true })
+    @Column({ name: "branch_id", type: "uuid" })
     branch_id?: string
 
     @ManyToOne(() => Branch)

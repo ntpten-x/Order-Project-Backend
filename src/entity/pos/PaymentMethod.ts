@@ -15,7 +15,7 @@ export class PaymentMethod {
     display_name!: string // ชื่อที่แสดงให้เห็น (เช่น เงินสด, บัตรเครดิต)
 
     @Index()
-    @Column({ name: "branch_id", type: "uuid", nullable: true })
+    @Column({ name: "branch_id", type: "uuid" })
     branch_id?: string
 
     @ManyToOne(() => Branch)
