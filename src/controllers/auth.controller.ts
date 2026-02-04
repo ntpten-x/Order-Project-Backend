@@ -1,11 +1,13 @@
 import { Request, Response } from "express";
 import { AppDataSource } from "../database/database";
 import { Users } from "../entity/Users";
+import { Branch } from "../entity/Branch";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { AuthRequest } from "../middleware/auth.middleware";
 import { securityLogger, getClientIp } from "../utils/securityLogger";
 import { ApiResponses } from "../utils/ApiResponse";
+import { getRepository, runWithDbContext } from "../database/dbContext";
 
 export class AuthController {
 
@@ -17,7 +19,7 @@ export class AuthController {
         try {
             const user = await userRepository.findOne({
                 where: { username },
-                relations: ["roles", "branch"]
+                relations: ["roles"]
             });
 
             if (!user) {
@@ -80,13 +82,25 @@ export class AuthController {
                 details: { username }
             });
 
+            const role = user.roles.roles_name;
+            const isAdmin = role === "Admin";
+
+            // branches table is RLS-protected; load branch under branch context
+            let branch: Branch | null | undefined;
+            if (user.branch_id) {
+                branch = await runWithDbContext(
+                    { branchId: user.branch_id, userId: user.id, role, isAdmin },
+                    async () => getRepository(Branch).findOneBy({ id: user.branch_id! })
+                );
+            }
+
             // Generate Token
             const secret = process.env.JWT_SECRET;
             if (!secret) {
                 return ApiResponses.internalError(res, "Server misconfiguration: JWT_SECRET missing");
             }
             const token = jwt.sign(
-                { id: user.id, username: user.username, role: user.roles.roles_name },
+                { id: user.id, username: user.username, role },
                 secret,
                 { expiresIn: "10h" } // Token valid for 10 hours
             );
@@ -114,16 +128,16 @@ export class AuthController {
                     id: user.id,
                     username: user.username,
                     name: user.name,
-                    role: user.roles.roles_name,
+                    role,
                     display_name: user.roles.display_name,
                     branch_id: user.branch_id,
-                    branch: user.branch ? {
-                        id: user.branch.id,
-                        branch_name: user.branch.branch_name,
-                        branch_code: user.branch.branch_code,
-                        address: user.branch.address,
-                        phone: user.branch.phone,
-                        is_active: user.branch.is_active
+                    branch: branch ? {
+                        id: branch.id,
+                        branch_name: branch.branch_name,
+                        branch_code: branch.branch_code,
+                        address: branch.address,
+                        phone: branch.phone,
+                        is_active: branch.is_active
                     } : undefined
                 }
             });

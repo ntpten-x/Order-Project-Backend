@@ -2,8 +2,9 @@ import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { AppDataSource } from "../database/database";
 import { Users } from "../entity/Users";
+import { Branch } from "../entity/Branch";
 import { securityLogger, getClientIp } from "../utils/securityLogger";
-import { runWithDbContext } from "../database/dbContext";
+import { getRepository, runWithDbContext } from "../database/dbContext";
 import { ApiResponses } from "../utils/ApiResponse";
 
 export interface AuthRequest extends Request {
@@ -65,11 +66,11 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
             return ApiResponses.unauthorized(res, "Session expired. Please login again.");
         }
 
-        // 3. Attach user to request (including branch relation for branch-based filtering)
+        // 3. Attach user to request
         const userRepository = AppDataSource.getRepository(Users);
         const user = await userRepository.findOne({
             where: { id: decoded.id },
-            relations: ["roles", "branch"]
+            relations: ["roles"]
         });
 
         if (!user) {
@@ -99,9 +100,6 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
             return ApiResponses.forbidden(res, "Account disabled");
         }
 
-        req.user = user;
-        req.tokenExpiry = tokenIssuedAt + SESSION_TIMEOUT;
-
         const role = user.roles?.roles_name;
         const isAdmin = role === "Admin";
 
@@ -110,6 +108,14 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
         return runWithDbContext(
             { branchId: user.branch_id, userId: user.id, role, isAdmin },
             async () => {
+                if (user.branch_id) {
+                    const branch = await getRepository(Branch).findOneBy({ id: user.branch_id });
+                    if (branch) user.branch = branch;
+                }
+
+                req.user = user;
+                req.tokenExpiry = tokenIssuedAt + SESSION_TIMEOUT;
+
                 await new Promise<void>((resolve) => {
                     const done = () => resolve();
                     res.once("finish", done);

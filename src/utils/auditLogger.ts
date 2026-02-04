@@ -4,7 +4,7 @@
  * Stores logs in database for persistence.
  */
 
-import { getRepository } from "../database/dbContext";
+import { getDbContext, getRepository } from "../database/dbContext";
 import { AuditLog } from "../entity/AuditLog";
 import { AuditActionType } from "./auditTypes";
 
@@ -32,8 +32,12 @@ class AuditLogger {
         method?: string;
     }): Promise<void> {
         try {
+            const ctx = getDbContext();
+            const branch_id = params.branch_id ?? ctx?.branchId;
+
             const auditLog = this.repository.create({
                 ...params,
+                branch_id,
                 created_at: new Date(),
             });
 

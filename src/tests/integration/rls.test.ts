@@ -72,12 +72,35 @@ describeIntegration("Postgres RLS branch isolation", () => {
             expect(rowsB.map((r: any) => r.id)).toEqual([orderB]);
             expect(rowsB[0].branch_id).toBe(branchB);
 
+            // Admin with an explicit branch context behaves like "switch branch": still isolated to the selected branch.
+            const rowsAdminScoped = await runWithDbContext({ branchId: branchA, isAdmin: true }, async () => {
+                const db = getDbManager();
+                return db.query(`SELECT id, branch_id FROM sales_orders ORDER BY id`);
+            });
+
+            expect(rowsAdminScoped.map((r: any) => r.id)).toEqual([orderA]);
+            expect(rowsAdminScoped[0].branch_id).toBe(branchA);
+
             const rowsAdmin = await runWithDbContext({ isAdmin: true }, async () => {
                 const db = getDbManager();
                 return db.query(`SELECT id FROM sales_orders ORDER BY id`);
             });
 
             expect(rowsAdmin.map((r: any) => r.id)).toEqual([orderA, orderB]);
+
+            const branchesScoped = await runWithDbContext({ branchId: branchA, isAdmin: false }, async () => {
+                const db = getDbManager();
+                return db.query(`SELECT id FROM branches ORDER BY id`);
+            });
+
+            expect(branchesScoped.map((r: any) => r.id)).toEqual([branchA]);
+
+            const branchesAdmin = await runWithDbContext({ branchId: branchA, isAdmin: true }, async () => {
+                const db = getDbManager();
+                return db.query(`SELECT id FROM branches ORDER BY id`);
+            });
+
+            expect(branchesAdmin.map((r: any) => r.id)).toEqual([branchA, branchB]);
         } finally {
             await runWithDbContext({ isAdmin: true }, async () => {
                 const db = getDbManager();
@@ -87,4 +110,3 @@ describeIntegration("Postgres RLS branch isolation", () => {
         }
     });
 });
-
