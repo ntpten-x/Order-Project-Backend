@@ -43,7 +43,7 @@ class RolesService {
                 const savedRole = yield this.rolesModels.create(data);
                 const createdRole = yield this.rolesModels.findOne(savedRole.id);
                 if (createdRole) {
-                    this.socketService.emit('roles:create', createdRole);
+                    this.socketService.emitToRole('Admin', 'roles:create', createdRole);
                     return createdRole;
                 }
                 return savedRole;
@@ -59,7 +59,7 @@ class RolesService {
                 yield this.rolesModels.update(id, data);
                 const updatedRole = yield this.rolesModels.findOne(id);
                 if (updatedRole) {
-                    this.socketService.emit('roles:update', updatedRole);
+                    this.socketService.emitToRole('Admin', 'roles:update', updatedRole);
                     return updatedRole;
                 }
                 throw new Error("ไม่พบข้อมูลบทบาท");
@@ -73,7 +73,7 @@ class RolesService {
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 yield this.rolesModels.delete(id);
-                this.socketService.emit('roles:delete', { id });
+                this.socketService.emitToRole('Admin', 'roles:delete', { id });
             }
             catch (error) {
                 throw error;

@@ -14,6 +14,8 @@ const catchAsync_1 = require("../../utils/catchAsync");
 const AppError_1 = require("../../utils/AppError");
 const ApiResponse_1 = require("../../utils/ApiResponse");
 const branch_middleware_1 = require("../../middleware/branch.middleware");
+const auditLogger_1 = require("../../utils/auditLogger");
+const securityLogger_1 = require("../../utils/securityLogger");
 /**
  * Ingredients Controller
  * Following supabase-postgres-best-practices:
@@ -49,21 +51,36 @@ class IngredientsController {
         }));
         this.create = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
             const branchId = (0, branch_middleware_1.getBranchId)(req);
-            if (branchId && !req.body.branch_id) {
+            if (branchId) {
                 req.body.branch_id = branchId;
             }
             const ingredient = yield this.ingredientsService.create(req.body);
+            const userInfo = (0, auditLogger_1.getUserInfoFromRequest)(req);
+            yield auditLogger_1.auditLogger.log(Object.assign(Object.assign({ action_type: auditLogger_1.AuditActionType.STOCK_INGREDIENT_CREATE }, userInfo), { ip_address: (0, securityLogger_1.getClientIp)(req), user_agent: req.get("User-Agent"), entity_type: "Ingredients", entity_id: ingredient.id, branch_id: branchId, new_values: req.body, path: req.originalUrl, method: req.method, description: `Create ingredient ${ingredient.ingredient_name || ingredient.display_name || ingredient.id}` }));
             return ApiResponse_1.ApiResponses.created(res, ingredient);
         }));
         this.update = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
-            const ingredient = yield this.ingredientsService.update(req.params.id, req.body);
+            const branchId = (0, branch_middleware_1.getBranchId)(req);
+            if (branchId) {
+                req.body.branch_id = branchId;
+            }
+            const oldIngredient = yield this.ingredientsService.findOne(req.params.id, branchId);
+            const ingredient = yield this.ingredientsService.update(req.params.id, req.body, branchId);
+            if (ingredient) {
+                const userInfo = (0, auditLogger_1.getUserInfoFromRequest)(req);
+                yield auditLogger_1.auditLogger.log(Object.assign(Object.assign({ action_type: auditLogger_1.AuditActionType.STOCK_INGREDIENT_UPDATE }, userInfo), { ip_address: (0, securityLogger_1.getClientIp)(req), user_agent: req.get("User-Agent"), entity_type: "Ingredients", entity_id: req.params.id, branch_id: branchId, old_values: oldIngredient, new_values: req.body, path: req.originalUrl, method: req.method, description: `Update ingredient ${req.params.id}` }));
+            }
             if (!ingredient) {
                 throw AppError_1.AppError.notFound("วัตถุดิบ");
             }
             return ApiResponse_1.ApiResponses.ok(res, ingredient);
         }));
         this.delete = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
-            yield this.ingredientsService.delete(req.params.id);
+            const branchId = (0, branch_middleware_1.getBranchId)(req);
+            const oldIngredient = yield this.ingredientsService.findOne(req.params.id, branchId);
+            yield this.ingredientsService.delete(req.params.id, branchId);
+            const userInfo = (0, auditLogger_1.getUserInfoFromRequest)(req);
+            yield auditLogger_1.auditLogger.log(Object.assign(Object.assign({ action_type: auditLogger_1.AuditActionType.STOCK_INGREDIENT_DELETE }, userInfo), { ip_address: (0, securityLogger_1.getClientIp)(req), user_agent: req.get("User-Agent"), entity_type: "Ingredients", entity_id: req.params.id, branch_id: branchId, old_values: oldIngredient, path: req.originalUrl, method: req.method, description: `Delete ingredient ${req.params.id}` }));
             return ApiResponse_1.ApiResponses.ok(res, { message: "วัตถุดิบลบสำเร็จ" });
         }));
     }

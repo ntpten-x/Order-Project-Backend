@@ -10,44 +10,67 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.OrderQueueService = void 0;
-const database_1 = require("../../database/database");
 const OrderQueue_1 = require("../../entity/pos/OrderQueue");
 const SalesOrder_1 = require("../../entity/pos/SalesOrder");
 const socket_service_1 = require("../socket.service");
 const AppError_1 = require("../../utils/AppError");
+const cache_1 = require("../../utils/cache");
+const dbContext_1 = require("../../database/dbContext");
 class OrderQueueService {
     constructor() {
-        this.queueRepository = database_1.AppDataSource.getRepository(OrderQueue_1.OrderQueue);
-        this.orderRepository = database_1.AppDataSource.getRepository(SalesOrder_1.SalesOrder);
         this.socketService = socket_service_1.SocketService.getInstance();
+        this.CACHE_PREFIX = 'order-queue';
+        this.CACHE_TTL = 2 * 1000; // 2 seconds
+    }
+    getCacheScopeParts(branchId) {
+        const ctx = (0, dbContext_1.getDbContext)();
+        const effectiveBranchId = branchId !== null && branchId !== void 0 ? branchId : ctx === null || ctx === void 0 ? void 0 : ctx.branchId;
+        if (effectiveBranchId)
+            return ["branch", effectiveBranchId];
+        if (ctx === null || ctx === void 0 ? void 0 : ctx.isAdmin)
+            return ["admin"];
+        return ["public"];
+    }
+    invalidateQueueCache(branchId) {
+        const ctx = (0, dbContext_1.getDbContext)();
+        const effectiveBranchId = branchId !== null && branchId !== void 0 ? branchId : ctx === null || ctx === void 0 ? void 0 : ctx.branchId;
+        if (!effectiveBranchId) {
+            (0, cache_1.invalidateCache)([`${this.CACHE_PREFIX}:`]);
+            return;
+        }
+        (0, cache_1.invalidateCache)([(0, cache_1.cacheKey)(this.CACHE_PREFIX, "branch", effectiveBranchId, "list")]);
     }
     /**
      * Add order to queue
      */
     addToQueue(orderId_1) {
         return __awaiter(this, arguments, void 0, function* (orderId, priority = OrderQueue_1.QueuePriority.Normal, branchId) {
+            const queueRepository = (0, dbContext_1.getRepository)(OrderQueue_1.OrderQueue);
+            const orderRepository = (0, dbContext_1.getRepository)(SalesOrder_1.SalesOrder);
             // Check if order exists
-            const order = yield this.orderRepository.findOne({ where: { id: orderId } });
+            const order = yield orderRepository.findOne({ where: { id: orderId } });
             if (!order) {
                 throw AppError_1.AppError.notFound("Order not found");
             }
+            const effectiveBranchId = branchId || order.branch_id;
             // Check if already in queue
-            const existing = yield this.queueRepository.findOne({ where: { order_id: orderId } });
+            const existing = yield queueRepository.findOne({ where: { order_id: orderId } });
             if (existing) {
                 throw AppError_1.AppError.conflict("Order already in queue");
             }
             // Get next queue position
-            const queuePosition = yield this.getNextQueuePosition(branchId);
-            const queueItem = this.queueRepository.create({
+            const queuePosition = yield this.getNextQueuePosition(effectiveBranchId);
+            const queueItem = queueRepository.create({
                 order_id: orderId,
-                branch_id: branchId || order.branch_id,
+                branch_id: effectiveBranchId,
                 status: OrderQueue_1.QueueStatus.Pending,
                 priority,
                 queue_position: queuePosition,
             });
-            const saved = yield this.queueRepository.save(queueItem);
+            const saved = yield queueRepository.save(queueItem);
+            this.invalidateQueueCache(effectiveBranchId);
             // Emit socket event
-            this.socketService.emitToBranch(saved.branch_id || '', 'order-queue:added', saved);
+            this.socketService.emitToBranch(effectiveBranchId || "", 'order-queue:added', saved);
             return saved;
         });
     }
@@ -56,7 +79,8 @@ class OrderQueueService {
      */
     getNextQueuePosition(branchId) {
         return __awaiter(this, void 0, void 0, function* () {
-            const query = this.queueRepository
+            const queueRepository = (0, dbContext_1.getRepository)(OrderQueue_1.OrderQueue);
+            const query = queueRepository
                 .createQueryBuilder('queue')
                 .select('MAX(queue.queue_position)', 'max');
             if (branchId) {
@@ -71,26 +95,41 @@ class OrderQueueService {
      */
     getQueue(branchId, status) {
         return __awaiter(this, void 0, void 0, function* () {
-            const query = this.queueRepository
-                .createQueryBuilder('queue')
-                .leftJoinAndSelect('queue.order', 'order')
-                .orderBy('queue.priority', 'DESC')
-                .addOrderBy('queue.queue_position', 'ASC');
-            if (branchId) {
-                query.where('queue.branch_id = :branchId', { branchId });
-            }
-            if (status) {
-                query.andWhere('queue.status = :status', { status });
-            }
-            return query.getMany();
+            const scope = this.getCacheScopeParts(branchId);
+            const key = (0, cache_1.cacheKey)(this.CACHE_PREFIX, ...scope, "list", status || "all");
+            return (0, cache_1.withCache)(key, () => __awaiter(this, void 0, void 0, function* () {
+                const queueRepository = (0, dbContext_1.getRepository)(OrderQueue_1.OrderQueue);
+                const query = queueRepository
+                    .createQueryBuilder('queue')
+                    .leftJoinAndSelect('queue.order', 'order')
+                    .orderBy('queue.priority', 'DESC')
+                    .addOrderBy('queue.queue_position', 'ASC');
+                if (branchId) {
+                    query.where('queue.branch_id = :branchId', { branchId });
+                }
+                if (status) {
+                    query.andWhere('queue.status = :status', { status });
+                }
+                return query.getMany();
+            }), this.CACHE_TTL, cache_1.queryCache);
+        });
+    }
+    /**
+     * Get a single queue item by ID (optionally scoped to a branch)
+     */
+    getQueueItem(queueId, branchId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return (0, dbContext_1.getRepository)(OrderQueue_1.OrderQueue).findOne({
+                where: branchId ? { id: queueId, branch_id: branchId } : { id: queueId },
+            });
         });
     }
     /**
      * Update queue status
      */
-    updateStatus(queueId, status) {
+    updateStatus(queueId, status, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
-            const queueItem = yield this.queueRepository.findOne({ where: { id: queueId } });
+            const queueItem = yield this.getQueueItem(queueId, branchId);
             if (!queueItem) {
                 throw AppError_1.AppError.notFound("Queue item not found");
             }
@@ -101,7 +140,8 @@ class OrderQueueService {
             else if (status === OrderQueue_1.QueueStatus.Completed || status === OrderQueue_1.QueueStatus.Cancelled) {
                 queueItem.completed_at = new Date();
             }
-            const saved = yield this.queueRepository.save(queueItem);
+            const saved = yield (0, dbContext_1.getRepository)(OrderQueue_1.OrderQueue).save(queueItem);
+            this.invalidateQueueCache(saved.branch_id || branchId);
             // Emit socket event
             this.socketService.emitToBranch(saved.branch_id || '', 'order-queue:updated', saved);
             return saved;
@@ -110,13 +150,14 @@ class OrderQueueService {
     /**
      * Remove from queue
      */
-    removeFromQueue(queueId) {
+    removeFromQueue(queueId, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
-            const queueItem = yield this.queueRepository.findOne({ where: { id: queueId } });
+            const queueItem = yield this.getQueueItem(queueId, branchId);
             if (!queueItem) {
                 throw AppError_1.AppError.notFound("Queue item not found");
             }
-            yield this.queueRepository.remove(queueItem);
+            yield (0, dbContext_1.getRepository)(OrderQueue_1.OrderQueue).remove(queueItem);
+            this.invalidateQueueCache(queueItem.branch_id || branchId);
             // Emit socket event
             this.socketService.emitToBranch(queueItem.branch_id || '', 'order-queue:removed', { id: queueId });
         });
@@ -126,7 +167,11 @@ class OrderQueueService {
      */
     reorderQueue(branchId) {
         return __awaiter(this, void 0, void 0, function* () {
-            const queueItems = yield this.getQueue(branchId, OrderQueue_1.QueueStatus.Pending);
+            const queueRepository = (0, dbContext_1.getRepository)(OrderQueue_1.OrderQueue);
+            const queueItems = yield queueRepository.find({
+                where: branchId ? { branch_id: branchId, status: OrderQueue_1.QueueStatus.Pending } : { status: OrderQueue_1.QueueStatus.Pending },
+                order: { priority: "DESC", queue_position: "ASC" },
+            });
             // Sort by priority and current position
             queueItems.sort((a, b) => {
                 const priorityOrder = {
@@ -143,10 +188,16 @@ class OrderQueueService {
             // Update positions
             for (let i = 0; i < queueItems.length; i++) {
                 queueItems[i].queue_position = i + 1;
-                yield this.queueRepository.save(queueItems[i]);
             }
-            // Emit socket event
-            this.socketService.emitToBranch(branchId || '', 'order-queue:reordered', { branchId });
+            yield (0, dbContext_1.runInTransaction)((manager) => __awaiter(this, void 0, void 0, function* () {
+                yield manager.getRepository(OrderQueue_1.OrderQueue).save(queueItems);
+            }));
+            this.invalidateQueueCache(branchId);
+            // Emit socket event with minimal payload so clients can patch cache without full refetch
+            this.socketService.emitToBranch(branchId || '', 'order-queue:reordered', {
+                branchId,
+                updates: queueItems.map((q) => ({ id: q.id, queue_position: q.queue_position, priority: q.priority }))
+            });
         });
     }
 }

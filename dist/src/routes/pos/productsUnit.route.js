@@ -6,6 +6,7 @@ const productsUnit_service_1 = require("../../services/pos/productsUnit.service"
 const productsUnit_model_1 = require("../../models/pos/productsUnit.model");
 const auth_middleware_1 = require("../../middleware/auth.middleware");
 const validate_middleware_1 = require("../../middleware/validate.middleware");
+const branch_middleware_1 = require("../../middleware/branch.middleware");
 const posMaster_schema_1 = require("../../utils/schemas/posMaster.schema");
 const router = (0, express_1.Router)();
 const productsUnitModel = new productsUnit_model_1.ProductsUnitModels();
@@ -13,6 +14,7 @@ const productsUnitService = new productsUnit_service_1.ProductsUnitService(produ
 const productsUnitController = new productsUnit_controller_1.ProductsUnitController(productsUnitService);
 router.use(auth_middleware_1.authenticateToken);
 router.use((0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]));
+router.use(branch_middleware_1.requireBranch);
 router.get("/", productsUnitController.findAll);
 router.get("/:id", (0, validate_middleware_1.validate)(posMaster_schema_1.productsUnitIdParamSchema), productsUnitController.findOne);
 router.get("/name/:unit_name", (0, validate_middleware_1.validate)(posMaster_schema_1.productsUnitNameParamSchema), productsUnitController.findOneByName);

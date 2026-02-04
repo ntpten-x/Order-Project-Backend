@@ -25,7 +25,6 @@
   - `/pos/orders/*` (สร้าง/แก้ไข/ลบออเดอร์)
   - `/pos/payments/*` (ชำระเงิน)
   - `/pos/discounts/*` (จัดการส่วนลด)
-  - `/pos/promotions/*` (จัดการโปรโมชัน)
   - `/pos/products/*` (จัดการสินค้า)
   - และ routes อื่นๆ ที่ใช้ cookie auth
 

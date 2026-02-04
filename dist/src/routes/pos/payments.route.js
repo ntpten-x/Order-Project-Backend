@@ -5,6 +5,7 @@ const payments_model_1 = require("../../models/pos/payments.model");
 const payments_service_1 = require("../../services/pos/payments.service");
 const payments_controller_1 = require("../../controllers/pos/payments.controller");
 const auth_middleware_1 = require("../../middleware/auth.middleware");
+const branch_middleware_1 = require("../../middleware/branch.middleware");
 const validate_middleware_1 = require("../../middleware/validate.middleware");
 const payments_schema_1 = require("../../utils/schemas/payments.schema");
 const router = (0, express_1.Router)();
@@ -13,6 +14,7 @@ const paymentsService = new payments_service_1.PaymentsService(paymentsModel);
 const paymentsController = new payments_controller_1.PaymentsController(paymentsService);
 router.use(auth_middleware_1.authenticateToken);
 router.use((0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]));
+router.use(branch_middleware_1.requireBranch);
 // Authorization: 
 // Admin/Manager manage, Employee usually creates payments.
 // Allowing Employee to Create/Read/Update (if needed) but maybe restrict Delete to Admin/Manager?

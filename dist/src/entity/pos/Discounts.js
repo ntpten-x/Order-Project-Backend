@@ -34,7 +34,7 @@ __decorate([
 ], Discounts.prototype, "display_name", void 0);
 __decorate([
     (0, typeorm_1.Index)(),
-    (0, typeorm_1.Column)({ name: "branch_id", type: "uuid", nullable: true }),
+    (0, typeorm_1.Column)({ name: "branch_id", type: "uuid" }),
     __metadata("design:type", String)
 ], Discounts.prototype, "branch_id", void 0);
 __decorate([

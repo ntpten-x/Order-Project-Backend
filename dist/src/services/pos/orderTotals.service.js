@@ -10,14 +10,14 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.recalculateOrderTotal = void 0;
-const database_1 = require("../../database/database");
 const SalesOrder_1 = require("../../entity/pos/SalesOrder");
 const SalesOrderItem_1 = require("../../entity/pos/SalesOrderItem");
 const OrderEnums_1 = require("../../entity/pos/OrderEnums");
 const priceCalculator_service_1 = require("./priceCalculator.service");
+const dbContext_1 = require("../../database/dbContext");
 const recalculateOrderTotal = (orderId, manager) => __awaiter(void 0, void 0, void 0, function* () {
-    const orderRepo = manager ? manager.getRepository(SalesOrder_1.SalesOrder) : database_1.AppDataSource.getRepository(SalesOrder_1.SalesOrder);
-    const itemRepo = manager ? manager.getRepository(SalesOrderItem_1.SalesOrderItem) : database_1.AppDataSource.getRepository(SalesOrderItem_1.SalesOrderItem);
+    const orderRepo = manager ? manager.getRepository(SalesOrder_1.SalesOrder) : (0, dbContext_1.getRepository)(SalesOrder_1.SalesOrder);
+    const itemRepo = manager ? manager.getRepository(SalesOrderItem_1.SalesOrderItem) : (0, dbContext_1.getRepository)(SalesOrderItem_1.SalesOrderItem);
     const order = yield orderRepo.findOne({
         where: { id: orderId },
         relations: ["discount"]

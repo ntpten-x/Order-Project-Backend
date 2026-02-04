@@ -10,16 +10,14 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CategoryModels = void 0;
-const database_1 = require("../../database/database");
 const Category_1 = require("../../entity/pos/Category");
+const dbContext_1 = require("../../database/dbContext");
 class CategoryModels {
-    constructor() {
-        this.categoryRepository = database_1.AppDataSource.getRepository(Category_1.Category);
-    }
     findAll(branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const query = this.categoryRepository.createQueryBuilder("category")
+                const categoryRepository = (0, dbContext_1.getRepository)(Category_1.Category);
+                const query = categoryRepository.createQueryBuilder("category")
                     .orderBy("category.create_date", "ASC");
                 if (branchId) {
                     query.andWhere("category.branch_id = :branchId", { branchId });
@@ -34,7 +32,8 @@ class CategoryModels {
     findOne(id, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const query = this.categoryRepository.createQueryBuilder("category")
+                const categoryRepository = (0, dbContext_1.getRepository)(Category_1.Category);
+                const query = categoryRepository.createQueryBuilder("category")
                     .where("category.id = :id", { id });
                 if (branchId) {
                     query.andWhere("category.branch_id = :branchId", { branchId });
@@ -49,7 +48,8 @@ class CategoryModels {
     findOneByName(category_name, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const query = this.categoryRepository.createQueryBuilder("category")
+                const categoryRepository = (0, dbContext_1.getRepository)(Category_1.Category);
+                const query = categoryRepository.createQueryBuilder("category")
                     .where("category.category_name = :category_name", { category_name });
                 if (branchId) {
                     query.andWhere("category.branch_id = :branchId", { branchId });
@@ -64,27 +64,42 @@ class CategoryModels {
     create(data) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.categoryRepository.createQueryBuilder("category").insert().values(data).returning("id").execute().then((result) => result.raw[0]);
+                const categoryRepository = (0, dbContext_1.getRepository)(Category_1.Category);
+                return categoryRepository.createQueryBuilder("category").insert().values(data).returning("id").execute().then((result) => result.raw[0]);
             }
             catch (error) {
                 throw error;
             }
         });
     }
-    update(id, data) {
+    update(id, data, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.categoryRepository.createQueryBuilder("category").update(data).where("category.id = :id", { id }).returning("id").execute().then((result) => result.raw[0]);
+                const categoryRepository = (0, dbContext_1.getRepository)(Category_1.Category);
+                const qb = categoryRepository.createQueryBuilder("category")
+                    .update(data)
+                    .where("category.id = :id", { id });
+                if (branchId) {
+                    qb.andWhere("category.branch_id = :branchId", { branchId });
+                }
+                return qb.returning("id").execute().then((result) => result.raw[0]);
             }
             catch (error) {
                 throw error;
             }
         });
     }
-    delete(id) {
+    delete(id, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                this.categoryRepository.createQueryBuilder("category").delete().where("category.id = :id", { id }).execute();
+                const categoryRepository = (0, dbContext_1.getRepository)(Category_1.Category);
+                const qb = categoryRepository.createQueryBuilder("category")
+                    .delete()
+                    .where("category.id = :id", { id });
+                if (branchId) {
+                    qb.andWhere("category.branch_id = :branchId", { branchId });
+                }
+                qb.execute();
             }
             catch (error) {
                 throw error;

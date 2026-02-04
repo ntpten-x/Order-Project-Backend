@@ -10,23 +10,34 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PaymentAccountService = void 0;
-const database_1 = require("../../database/database");
 const ShopProfile_1 = require("../../entity/pos/ShopProfile");
 const paymentAccount_schema_1 = require("../../schemas/paymentAccount.schema");
 const socket_service_1 = require("../socket.service");
+const dbContext_1 = require("../../database/dbContext");
 class PaymentAccountService {
     constructor(model) {
         this.socketService = socket_service_1.SocketService.getInstance();
         this.model = model;
-        this.shopRepository = database_1.AppDataSource.getRepository(ShopProfile_1.ShopProfile);
     }
-    getAccounts(shopId) {
+    getShopIdForBranch(branchId) {
         return __awaiter(this, void 0, void 0, function* () {
+            const shopRepository = (0, dbContext_1.getRepository)(ShopProfile_1.ShopProfile);
+            const existing = yield shopRepository.findOne({ where: { branch_id: branchId } });
+            if (existing)
+                return existing.id;
+            const created = yield shopRepository.save({ branch_id: branchId, shop_name: "POS Shop" });
+            return created.id;
+        });
+    }
+    getAccounts(branchId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const shopId = yield this.getShopIdForBranch(branchId);
             return yield this.model.findByShopId(shopId);
         });
     }
-    createAccount(shopId, data) {
+    createAccount(branchId, data) {
         return __awaiter(this, void 0, void 0, function* () {
+            const shopId = yield this.getShopIdForBranch(branchId);
             // Zod Validation
             const validation = paymentAccount_schema_1.paymentAccountSchema.safeParse(data);
             if (!validation.success) {
@@ -52,12 +63,13 @@ class PaymentAccountService {
                 // Sync with ShopProfile
                 yield this.syncToShopProfile(shopId, account);
             }
-            this.socketService.emit("payment-accounts:create", account);
+            this.socketService.emitToBranch(branchId, "payment-accounts:create", account);
             return account;
         });
     }
-    updateAccount(shopId, accountId, data) {
+    updateAccount(branchId, accountId, data) {
         return __awaiter(this, void 0, void 0, function* () {
+            const shopId = yield this.getShopIdForBranch(branchId);
             const account = yield this.model.findOne(shopId, accountId);
             if (!account)
                 throw new Error("Account not found");
@@ -84,12 +96,13 @@ class PaymentAccountService {
             if (savedAccount.is_active) {
                 yield this.syncToShopProfile(shopId, savedAccount);
             }
-            this.socketService.emit("payment-accounts:update", savedAccount);
+            this.socketService.emitToBranch(branchId, "payment-accounts:update", savedAccount);
             return savedAccount;
         });
     }
-    activateAccount(shopId, accountId) {
+    activateAccount(branchId, accountId) {
         return __awaiter(this, void 0, void 0, function* () {
+            const shopId = yield this.getShopIdForBranch(branchId);
             const account = yield this.model.findOne(shopId, accountId);
             if (!account)
                 throw new Error("Account not found");
@@ -100,12 +113,13 @@ class PaymentAccountService {
             const savedAccount = yield this.model.save(account);
             // Sync with ShopProfile
             yield this.syncToShopProfile(shopId, savedAccount);
-            this.socketService.emit("payment-accounts:update", savedAccount);
+            this.socketService.emitToBranch(branchId, "payment-accounts:update", savedAccount);
             return savedAccount;
         });
     }
-    deleteAccount(shopId, accountId) {
+    deleteAccount(branchId, accountId) {
         return __awaiter(this, void 0, void 0, function* () {
+            const shopId = yield this.getShopIdForBranch(branchId);
             const account = yield this.model.findOne(shopId, accountId);
             if (!account)
                 throw new Error("Account not found");
@@ -113,14 +127,14 @@ class PaymentAccountService {
                 throw new Error("Cannot delete the active account. Please activate another account first.");
             }
             const result = yield this.model.delete(account);
-            this.socketService.emit("payment-accounts:delete", { id: accountId });
+            this.socketService.emitToBranch(branchId, "payment-accounts:delete", { id: accountId });
             return result;
         });
     }
     // Helper to sync active account to ShopProfile for backward compatibility
     syncToShopProfile(shopId, account) {
         return __awaiter(this, void 0, void 0, function* () {
-            yield this.shopRepository.update(shopId, {
+            yield (0, dbContext_1.getRepository)(ShopProfile_1.ShopProfile).update(shopId, {
                 promptpay_number: account.account_number,
                 promptpay_name: account.account_name,
                 bank_name: account.bank_name,
@@ -134,7 +148,7 @@ class PaymentAccountService {
         return __awaiter(this, void 0, void 0, function* () {
             var _a;
             // Always pick the first shop in alphabetic or creation order to be deterministic
-            const shops = yield this.shopRepository.find({
+            const shops = yield (0, dbContext_1.getRepository)(ShopProfile_1.ShopProfile).find({
                 order: { id: "ASC" },
                 take: 1
             });

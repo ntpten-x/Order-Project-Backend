@@ -5,6 +5,7 @@ const orders_model_1 = require("../../models/pos/orders.model");
 const orders_service_1 = require("../../services/pos/orders.service");
 const orders_controller_1 = require("../../controllers/pos/orders.controller");
 const auth_middleware_1 = require("../../middleware/auth.middleware");
+const branch_middleware_1 = require("../../middleware/branch.middleware");
 const validate_middleware_1 = require("../../middleware/validate.middleware");
 const posOrders_schema_1 = require("../../utils/schemas/posOrders.schema");
 const router = (0, express_1.Router)();
@@ -13,6 +14,7 @@ const ordersService = new orders_service_1.OrdersService(ordersModel);
 const ordersController = new orders_controller_1.OrdersController(ordersService);
 router.use(auth_middleware_1.authenticateToken);
 router.use((0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]));
+router.use(branch_middleware_1.requireBranch);
 // Specific routes must come before dynamic routes like /:id
 router.get("/stats", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), ordersController.getStats);
 router.get("/summary", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), ordersController.findSummary);

@@ -6,6 +6,7 @@ const salesOrderItem_service_1 = require("../../services/pos/salesOrderItem.serv
 const salesOrderItem_controller_1 = require("../../controllers/pos/salesOrderItem.controller");
 const auth_middleware_1 = require("../../middleware/auth.middleware");
 const validate_middleware_1 = require("../../middleware/validate.middleware");
+const branch_middleware_1 = require("../../middleware/branch.middleware");
 const posMaster_schema_1 = require("../../utils/schemas/posMaster.schema");
 const router = (0, express_1.Router)();
 const salesOrderItemModel = new salesOrderItem_model_1.SalesOrderItemModels();
@@ -13,6 +14,7 @@ const salesOrderItemService = new salesOrderItem_service_1.SalesOrderItemService
 const salesOrderItemController = new salesOrderItem_controller_1.SalesOrderItemController(salesOrderItemService);
 router.use(auth_middleware_1.authenticateToken);
 router.use((0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]));
+router.use(branch_middleware_1.requireBranch);
 router.get("/", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), salesOrderItemController.findAll);
 router.get("/:id", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), (0, validate_middleware_1.validate)(posMaster_schema_1.salesOrderItemIdParamSchema), salesOrderItemController.findOne);
 router.post("/", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), (0, validate_middleware_1.validate)(posMaster_schema_1.createSalesOrderItemSchema), salesOrderItemController.create);

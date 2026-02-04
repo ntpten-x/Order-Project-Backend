@@ -46,18 +46,24 @@ class ProductsUnitService {
             }
         });
     }
-    create(productsUnit) {
+    create(productsUnit, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const findProductsUnit = yield this.productsUnitModel.findOneByName(productsUnit.unit_name, productsUnit.branch_id);
+                const effectiveBranchId = branchId || productsUnit.branch_id;
+                if (effectiveBranchId) {
+                    productsUnit.branch_id = effectiveBranchId;
+                }
+                const findProductsUnit = yield this.productsUnitModel.findOneByName(productsUnit.unit_name, effectiveBranchId);
                 if (findProductsUnit) {
                     throw new Error("หน่วยนี้มีอยู่ในระบบแล้ว");
                 }
                 // @ts-ignore
                 const savedProductsUnit = yield this.productsUnitModel.create(productsUnit);
-                const createdProductsUnit = yield this.productsUnitModel.findOne(savedProductsUnit.id);
+                const createdProductsUnit = yield this.productsUnitModel.findOne(savedProductsUnit.id, effectiveBranchId);
                 if (createdProductsUnit) {
-                    this.socketService.emit('productsUnit:create', createdProductsUnit);
+                    if (effectiveBranchId) {
+                        this.socketService.emitToBranch(effectiveBranchId, 'productsUnit:create', createdProductsUnit);
+                    }
                     return createdProductsUnit;
                 }
                 return savedProductsUnit;
@@ -67,16 +73,26 @@ class ProductsUnitService {
             }
         });
     }
-    update(id, productsUnit) {
+    update(id, productsUnit, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const findProductsUnit = yield this.productsUnitModel.findOneByName(productsUnit.unit_name, productsUnit.branch_id);
+                const effectiveBranchId = branchId || productsUnit.branch_id;
+                if (effectiveBranchId) {
+                    productsUnit.branch_id = effectiveBranchId;
+                }
+                const existingUnit = yield this.productsUnitModel.findOne(id, effectiveBranchId);
+                if (!existingUnit) {
+                    throw new Error("Products unit not found");
+                }
+                const findProductsUnit = yield this.productsUnitModel.findOneByName(productsUnit.unit_name, effectiveBranchId);
                 if (findProductsUnit && findProductsUnit.id !== id) {
                     throw new Error("หน่วยนี้มีอยู่ในระบบแล้ว");
                 }
-                const updatedProductsUnit = yield this.productsUnitModel.update(id, productsUnit);
+                const updatedProductsUnit = yield this.productsUnitModel.update(id, productsUnit, effectiveBranchId);
                 if (updatedProductsUnit) {
-                    this.socketService.emit('productsUnit:update', updatedProductsUnit);
+                    if (effectiveBranchId) {
+                        this.socketService.emitToBranch(effectiveBranchId, 'productsUnit:update', updatedProductsUnit);
+                    }
                     return updatedProductsUnit;
                 }
                 throw new Error("ไม่สามารถอัปเดตข้อมูลได้");
@@ -86,11 +102,17 @@ class ProductsUnitService {
             }
         });
     }
-    delete(id) {
+    delete(id, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                yield this.productsUnitModel.delete(id);
-                this.socketService.emit('productsUnit:delete', { id });
+                const existing = yield this.productsUnitModel.findOne(id, branchId);
+                if (!existing)
+                    throw new Error("Products unit not found");
+                const effectiveBranchId = branchId || existing.branch_id;
+                yield this.productsUnitModel.delete(id, effectiveBranchId);
+                if (effectiveBranchId) {
+                    this.socketService.emitToBranch(effectiveBranchId, 'productsUnit:delete', { id });
+                }
             }
             catch (error) {
                 throw error;

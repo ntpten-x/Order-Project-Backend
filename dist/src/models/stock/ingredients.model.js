@@ -10,9 +10,9 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.IngredientsModel = void 0;
-const database_1 = require("../../database/database");
 const Ingredients_1 = require("../../entity/stock/Ingredients");
 const dbHelpers_1 = require("../../utils/dbHelpers");
+const dbContext_1 = require("../../database/dbContext");
 /**
  * Ingredients Model
  * Following supabase-postgres-best-practices:
@@ -21,12 +21,10 @@ const dbHelpers_1 = require("../../utils/dbHelpers");
  * - Branch-based data isolation support
  */
 class IngredientsModel {
-    constructor() {
-        this.ingredientsRepository = database_1.AppDataSource.getRepository(Ingredients_1.Ingredients);
-    }
     findAll(filters, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
-            let query = this.ingredientsRepository.createQueryBuilder("ingredients")
+            const ingredientsRepository = (0, dbContext_1.getRepository)(Ingredients_1.Ingredients);
+            let query = ingredientsRepository.createQueryBuilder("ingredients")
                 .leftJoinAndSelect("ingredients.unit", "unit")
                 .orderBy("ingredients.create_date", "ASC");
             // Filter by branch for data isolation
@@ -43,7 +41,8 @@ class IngredientsModel {
     findOne(id, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const query = this.ingredientsRepository.createQueryBuilder("ingredients")
+                const ingredientsRepository = (0, dbContext_1.getRepository)(Ingredients_1.Ingredients);
+                const query = ingredientsRepository.createQueryBuilder("ingredients")
                     .leftJoinAndSelect("ingredients.unit", "unit")
                     .where("ingredients.id = :id", { id });
                 if (branchId) {
@@ -59,7 +58,8 @@ class IngredientsModel {
     findOneByName(ingredient_name, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const query = this.ingredientsRepository.createQueryBuilder("ingredients")
+                const ingredientsRepository = (0, dbContext_1.getRepository)(Ingredients_1.Ingredients);
+                const query = ingredientsRepository.createQueryBuilder("ingredients")
                     .leftJoinAndSelect("ingredients.unit", "unit")
                     .where("ingredients.ingredient_name = :ingredient_name", { ingredient_name });
                 if (branchId) {
@@ -75,27 +75,33 @@ class IngredientsModel {
     create(ingredients) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.ingredientsRepository.save(ingredients);
+                return (0, dbContext_1.getRepository)(Ingredients_1.Ingredients).save(ingredients);
             }
             catch (error) {
                 throw error;
             }
         });
     }
-    update(id, ingredients) {
+    update(id, ingredients, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.ingredientsRepository.save(Object.assign(Object.assign({}, ingredients), { id }));
+                return (0, dbContext_1.getRepository)(Ingredients_1.Ingredients).save(Object.assign(Object.assign(Object.assign({}, ingredients), { id }), (branchId ? { branch_id: branchId } : {})));
             }
             catch (error) {
                 throw error;
             }
         });
     }
-    delete(id) {
+    delete(id, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                yield this.ingredientsRepository.delete(id);
+                const ingredientsRepository = (0, dbContext_1.getRepository)(Ingredients_1.Ingredients);
+                if (branchId) {
+                    yield ingredientsRepository.delete({ id, branch_id: branchId });
+                }
+                else {
+                    yield ingredientsRepository.delete(id);
+                }
             }
             catch (error) {
                 throw error;

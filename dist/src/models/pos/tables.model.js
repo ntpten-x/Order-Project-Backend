@@ -10,17 +10,15 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TablesModels = void 0;
-const database_1 = require("../../database/database");
 const Tables_1 = require("../../entity/pos/Tables");
+const dbContext_1 = require("../../database/dbContext");
 class TablesModels {
-    constructor() {
-        this.tablesRepository = database_1.AppDataSource.getRepository(Tables_1.Tables);
-    }
     findAll() {
         return __awaiter(this, arguments, void 0, function* (page = 1, limit = 50, q, branchId) {
             try {
                 const skip = (page - 1) * limit;
-                const query = this.tablesRepository.createQueryBuilder("tables")
+                const tablesRepository = (0, dbContext_1.getRepository)(Tables_1.Tables);
+                const query = tablesRepository.createQueryBuilder("tables")
                     .leftJoinAndMapOne("tables.active_order", "SalesOrder", "so", "so.table_id = tables.id AND so.status NOT IN (:...statuses)", { statuses: ['Paid', 'Cancelled', 'completed'] })
                     .orderBy("tables.create_date", "ASC");
                 if (q && q.trim()) {
@@ -46,10 +44,10 @@ class TablesModels {
             }
         });
     }
-    findOne(id) {
+    findOne(id, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.tablesRepository.findOneBy({ id });
+                return (0, dbContext_1.getRepository)(Tables_1.Tables).findOneBy(branchId ? { id, branch_id: branchId } : { id });
             }
             catch (error) {
                 throw error;
@@ -62,7 +60,7 @@ class TablesModels {
                 const where = { table_name };
                 if (branchId)
                     where.branch_id = branchId;
-                return this.tablesRepository.findOneBy(where);
+                return (0, dbContext_1.getRepository)(Tables_1.Tables).findOneBy(where);
             }
             catch (error) {
                 throw error;
@@ -72,18 +70,23 @@ class TablesModels {
     create(data) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.tablesRepository.save(data);
+                return (0, dbContext_1.getRepository)(Tables_1.Tables).save(data);
             }
             catch (error) {
                 throw error;
             }
         });
     }
-    update(id, data) {
+    update(id, data, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                yield this.tablesRepository.update(id, data);
-                const updatedTable = yield this.findOne(id);
+                if (branchId) {
+                    yield (0, dbContext_1.getRepository)(Tables_1.Tables).update({ id, branch_id: branchId }, data);
+                }
+                else {
+                    yield (0, dbContext_1.getRepository)(Tables_1.Tables).update(id, data);
+                }
+                const updatedTable = yield this.findOne(id, branchId);
                 if (!updatedTable) {
                     throw new Error("ไม่พบข้อมูลโต๊ะที่ต้องการค้นหา");
                 }
@@ -94,10 +97,15 @@ class TablesModels {
             }
         });
     }
-    delete(id) {
+    delete(id, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                yield this.tablesRepository.delete(id);
+                if (branchId) {
+                    yield (0, dbContext_1.getRepository)(Tables_1.Tables).delete({ id, branch_id: branchId });
+                }
+                else {
+                    yield (0, dbContext_1.getRepository)(Tables_1.Tables).delete(id);
+                }
             }
             catch (error) {
                 throw error;

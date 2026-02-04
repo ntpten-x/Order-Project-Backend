@@ -10,20 +10,19 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.OrdersModels = void 0;
-const database_1 = require("../../database/database");
 const SalesOrder_1 = require("../../entity/pos/SalesOrder");
 const SalesOrderItem_1 = require("../../entity/pos/SalesOrderItem");
 const SalesOrderDetail_1 = require("../../entity/pos/SalesOrderDetail");
 const Products_1 = require("../../entity/pos/Products");
+const OrderEnums_1 = require("../../entity/pos/OrderEnums");
+const dbContext_1 = require("../../database/dbContext");
 class OrdersModels {
-    constructor() {
-        this.ordersRepository = database_1.AppDataSource.getRepository(SalesOrder_1.SalesOrder);
-    }
     findAll() {
         return __awaiter(this, arguments, void 0, function* (page = 1, limit = 50, statuses, orderType, searchTerm, branchId) {
             try {
                 const skip = (page - 1) * limit;
-                const qb = this.ordersRepository.createQueryBuilder("order")
+                const ordersRepository = (0, dbContext_1.getRepository)(SalesOrder_1.SalesOrder);
+                const qb = ordersRepository.createQueryBuilder("order")
                     .leftJoinAndSelect("order.table", "table")
                     .leftJoinAndSelect("order.delivery", "delivery")
                     .leftJoinAndSelect("order.discount", "discount")
@@ -94,7 +93,7 @@ class OrdersModels {
                 FROM sales_orders o
                 ${whereSql}
             `;
-                const countResult = yield database_1.AppDataSource.query(countQuery, params);
+                const countResult = yield (0, dbContext_1.getDbManager)().query(countQuery, params);
                 const total = (_b = (_a = countResult === null || countResult === void 0 ? void 0 : countResult[0]) === null || _a === void 0 ? void 0 : _a.total) !== null && _b !== void 0 ? _b : 0;
                 const dataParams = [...params, limit, (page - 1) * limit];
                 const limitIndex = params.length + 1;
@@ -136,7 +135,7 @@ class OrdersModels {
                 ORDER BY o.create_date DESC
                 LIMIT $${limitIndex} OFFSET $${offsetIndex}
             `;
-                const rows = yield database_1.AppDataSource.query(dataQuery, dataParams);
+                const rows = yield (0, dbContext_1.getDbManager)().query(dataQuery, dataParams);
                 const data = rows.map((row) => {
                     var _a;
                     return ({
@@ -170,7 +169,7 @@ class OrdersModels {
     getStats(statuses, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const stats = yield this.ordersRepository
+                const stats = yield (0, dbContext_1.getRepository)(SalesOrder_1.SalesOrder)
                     .createQueryBuilder("order")
                     .select("order.order_type", "type")
                     .addSelect("COUNT(order.id)", "count")
@@ -211,8 +210,8 @@ class OrdersModels {
                     where.status = status;
                 if (branchId)
                     where.order = { branch_id: branchId };
-                const repo = database_1.AppDataSource.getRepository(SalesOrderItem_1.SalesOrderItem);
-                const [items] = yield repo.findAndCount({
+                const repo = (0, dbContext_1.getRepository)(SalesOrderItem_1.SalesOrderItem);
+                const [data, total] = yield repo.findAndCount({
                     where,
                     relations: ["product", "product.category", "order", "order.table"], // order.table for monitoring
                     order: {
@@ -223,18 +222,22 @@ class OrdersModels {
                     take: limit,
                     skip: (page - 1) * limit
                 });
-                return items;
+                return { data, total, page, limit };
             }
             catch (error) {
                 throw error;
             }
         });
     }
-    findOne(id) {
+    findOne(id, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.ordersRepository.findOne({
-                    where: { id },
+                const where = { id };
+                if (branchId) {
+                    where.branch_id = branchId;
+                }
+                return (0, dbContext_1.getRepository)(SalesOrder_1.SalesOrder).findOne({
+                    where,
                     relations: [
                         "table",
                         "delivery",
@@ -254,11 +257,11 @@ class OrdersModels {
             }
         });
     }
-    findOneByOrderNo(order_no) {
+    findOneByOrderNo(order_no, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.ordersRepository.findOne({
-                    where: { order_no },
+                return (0, dbContext_1.getRepository)(SalesOrder_1.SalesOrder).findOne({
+                    where: branchId ? { order_no, branch_id: branchId } : { order_no },
                     relations: ["table", "delivery", "discount", "created_by"]
                 });
             }
@@ -270,7 +273,7 @@ class OrdersModels {
     create(data, manager) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const repo = manager ? manager.getRepository(SalesOrder_1.SalesOrder) : this.ordersRepository;
+                const repo = manager ? manager.getRepository(SalesOrder_1.SalesOrder) : (0, dbContext_1.getRepository)(SalesOrder_1.SalesOrder);
                 return repo.save(data);
             }
             catch (error) {
@@ -281,7 +284,8 @@ class OrdersModels {
     // Transactional Create
     createFullOrder(data, items) {
         return __awaiter(this, void 0, void 0, function* () {
-            return yield database_1.AppDataSource.manager.transaction((transactionalEntityManager) => __awaiter(this, void 0, void 0, function* () {
+            return yield (0, dbContext_1.runInTransaction)((transactionalEntityManager) => __awaiter(this, void 0, void 0, function* () {
+                var _a;
                 // 1. Save Order Header
                 const savedOrder = yield transactionalEntityManager.save(SalesOrder_1.SalesOrder, data);
                 // 2. Save Items and Details
@@ -300,7 +304,10 @@ class OrdersModels {
                         const detailsTotal = itemData.details
                             ? itemData.details.reduce((sum, d) => sum + (Number(d.extra_price) || 0), 0)
                             : 0;
-                        item.price = Number(product.price);
+                        item.price =
+                            data.order_type === OrderEnums_1.OrderType.Delivery
+                                ? Number((_a = product.price_delivery) !== null && _a !== void 0 ? _a : product.price)
+                                : Number(product.price);
                         item.discount_amount = itemData.discount_amount || 0;
                         item.total_price = Math.max(0, (item.price + detailsTotal) * item.quantity - Number(item.discount_amount || 0));
                         item.notes = itemData.notes;
@@ -320,13 +327,18 @@ class OrdersModels {
             }));
         });
     }
-    update(id, data, manager) {
+    update(id, data, manager, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const repo = manager ? manager.getRepository(SalesOrder_1.SalesOrder) : this.ordersRepository;
-                yield repo.update(id, data);
+                const repo = manager ? manager.getRepository(SalesOrder_1.SalesOrder) : (0, dbContext_1.getRepository)(SalesOrder_1.SalesOrder);
+                if (branchId) {
+                    yield repo.update({ id, branch_id: branchId }, data);
+                }
+                else {
+                    yield repo.update(id, data);
+                }
                 const updatedOrder = yield repo.findOne({
-                    where: { id },
+                    where: branchId ? { id, branch_id: branchId } : { id },
                     relations: [
                         "table",
                         "delivery",
@@ -348,11 +360,16 @@ class OrdersModels {
             }
         });
     }
-    delete(id, manager) {
+    delete(id, manager, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const repo = manager ? manager.getRepository(SalesOrder_1.SalesOrder) : this.ordersRepository;
-                yield repo.delete(id);
+                const repo = manager ? manager.getRepository(SalesOrder_1.SalesOrder) : (0, dbContext_1.getRepository)(SalesOrder_1.SalesOrder);
+                if (branchId) {
+                    yield repo.delete({ id, branch_id: branchId });
+                }
+                else {
+                    yield repo.delete(id);
+                }
             }
             catch (error) {
                 throw error;
@@ -362,7 +379,7 @@ class OrdersModels {
     updateItemStatus(itemId, status, manager) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const repo = manager ? manager.getRepository(SalesOrderItem_1.SalesOrderItem) : database_1.AppDataSource.getRepository(SalesOrderItem_1.SalesOrderItem);
+                const repo = manager ? manager.getRepository(SalesOrderItem_1.SalesOrderItem) : (0, dbContext_1.getRepository)(SalesOrderItem_1.SalesOrderItem);
                 yield repo.update(itemId, { status });
             }
             catch (error) {
@@ -372,44 +389,52 @@ class OrdersModels {
     }
     findItemsByOrderId(orderId, manager) {
         return __awaiter(this, void 0, void 0, function* () {
-            const repo = manager ? manager.getRepository(SalesOrderItem_1.SalesOrderItem) : database_1.AppDataSource.getRepository(SalesOrderItem_1.SalesOrderItem);
+            const repo = manager ? manager.getRepository(SalesOrderItem_1.SalesOrderItem) : (0, dbContext_1.getRepository)(SalesOrderItem_1.SalesOrderItem);
             return yield repo.find({ where: { order_id: orderId } });
         });
     }
     updateStatus(orderId, status, manager) {
         return __awaiter(this, void 0, void 0, function* () {
-            const repo = manager ? manager.getRepository(SalesOrder_1.SalesOrder) : this.ordersRepository;
+            const repo = manager ? manager.getRepository(SalesOrder_1.SalesOrder) : (0, dbContext_1.getRepository)(SalesOrder_1.SalesOrder);
             yield repo.update(orderId, { status });
         });
     }
     updateAllItemsStatus(orderId, status, manager) {
         return __awaiter(this, void 0, void 0, function* () {
-            const repo = manager ? manager.getRepository(SalesOrderItem_1.SalesOrderItem) : database_1.AppDataSource.getRepository(SalesOrderItem_1.SalesOrderItem);
+            const repo = manager ? manager.getRepository(SalesOrderItem_1.SalesOrderItem) : (0, dbContext_1.getRepository)(SalesOrderItem_1.SalesOrderItem);
             yield repo.update({ order_id: orderId }, { status });
         });
     }
     createItem(data, manager) {
         return __awaiter(this, void 0, void 0, function* () {
-            const repo = manager ? manager.getRepository(SalesOrderItem_1.SalesOrderItem) : database_1.AppDataSource.getRepository(SalesOrderItem_1.SalesOrderItem);
+            const repo = manager ? manager.getRepository(SalesOrderItem_1.SalesOrderItem) : (0, dbContext_1.getRepository)(SalesOrderItem_1.SalesOrderItem);
             return yield repo.save(data);
         });
     }
     updateItem(id, data, manager) {
         return __awaiter(this, void 0, void 0, function* () {
-            const repo = manager ? manager.getRepository(SalesOrderItem_1.SalesOrderItem) : database_1.AppDataSource.getRepository(SalesOrderItem_1.SalesOrderItem);
+            const repo = manager ? manager.getRepository(SalesOrderItem_1.SalesOrderItem) : (0, dbContext_1.getRepository)(SalesOrderItem_1.SalesOrderItem);
             yield repo.update(id, data);
         });
     }
     deleteItem(id, manager) {
         return __awaiter(this, void 0, void 0, function* () {
-            const repo = manager ? manager.getRepository(SalesOrderItem_1.SalesOrderItem) : database_1.AppDataSource.getRepository(SalesOrderItem_1.SalesOrderItem);
+            const repo = manager ? manager.getRepository(SalesOrderItem_1.SalesOrderItem) : (0, dbContext_1.getRepository)(SalesOrderItem_1.SalesOrderItem);
             yield repo.delete(id);
         });
     }
-    findItemById(id, manager) {
+    findItemById(id, manager, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
-            const repo = manager ? manager.getRepository(SalesOrderItem_1.SalesOrderItem) : database_1.AppDataSource.getRepository(SalesOrderItem_1.SalesOrderItem);
-            return yield repo.findOne({ where: { id }, relations: ["product", "details"] });
+            const repo = manager ? manager.getRepository(SalesOrderItem_1.SalesOrderItem) : (0, dbContext_1.getRepository)(SalesOrderItem_1.SalesOrderItem);
+            const query = repo.createQueryBuilder("item")
+                .leftJoinAndSelect("item.product", "product")
+                .leftJoinAndSelect("item.details", "details")
+                .leftJoinAndSelect("item.order", "order")
+                .where("item.id = :id", { id });
+            if (branchId) {
+                query.andWhere("order.branch_id = :branchId", { branchId });
+            }
+            return query.getOne();
         });
     }
 }

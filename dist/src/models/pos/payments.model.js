@@ -10,34 +10,39 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PaymentsModels = void 0;
-const database_1 = require("../../database/database");
 const Payments_1 = require("../../entity/pos/Payments");
+const dbContext_1 = require("../../database/dbContext");
 class PaymentsModels {
-    constructor() {
-        this.paymentsRepository = database_1.AppDataSource.getRepository(Payments_1.Payments);
-    }
-    findAll() {
+    findAll(branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.paymentsRepository.find({
-                    order: {
-                        payment_date: "DESC"
-                    },
-                    relations: ["order", "payment_method"]
-                });
+                const paymentsRepository = (0, dbContext_1.getRepository)(Payments_1.Payments);
+                const query = paymentsRepository.createQueryBuilder("payments")
+                    .leftJoinAndSelect("payments.order", "order")
+                    .leftJoinAndSelect("payments.payment_method", "payment_method")
+                    .orderBy("payments.payment_date", "DESC");
+                if (branchId) {
+                    query.andWhere("payments.branch_id = :branchId", { branchId });
+                }
+                return query.getMany();
             }
             catch (error) {
                 throw error;
             }
         });
     }
-    findOne(id) {
+    findOne(id, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.paymentsRepository.findOne({
-                    where: { id },
-                    relations: ["order", "payment_method"]
-                });
+                const paymentsRepository = (0, dbContext_1.getRepository)(Payments_1.Payments);
+                const query = paymentsRepository.createQueryBuilder("payments")
+                    .leftJoinAndSelect("payments.order", "order")
+                    .leftJoinAndSelect("payments.payment_method", "payment_method")
+                    .where("payments.id = :id", { id });
+                if (branchId) {
+                    query.andWhere("payments.branch_id = :branchId", { branchId });
+                }
+                return query.getOne();
             }
             catch (error) {
                 throw error;
@@ -47,7 +52,7 @@ class PaymentsModels {
     create(data, manager) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const repo = manager ? manager.getRepository(Payments_1.Payments) : this.paymentsRepository;
+                const repo = manager ? manager.getRepository(Payments_1.Payments) : (0, dbContext_1.getRepository)(Payments_1.Payments);
                 return repo.save(data);
             }
             catch (error) {
@@ -58,7 +63,7 @@ class PaymentsModels {
     update(id, data, manager) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const repo = manager ? manager.getRepository(Payments_1.Payments) : this.paymentsRepository;
+                const repo = manager ? manager.getRepository(Payments_1.Payments) : (0, dbContext_1.getRepository)(Payments_1.Payments);
                 yield repo.update(id, data);
                 // Note: findOne typically relies on default repo. In transaction, we might want to query using manager.
                 // But reuse findOne here is okay if we are careful or if strict read consistency isn't violated.
@@ -80,7 +85,7 @@ class PaymentsModels {
     delete(id, manager) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const repo = manager ? manager.getRepository(Payments_1.Payments) : this.paymentsRepository;
+                const repo = manager ? manager.getRepository(Payments_1.Payments) : (0, dbContext_1.getRepository)(Payments_1.Payments);
                 yield repo.delete(id);
             }
             catch (error) {

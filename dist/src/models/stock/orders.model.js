@@ -10,54 +10,39 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.StockOrdersModel = void 0;
-const database_1 = require("../../database/database");
 const PurchaseOrder_1 = require("../../entity/stock/PurchaseOrder");
 const OrdersItem_1 = require("../../entity/stock/OrdersItem");
 const OrdersDetail_1 = require("../../entity/stock/OrdersDetail");
+const dbContext_1 = require("../../database/dbContext");
 class StockOrdersModel {
-    constructor() {
-        this.ordersRepository = database_1.AppDataSource.getRepository(PurchaseOrder_1.PurchaseOrder);
-    }
     // Creates an order and its items in a transaction
     // Creates an order and its items in a transaction
     createOrderWithItems(orderedById, items, remark, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
-            const queryRunner = database_1.AppDataSource.createQueryRunner();
-            yield queryRunner.connect();
-            yield queryRunner.startTransaction();
-            try {
-                const newOrder = queryRunner.manager.create(PurchaseOrder_1.PurchaseOrder, {
+            return (0, dbContext_1.runInTransaction)((manager) => __awaiter(this, void 0, void 0, function* () {
+                const newOrder = manager.create(PurchaseOrder_1.PurchaseOrder, {
                     ordered_by_id: orderedById,
                     status: PurchaseOrder_1.PurchaseOrderStatus.PENDING,
-                    remark: remark,
-                    branch_id: branchId
+                    remark,
+                    branch_id: branchId,
                 });
-                const savedOrder = yield queryRunner.manager.save(newOrder);
-                const orderItems = items.map(item => queryRunner.manager.create(OrdersItem_1.StockOrdersItem, {
+                const savedOrder = yield manager.save(newOrder);
+                const orderItems = items.map((item) => manager.create(OrdersItem_1.StockOrdersItem, {
                     orders_id: savedOrder.id,
                     ingredient_id: item.ingredient_id,
-                    quantity_ordered: item.quantity_ordered
+                    quantity_ordered: item.quantity_ordered,
                 }));
-                yield queryRunner.manager.save(orderItems);
-                yield queryRunner.commitTransaction();
-                // Return the complete order with relations (using the same transaction manager or separate generic find)
-                // It is safe to use queryRunner.manager to fetch before release to ensure consistency
-                return yield this.findByIdInternal(savedOrder.id, queryRunner.manager);
-            }
-            catch (error) {
-                yield queryRunner.rollbackTransaction();
-                throw error;
-            }
-            finally {
-                yield queryRunner.release();
-            }
+                yield manager.save(orderItems);
+                return this.findByIdInternal(savedOrder.id, manager, branchId);
+            }));
         });
     }
     findAll(filters_1) {
         return __awaiter(this, arguments, void 0, function* (filters, page = 1, limit = 50, branchId) {
             // Use QueryBuilder for better control and optimization
             const { In } = require("typeorm");
-            let query = this.ordersRepository.createQueryBuilder("order")
+            const ordersRepository = (0, dbContext_1.getRepository)(PurchaseOrder_1.PurchaseOrder);
+            let query = ordersRepository.createQueryBuilder("order")
                 .leftJoinAndSelect("order.ordered_by", "ordered_by")
                 .leftJoinAndSelect("order.ordersItems", "ordersItems")
                 .leftJoinAndSelect("ordersItems.ingredient", "ingredient")
@@ -90,9 +75,14 @@ class StockOrdersModel {
             };
         });
     }
-    updateOrderItems(orderId, newItems) {
+    updateOrderItems(orderId, newItems, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
-            return yield database_1.AppDataSource.transaction((transactionalEntityManager) => __awaiter(this, void 0, void 0, function* () {
+            return yield (0, dbContext_1.runInTransaction)((transactionalEntityManager) => __awaiter(this, void 0, void 0, function* () {
+                if (branchId) {
+                    const order = yield transactionalEntityManager.findOne(PurchaseOrder_1.PurchaseOrder, { where: { id: orderId, branch_id: branchId } });
+                    if (!order)
+                        throw new Error("Order not found");
+                }
                 // 1. Fetch existing items
                 const existingItems = yield transactionalEntityManager.find(OrdersItem_1.StockOrdersItem, {
                     where: { orders_id: orderId }
@@ -124,14 +114,14 @@ class StockOrdersModel {
                     }
                 }
                 // 4. Return updated order
-                return this.findByIdInternal(orderId, transactionalEntityManager);
+                return this.findByIdInternal(orderId, transactionalEntityManager, branchId);
             }));
         });
     }
-    findById(id) {
+    findById(id, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
-            return yield this.ordersRepository.findOne({
-                where: { id },
+            return yield (0, dbContext_1.getRepository)(PurchaseOrder_1.PurchaseOrder).findOne({
+                where: branchId ? { id, branch_id: branchId } : { id },
                 relations: {
                     ordered_by: true,
                     ordersItems: {
@@ -146,24 +136,30 @@ class StockOrdersModel {
             });
         });
     }
-    updateStatus(id, status) {
+    updateStatus(id, status, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
-            const order = yield this.ordersRepository.findOneBy({ id });
+            const ordersRepository = (0, dbContext_1.getRepository)(PurchaseOrder_1.PurchaseOrder);
+            const order = yield ordersRepository.findOneBy(branchId ? { id, branch_id: branchId } : { id });
             if (!order)
                 return null;
             order.status = status;
-            return yield this.ordersRepository.save(order);
+            return yield ordersRepository.save(order);
         });
     }
-    delete(id) {
+    delete(id, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
-            const result = yield this.ordersRepository.delete(id);
+            const result = yield (0, dbContext_1.getRepository)(PurchaseOrder_1.PurchaseOrder).delete(branchId ? { id, branch_id: branchId } : { id });
             return result.affected !== 0;
         });
     }
-    confirmPurchase(orderId, items, purchasedById) {
+    confirmPurchase(orderId, items, purchasedById, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
-            return yield database_1.AppDataSource.transaction((transactionalEntityManager) => __awaiter(this, void 0, void 0, function* () {
+            return yield (0, dbContext_1.runInTransaction)((transactionalEntityManager) => __awaiter(this, void 0, void 0, function* () {
+                if (branchId) {
+                    const order = yield transactionalEntityManager.findOne(PurchaseOrder_1.PurchaseOrder, { where: { id: orderId, branch_id: branchId } });
+                    if (!order)
+                        throw new Error("Order not found");
+                }
                 // 1. Fetch Order Items
                 const orderItems = yield transactionalEntityManager.find(OrdersItem_1.StockOrdersItem, {
                     where: { orders_id: orderId },
@@ -186,17 +182,17 @@ class StockOrdersModel {
                     }
                 }
                 // 3. Update Order Status to COMPLETED
-                yield transactionalEntityManager.update(PurchaseOrder_1.PurchaseOrder, { id: orderId }, { status: PurchaseOrder_1.PurchaseOrderStatus.COMPLETED });
+                yield transactionalEntityManager.update(PurchaseOrder_1.PurchaseOrder, branchId ? { id: orderId, branch_id: branchId } : { id: orderId }, { status: PurchaseOrder_1.PurchaseOrderStatus.COMPLETED });
                 // 4. Return updated order
-                return this.findByIdInternal(orderId, transactionalEntityManager);
+                return this.findByIdInternal(orderId, transactionalEntityManager, branchId);
             }));
         });
     }
     // internal helper for transaction
-    findByIdInternal(id, manager) {
+    findByIdInternal(id, manager, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             return yield manager.findOne(PurchaseOrder_1.PurchaseOrder, {
-                where: { id },
+                where: branchId ? { id, branch_id: branchId } : { id },
                 relations: {
                     ordered_by: true,
                     ordersItems: {

@@ -6,6 +6,7 @@ const discounts_service_1 = require("../../services/pos/discounts.service");
 const discounts_controller_1 = require("../../controllers/pos/discounts.controller");
 const auth_middleware_1 = require("../../middleware/auth.middleware");
 const validate_middleware_1 = require("../../middleware/validate.middleware");
+const branch_middleware_1 = require("../../middleware/branch.middleware");
 const posMaster_schema_1 = require("../../utils/schemas/posMaster.schema");
 const router = (0, express_1.Router)();
 const discountsModel = new discounts_model_1.DiscountsModels();
@@ -13,6 +14,7 @@ const discountsService = new discounts_service_1.DiscountsService(discountsModel
 const discountsController = new discounts_controller_1.DiscountsController(discountsService);
 router.use(auth_middleware_1.authenticateToken);
 router.use((0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]));
+router.use(branch_middleware_1.requireBranch);
 // Authorization:
 // Admin/Manager can Manage
 // Employee can Read

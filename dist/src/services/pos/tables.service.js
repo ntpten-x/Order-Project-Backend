@@ -26,10 +26,10 @@ class TablesService {
             }
         });
     }
-    findOne(id) {
+    findOne(id, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.tablesModel.findOne(id);
+                return this.tablesModel.findOne(id, branchId);
             }
             catch (error) {
                 throw error;
@@ -57,7 +57,9 @@ class TablesService {
                     throw new Error("ชื่อโต๊ะนี้มีอยู่ในระบบแล้ว");
                 }
                 const createdTable = yield this.tablesModel.create(tables);
-                this.socketService.emit('tables:create', createdTable);
+                if (createdTable.branch_id) {
+                    this.socketService.emitToBranch(createdTable.branch_id, 'tables:create', createdTable);
+                }
                 return createdTable;
             }
             catch (error) {
@@ -65,10 +67,10 @@ class TablesService {
             }
         });
     }
-    update(id, tables) {
+    update(id, tables, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const tableToUpdate = yield this.tablesModel.findOne(id);
+                const tableToUpdate = yield this.tablesModel.findOne(id, branchId);
                 if (!tableToUpdate) {
                     throw new Error("ไม่พบข้อมูลโต๊ะที่ต้องการแก้ไข");
                 }
@@ -78,8 +80,11 @@ class TablesService {
                         throw new Error("ชื่อโต๊ะนี้มีอยู่ในระบบแล้ว");
                     }
                 }
-                const updatedTable = yield this.tablesModel.update(id, tables);
-                this.socketService.emit('tables:update', updatedTable);
+                const effectiveBranchId = tableToUpdate.branch_id || branchId || tables.branch_id;
+                const updatedTable = yield this.tablesModel.update(id, tables, effectiveBranchId);
+                if (effectiveBranchId) {
+                    this.socketService.emitToBranch(effectiveBranchId, 'tables:update', updatedTable);
+                }
                 return updatedTable;
             }
             catch (error) {
@@ -87,11 +92,17 @@ class TablesService {
             }
         });
     }
-    delete(id) {
+    delete(id, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                yield this.tablesModel.delete(id);
-                this.socketService.emit('tables:delete', { id });
+                const existing = yield this.tablesModel.findOne(id, branchId);
+                if (!existing)
+                    throw new Error("Table not found");
+                yield this.tablesModel.delete(id, branchId);
+                const effectiveBranchId = existing.branch_id || branchId;
+                if (effectiveBranchId) {
+                    this.socketService.emitToBranch(effectiveBranchId, 'tables:delete', { id });
+                }
             }
             catch (error) {
                 throw error;

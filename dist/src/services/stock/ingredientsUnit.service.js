@@ -46,21 +46,27 @@ class IngredientsUnitService {
             }
         });
     }
-    create(ingredientsUnit) {
+    create(ingredientsUnit, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
+                const effectiveBranchId = branchId || ingredientsUnit.branch_id;
+                if (effectiveBranchId) {
+                    ingredientsUnit.branch_id = effectiveBranchId;
+                }
                 // Check for duplicate name within the same branch
-                if (ingredientsUnit.unit_name && ingredientsUnit.branch_id) {
-                    const existing = yield this.ingredientsUnitModel.findOneByUnitName(ingredientsUnit.unit_name, ingredientsUnit.branch_id);
+                if (ingredientsUnit.unit_name && effectiveBranchId) {
+                    const existing = yield this.ingredientsUnitModel.findOneByUnitName(ingredientsUnit.unit_name, effectiveBranchId);
                     if (existing) {
                         throw new Error("ชื่อหน่วยนับนี้มีอยู่ในระบบแล้ว");
                     }
                 }
                 // @ts-ignore - model returns {id} essentially
                 const savedIngredientsUnit = yield this.ingredientsUnitModel.create(ingredientsUnit);
-                const createdIngredientsUnit = yield this.ingredientsUnitModel.findOne(savedIngredientsUnit.id);
+                const createdIngredientsUnit = yield this.ingredientsUnitModel.findOne(savedIngredientsUnit.id, effectiveBranchId);
                 if (createdIngredientsUnit) {
-                    this.socketService.emit('ingredientsUnit:create', createdIngredientsUnit);
+                    if (effectiveBranchId) {
+                        this.socketService.emitToBranch(effectiveBranchId, 'ingredientsUnit:create', createdIngredientsUnit);
+                    }
                     return createdIngredientsUnit;
                 }
                 return savedIngredientsUnit;
@@ -70,13 +76,22 @@ class IngredientsUnitService {
             }
         });
     }
-    update(id, ingredientsUnit) {
+    update(id, ingredientsUnit, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                yield this.ingredientsUnitModel.update(id, ingredientsUnit);
-                const updatedIngredientsUnit = yield this.ingredientsUnitModel.findOne(id);
+                const existing = yield this.ingredientsUnitModel.findOne(id, branchId);
+                if (!existing)
+                    throw new Error("Ingredients unit not found");
+                const effectiveBranchId = branchId || existing.branch_id || ingredientsUnit.branch_id;
+                if (effectiveBranchId) {
+                    ingredientsUnit.branch_id = effectiveBranchId;
+                }
+                yield this.ingredientsUnitModel.update(id, ingredientsUnit, effectiveBranchId);
+                const updatedIngredientsUnit = yield this.ingredientsUnitModel.findOne(id, effectiveBranchId);
                 if (updatedIngredientsUnit) {
-                    this.socketService.emit('ingredientsUnit:update', updatedIngredientsUnit);
+                    if (effectiveBranchId) {
+                        this.socketService.emitToBranch(effectiveBranchId, 'ingredientsUnit:update', updatedIngredientsUnit);
+                    }
                     return updatedIngredientsUnit;
                 }
                 throw new Error("พบข้อผิดพลาดในการอัปเดตหน่วยนับวัตถุดิบ");
@@ -86,11 +101,17 @@ class IngredientsUnitService {
             }
         });
     }
-    delete(id) {
+    delete(id, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                yield this.ingredientsUnitModel.delete(id);
-                this.socketService.emit('ingredientsUnit:delete', { id });
+                const existing = yield this.ingredientsUnitModel.findOne(id, branchId);
+                if (!existing)
+                    throw new Error("Ingredients unit not found");
+                const effectiveBranchId = branchId || existing.branch_id;
+                yield this.ingredientsUnitModel.delete(id, effectiveBranchId);
+                if (effectiveBranchId) {
+                    this.socketService.emitToBranch(effectiveBranchId, 'ingredientsUnit:delete', { id });
+                }
             }
             catch (error) {
                 throw error;

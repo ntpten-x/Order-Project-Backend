@@ -11,9 +11,9 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SalesOrderDetailService = void 0;
 const socket_service_1 = require("../socket.service");
-const database_1 = require("../../database/database");
 const SalesOrderItem_1 = require("../../entity/pos/SalesOrderItem");
 const orderTotals_service_1 = require("./orderTotals.service");
+const dbContext_1 = require("../../database/dbContext");
 class SalesOrderDetailService {
     constructor(salesOrderDetailModel) {
         this.salesOrderDetailModel = salesOrderDetailModel;
@@ -23,44 +23,58 @@ class SalesOrderDetailService {
         return __awaiter(this, void 0, void 0, function* () {
             if (!ordersItemId)
                 return;
-            const itemRepo = database_1.AppDataSource.getRepository(SalesOrderItem_1.SalesOrderItem);
+            const itemRepo = (0, dbContext_1.getRepository)(SalesOrderItem_1.SalesOrderItem);
             const item = yield itemRepo.findOneBy({ id: ordersItemId });
             if (item) {
                 yield (0, orderTotals_service_1.recalculateOrderTotal)(item.order_id);
             }
         });
     }
-    findAll() {
+    findAll(branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.salesOrderDetailModel.findAll();
+                return this.salesOrderDetailModel.findAll(branchId);
             }
             catch (error) {
                 throw error;
             }
         });
     }
-    findOne(id) {
+    findOne(id, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.salesOrderDetailModel.findOne(id);
+                return this.salesOrderDetailModel.findOne(id, branchId);
             }
             catch (error) {
                 throw error;
             }
         });
     }
-    create(salesOrderDetail) {
+    create(salesOrderDetail, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 if (!salesOrderDetail.orders_item_id) {
                     throw new Error("เธเธฃเธธเธ“เธฒเธฃเธฐเธเธธเธฃเธซเธฑเธชเธฃเธฒเธขเธเธฒเธฃเธชเธดเธเธเนเธฒเนเธกเนเธเนเธฒเธข");
                 }
+                if (branchId) {
+                    const itemRepo = (0, dbContext_1.getRepository)(SalesOrderItem_1.SalesOrderItem);
+                    const item = yield itemRepo
+                        .createQueryBuilder("item")
+                        .innerJoin("item.order", "order")
+                        .where("item.id = :id", { id: salesOrderDetail.orders_item_id })
+                        .andWhere("order.branch_id = :branchId", { branchId })
+                        .getOne();
+                    if (!item) {
+                        throw new Error("Order item not found for this branch");
+                    }
+                }
                 const createdDetail = yield this.salesOrderDetailModel.create(salesOrderDetail);
                 yield this.recalcByItemId(createdDetail.orders_item_id);
-                const completeDetail = yield this.salesOrderDetailModel.findOne(createdDetail.id);
+                const completeDetail = yield this.salesOrderDetailModel.findOne(createdDetail.id, branchId);
                 if (completeDetail) {
-                    this.socketService.emit('salesOrderDetail:create', completeDetail);
+                    if (branchId) {
+                        this.socketService.emitToBranch(branchId, 'salesOrderDetail:create', completeDetail);
+                    }
                     return completeDetail;
                 }
                 return createdDetail;
@@ -70,16 +84,18 @@ class SalesOrderDetailService {
             }
         });
     }
-    update(id, salesOrderDetail) {
+    update(id, salesOrderDetail, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const detailToUpdate = yield this.salesOrderDetailModel.findOne(id);
+                const detailToUpdate = yield this.salesOrderDetailModel.findOne(id, branchId);
                 if (!detailToUpdate) {
                     throw new Error("ไม่พบรายละเอียดเพิ่มเติมที่ต้องการแก้ไข");
                 }
-                const updatedDetail = yield this.salesOrderDetailModel.update(id, salesOrderDetail);
+                const updatedDetail = yield this.salesOrderDetailModel.update(id, salesOrderDetail, branchId);
                 yield this.recalcByItemId(detailToUpdate.orders_item_id);
-                this.socketService.emit('salesOrderDetail:update', updatedDetail);
+                if (branchId) {
+                    this.socketService.emitToBranch(branchId, 'salesOrderDetail:update', updatedDetail);
+                }
                 return updatedDetail;
             }
             catch (error) {
@@ -87,13 +103,15 @@ class SalesOrderDetailService {
             }
         });
     }
-    delete(id) {
+    delete(id, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const detailToDelete = yield this.salesOrderDetailModel.findOne(id);
-                yield this.salesOrderDetailModel.delete(id);
+                const detailToDelete = yield this.salesOrderDetailModel.findOne(id, branchId);
+                yield this.salesOrderDetailModel.delete(id, branchId);
                 yield this.recalcByItemId(detailToDelete === null || detailToDelete === void 0 ? void 0 : detailToDelete.orders_item_id);
-                this.socketService.emit('salesOrderDetail:delete', { id });
+                if (branchId) {
+                    this.socketService.emitToBranch(branchId, 'salesOrderDetail:delete', { id });
+                }
             }
             catch (error) {
                 throw error;

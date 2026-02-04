@@ -10,22 +10,25 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UsersModels = void 0;
-const database_1 = require("../database/database");
 const Users_1 = require("../entity/Users");
+const dbContext_1 = require("../database/dbContext");
 class UsersModels {
-    constructor() {
-        this.usersRepository = database_1.AppDataSource.getRepository(Users_1.Users);
-    }
     findAll(filters) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const query = this.usersRepository.createQueryBuilder("users")
+                const usersRepository = (0, dbContext_1.getRepository)(Users_1.Users);
+                const ctx = (0, dbContext_1.getDbContext)();
+                const query = usersRepository.createQueryBuilder("users")
                     .leftJoinAndSelect("users.roles", "roles")
                     .leftJoinAndSelect("users.branch", "branch")
                     .orderBy("users.is_active", "DESC")
                     .addOrderBy("users.create_date", "ASC");
                 if (filters === null || filters === void 0 ? void 0 : filters.role) {
                     query.where("roles.roles_name = :role", { role: filters.role });
+                }
+                // Respect active branch context (e.g. Admin switching branch) when present.
+                if (ctx === null || ctx === void 0 ? void 0 : ctx.branchId) {
+                    query.andWhere("users.branch_id = :branchId", { branchId: ctx.branchId });
                 }
                 return yield query.getMany();
             }
@@ -37,11 +40,15 @@ class UsersModels {
     findOne(id) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.usersRepository.createQueryBuilder("users")
+                const ctx = (0, dbContext_1.getDbContext)();
+                const query = (0, dbContext_1.getRepository)(Users_1.Users).createQueryBuilder("users")
                     .leftJoinAndSelect("users.roles", "roles")
                     .leftJoinAndSelect("users.branch", "branch")
-                    .where("users.id = :id", { id })
-                    .getOne();
+                    .where("users.id = :id", { id });
+                if (ctx === null || ctx === void 0 ? void 0 : ctx.branchId) {
+                    query.andWhere("users.branch_id = :branchId", { branchId: ctx.branchId });
+                }
+                return yield query.getOne();
             }
             catch (error) {
                 throw error;
@@ -51,7 +58,8 @@ class UsersModels {
     findOneByUsername(username) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.usersRepository.createQueryBuilder("users")
+                // Username is globally unique; do not apply branch scoping here.
+                return (0, dbContext_1.getRepository)(Users_1.Users).createQueryBuilder("users")
                     .leftJoinAndSelect("users.roles", "roles")
                     .leftJoinAndSelect("users.branch", "branch")
                     .where("users.username = :username", { username })
@@ -65,7 +73,12 @@ class UsersModels {
     create(users) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.usersRepository.save(users);
+                const ctx = (0, dbContext_1.getDbContext)();
+                // If an active branch context exists (Admin switched branch), force the user into that branch.
+                if (ctx === null || ctx === void 0 ? void 0 : ctx.branchId) {
+                    users.branch_id = ctx.branchId;
+                }
+                return (0, dbContext_1.getRepository)(Users_1.Users).save(users);
             }
             catch (error) {
                 throw error;
@@ -75,7 +88,16 @@ class UsersModels {
     update(id, users) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.usersRepository.save(Object.assign(Object.assign({}, users), { id }));
+                const ctx = (0, dbContext_1.getDbContext)();
+                // If an active branch context exists, only allow updates within that branch.
+                if (ctx === null || ctx === void 0 ? void 0 : ctx.branchId) {
+                    const existing = yield this.findOne(id);
+                    if (!existing) {
+                        throw new Error("ไม่พบผู้ใช้");
+                    }
+                    users.branch_id = ctx.branchId;
+                }
+                return (0, dbContext_1.getRepository)(Users_1.Users).save(Object.assign(Object.assign({}, users), { id }));
             }
             catch (error) {
                 throw error;
@@ -85,7 +107,16 @@ class UsersModels {
     delete(id) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                yield this.usersRepository.delete(id);
+                const ctx = (0, dbContext_1.getDbContext)();
+                const usersRepo = (0, dbContext_1.getRepository)(Users_1.Users);
+                if (ctx === null || ctx === void 0 ? void 0 : ctx.branchId) {
+                    const result = yield usersRepo.delete({ id, branch_id: ctx.branchId });
+                    if (!result.affected) {
+                        throw new Error("ไม่พบผู้ใช้");
+                    }
+                    return;
+                }
+                yield usersRepo.delete(id);
             }
             catch (error) {
                 throw error;

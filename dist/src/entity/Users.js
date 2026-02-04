@@ -62,7 +62,7 @@ __decorate([
 ], Users.prototype, "roles", void 0);
 __decorate([
     (0, typeorm_1.Index)(),
-    (0, typeorm_1.Column)({ name: "branch_id", type: "uuid", nullable: true }),
+    (0, typeorm_1.Column)({ name: "branch_id", type: "uuid" }),
     __metadata("design:type", String)
 ], Users.prototype, "branch_id", void 0);
 __decorate([

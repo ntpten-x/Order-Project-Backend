@@ -10,27 +10,24 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ShopProfileModels = void 0;
-const database_1 = require("../../database/database");
 const ShopProfile_1 = require("../../entity/pos/ShopProfile");
+const dbContext_1 = require("../../database/dbContext");
 class ShopProfileModels {
-    constructor() {
-        this.repo = database_1.AppDataSource.getRepository(ShopProfile_1.ShopProfile);
-    }
-    // Get the first profile (assuming single shop for now)
-    getProfile() {
+    getProfile(branchId) {
         return __awaiter(this, void 0, void 0, function* () {
-            return this.repo.findOne({ where: {} });
+            return (0, dbContext_1.getRepository)(ShopProfile_1.ShopProfile).findOne({ where: { branch_id: branchId } });
         });
     }
-    createOrUpdate(data) {
+    createOrUpdate(branchId, data) {
         return __awaiter(this, void 0, void 0, function* () {
-            const existing = yield this.getProfile();
+            const repo = (0, dbContext_1.getRepository)(ShopProfile_1.ShopProfile);
+            const existing = yield this.getProfile(branchId);
             if (existing) {
-                yield this.repo.update(existing.id, data);
-                return this.repo.findOneBy({ id: existing.id });
+                yield repo.update(existing.id, Object.assign(Object.assign({}, data), { branch_id: branchId }));
+                return repo.findOneBy({ id: existing.id });
             }
-            const newProfile = this.repo.create(data);
-            return this.repo.save(newProfile);
+            const newProfile = repo.create(Object.assign(Object.assign({}, data), { branch_id: branchId }));
+            return repo.save(newProfile);
         });
     }
 }

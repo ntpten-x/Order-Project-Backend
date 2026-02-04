@@ -5,6 +5,7 @@ const ingredientsUnit_model_1 = require("../../models/stock/ingredientsUnit.mode
 const ingredientsUnit_service_1 = require("../../services/stock/ingredientsUnit.service");
 const ingredientsUnit_controller_1 = require("../../controllers/stock/ingredientsUnit.controller");
 const auth_middleware_1 = require("../../middleware/auth.middleware");
+const branch_middleware_1 = require("../../middleware/branch.middleware");
 const validate_middleware_1 = require("../../middleware/validate.middleware");
 const stock_schema_1 = require("../../utils/schemas/stock.schema");
 const router = (0, express_1.Router)();
@@ -14,6 +15,7 @@ const ingredientsUnitController = new ingredientsUnit_controller_1.IngredientsUn
 // Protect all routes
 router.use(auth_middleware_1.authenticateToken);
 router.use((0, auth_middleware_1.authorizeRole)(["Admin"]));
+router.use(branch_middleware_1.requireBranch);
 router.get("/", ingredientsUnitController.findAll);
 router.get("/:id", (0, validate_middleware_1.validate)(stock_schema_1.ingredientUnitIdParamSchema), ingredientsUnitController.findOne);
 router.get("/unit_name/:unit_name", (0, validate_middleware_1.validate)(stock_schema_1.ingredientUnitNameParamSchema), ingredientsUnitController.findOneByUnitName);

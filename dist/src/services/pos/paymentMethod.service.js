@@ -46,18 +46,24 @@ class PaymentMethodService {
             }
         });
     }
-    create(paymentMethod) {
+    create(paymentMethod, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 if (!paymentMethod.payment_method_name) {
                     throw new Error("กรุณาระบุชื่อวิธีการชำระเงิน");
                 }
-                const existingPaymentMethod = yield this.paymentMethodModel.findOneByName(paymentMethod.payment_method_name, paymentMethod.branch_id);
+                const effectiveBranchId = branchId || paymentMethod.branch_id;
+                if (effectiveBranchId) {
+                    paymentMethod.branch_id = effectiveBranchId;
+                }
+                const existingPaymentMethod = yield this.paymentMethodModel.findOneByName(paymentMethod.payment_method_name, effectiveBranchId);
                 if (existingPaymentMethod) {
                     throw new Error("ชื่อวิธีการชำระเงินนี้มีอยู่ในระบบแล้ว");
                 }
                 const createdPaymentMethod = yield this.paymentMethodModel.create(paymentMethod);
-                this.socketService.emit('paymentMethod:create', createdPaymentMethod);
+                if (effectiveBranchId) {
+                    this.socketService.emitToBranch(effectiveBranchId, 'paymentMethod:create', createdPaymentMethod);
+                }
                 return createdPaymentMethod;
             }
             catch (error) {
@@ -65,21 +71,31 @@ class PaymentMethodService {
             }
         });
     }
-    update(id, paymentMethod) {
+    update(id, paymentMethod, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const paymentMethodToUpdate = yield this.paymentMethodModel.findOne(id);
+                const paymentMethodToUpdate = yield this.paymentMethodModel.findOne(id, branchId);
                 if (!paymentMethodToUpdate) {
                     throw new Error("ไม่พบข้อมูลวิธีการชำระเงินที่ต้องการแก้ไข");
                 }
                 if (paymentMethod.payment_method_name && paymentMethod.payment_method_name !== paymentMethodToUpdate.payment_method_name) {
-                    const existingPaymentMethod = yield this.paymentMethodModel.findOneByName(paymentMethod.payment_method_name, paymentMethod.branch_id || paymentMethodToUpdate.branch_id);
+                    const effectiveBranchId = branchId || paymentMethodToUpdate.branch_id || paymentMethod.branch_id;
+                    if (effectiveBranchId) {
+                        paymentMethod.branch_id = effectiveBranchId;
+                    }
+                    const existingPaymentMethod = yield this.paymentMethodModel.findOneByName(paymentMethod.payment_method_name, effectiveBranchId);
                     if (existingPaymentMethod) {
                         throw new Error("ชื่อวิธีการชำระเงินนี้มีอยู่ในระบบแล้ว");
                     }
                 }
-                const updatedPaymentMethod = yield this.paymentMethodModel.update(id, paymentMethod);
-                this.socketService.emit('paymentMethod:update', updatedPaymentMethod);
+                const effectiveBranchId = branchId || paymentMethodToUpdate.branch_id || paymentMethod.branch_id;
+                if (effectiveBranchId) {
+                    paymentMethod.branch_id = effectiveBranchId;
+                }
+                const updatedPaymentMethod = yield this.paymentMethodModel.update(id, paymentMethod, effectiveBranchId);
+                if (effectiveBranchId) {
+                    this.socketService.emitToBranch(effectiveBranchId, 'paymentMethod:update', updatedPaymentMethod);
+                }
                 return updatedPaymentMethod;
             }
             catch (error) {
@@ -87,11 +103,17 @@ class PaymentMethodService {
             }
         });
     }
-    delete(id) {
+    delete(id, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                yield this.paymentMethodModel.delete(id);
-                this.socketService.emit('paymentMethod:delete', { id });
+                const existing = yield this.paymentMethodModel.findOne(id, branchId);
+                if (!existing)
+                    throw new Error("Payment method not found");
+                const effectiveBranchId = branchId || existing.branch_id;
+                yield this.paymentMethodModel.delete(id, effectiveBranchId);
+                if (effectiveBranchId) {
+                    this.socketService.emitToBranch(effectiveBranchId, 'paymentMethod:delete', { id });
+                }
             }
             catch (error) {
                 throw error;

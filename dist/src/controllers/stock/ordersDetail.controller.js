@@ -15,6 +15,9 @@ const ordersDetail_model_1 = require("../../models/stock/ordersDetail.model");
 const catchAsync_1 = require("../../utils/catchAsync");
 const AppError_1 = require("../../utils/AppError");
 const ApiResponse_1 = require("../../utils/ApiResponse");
+const auditLogger_1 = require("../../utils/auditLogger");
+const securityLogger_1 = require("../../utils/securityLogger");
+const branch_middleware_1 = require("../../middleware/branch.middleware");
 /**
  * Orders Detail Controller
  * Following supabase-postgres-best-practices:
@@ -27,14 +30,18 @@ class OrdersDetailController {
         this.ordersDetailService = new ordersDetail_service_1.OrdersDetailService(this.ordersDetailModel);
         this.updatePurchase = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
             const { orders_item_id, actual_quantity, purchased_by_id, is_purchased } = req.body;
+            const branch_id = (0, branch_middleware_1.getBranchId)(req);
             if (!orders_item_id || !purchased_by_id) {
                 throw AppError_1.AppError.badRequest("ไม่พบข้อมูลสินค้าหรือผู้สั่งซื้อ");
             }
+            const oldDetail = yield this.ordersDetailService.getDetailByItemId(orders_item_id);
             const result = yield this.ordersDetailService.updatePurchaseDetail(orders_item_id, {
                 actual_quantity,
                 purchased_by_id,
                 is_purchased: is_purchased !== null && is_purchased !== void 0 ? is_purchased : true
-            });
+            }, branch_id);
+            const userInfo = (0, auditLogger_1.getUserInfoFromRequest)(req);
+            yield auditLogger_1.auditLogger.log(Object.assign(Object.assign({ action_type: auditLogger_1.AuditActionType.STOCK_ORDER_UPDATE }, userInfo), { ip_address: (0, securityLogger_1.getClientIp)(req), user_agent: req.get("User-Agent"), entity_type: "PurchaseOrderItemDetail", entity_id: orders_item_id, branch_id: branch_id, old_values: oldDetail, new_values: { actual_quantity, purchased_by_id, is_purchased: is_purchased !== null && is_purchased !== void 0 ? is_purchased : true }, path: req.originalUrl, method: req.method, description: `Update stock purchase detail ${orders_item_id}` }));
             return ApiResponse_1.ApiResponses.ok(res, result);
         }));
     }

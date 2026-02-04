@@ -57,7 +57,9 @@ class DeliveryService {
                     throw new Error("ชื่อบริการส่งนี้มีอยู่ในระบบแล้ว");
                 }
                 const createdDelivery = yield this.deliveryModel.create(delivery);
-                this.socketService.emit('delivery:create', createdDelivery);
+                if (createdDelivery.branch_id) {
+                    this.socketService.emitToBranch(createdDelivery.branch_id, 'delivery:create', createdDelivery);
+                }
                 return createdDelivery;
             }
             catch (error) {
@@ -65,10 +67,10 @@ class DeliveryService {
             }
         });
     }
-    update(id, delivery) {
+    update(id, delivery, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const deliveryToUpdate = yield this.deliveryModel.findOne(id);
+                const deliveryToUpdate = yield this.deliveryModel.findOne(id, branchId);
                 if (!deliveryToUpdate) {
                     throw new Error("ไม่พบข้อมูลบริการส่งที่ต้องการแก้ไข");
                 }
@@ -78,8 +80,11 @@ class DeliveryService {
                         throw new Error("ชื่อบริการส่งนี้มีอยู่ในระบบแล้ว");
                     }
                 }
-                const updatedDelivery = yield this.deliveryModel.update(id, delivery);
-                this.socketService.emit('delivery:update', updatedDelivery);
+                const effectiveBranchId = deliveryToUpdate.branch_id || branchId || delivery.branch_id;
+                const updatedDelivery = yield this.deliveryModel.update(id, delivery, effectiveBranchId);
+                if (effectiveBranchId) {
+                    this.socketService.emitToBranch(effectiveBranchId, 'delivery:update', updatedDelivery);
+                }
                 return updatedDelivery;
             }
             catch (error) {
@@ -87,11 +92,17 @@ class DeliveryService {
             }
         });
     }
-    delete(id) {
+    delete(id, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                yield this.deliveryModel.delete(id);
-                this.socketService.emit('delivery:delete', { id });
+                const existing = yield this.deliveryModel.findOne(id, branchId);
+                if (!existing)
+                    throw new Error("Delivery not found");
+                yield this.deliveryModel.delete(id, branchId);
+                const effectiveBranchId = existing.branch_id || branchId;
+                if (effectiveBranchId) {
+                    this.socketService.emitToBranch(effectiveBranchId, 'delivery:delete', { id });
+                }
             }
             catch (error) {
                 throw error;

@@ -46,18 +46,24 @@ class DiscountsService {
             }
         });
     }
-    create(discounts) {
+    create(discounts, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 if (!discounts.discount_name) {
                     throw new Error("กรุณาระบุชื่อส่วนลด");
                 }
-                const existingDiscount = yield this.discountsModel.findOneByName(discounts.discount_name, discounts.branch_id);
+                const effectiveBranchId = branchId || discounts.branch_id;
+                if (effectiveBranchId) {
+                    discounts.branch_id = effectiveBranchId;
+                }
+                const existingDiscount = yield this.discountsModel.findOneByName(discounts.discount_name, effectiveBranchId);
                 if (existingDiscount) {
                     throw new Error("ชื่อส่วนลดนี้มีอยู่ในระบบแล้ว");
                 }
                 const createdDiscount = yield this.discountsModel.create(discounts);
-                this.socketService.emit('discounts:create', createdDiscount);
+                if (effectiveBranchId) {
+                    this.socketService.emitToBranch(effectiveBranchId, 'discounts:create', createdDiscount);
+                }
                 return createdDiscount;
             }
             catch (error) {
@@ -65,21 +71,31 @@ class DiscountsService {
             }
         });
     }
-    update(id, discounts) {
+    update(id, discounts, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const discountToUpdate = yield this.discountsModel.findOne(id);
+                const discountToUpdate = yield this.discountsModel.findOne(id, branchId);
                 if (!discountToUpdate) {
                     throw new Error("ไม่พบข้อมูลส่วนลดที่ต้องการแก้ไข");
                 }
                 if (discounts.discount_name && discounts.discount_name !== discountToUpdate.discount_name) {
-                    const existingDiscount = yield this.discountsModel.findOneByName(discounts.discount_name, discounts.branch_id || discountToUpdate.branch_id);
+                    const effectiveBranchId = branchId || discountToUpdate.branch_id || discounts.branch_id;
+                    if (effectiveBranchId) {
+                        discounts.branch_id = effectiveBranchId;
+                    }
+                    const existingDiscount = yield this.discountsModel.findOneByName(discounts.discount_name, effectiveBranchId);
                     if (existingDiscount) {
                         throw new Error("ชื่อส่วนลดนี้มีอยู่ในระบบแล้ว");
                     }
                 }
-                const updatedDiscount = yield this.discountsModel.update(id, discounts);
-                this.socketService.emit('discounts:update', updatedDiscount);
+                const effectiveBranchId = branchId || discountToUpdate.branch_id || discounts.branch_id;
+                if (effectiveBranchId) {
+                    discounts.branch_id = effectiveBranchId;
+                }
+                const updatedDiscount = yield this.discountsModel.update(id, discounts, effectiveBranchId);
+                if (effectiveBranchId) {
+                    this.socketService.emitToBranch(effectiveBranchId, 'discounts:update', updatedDiscount);
+                }
                 return updatedDiscount;
             }
             catch (error) {
@@ -87,11 +103,17 @@ class DiscountsService {
             }
         });
     }
-    delete(id) {
+    delete(id, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                yield this.discountsModel.delete(id);
-                this.socketService.emit('discounts:delete', { id });
+                const existing = yield this.discountsModel.findOne(id, branchId);
+                if (!existing)
+                    throw new Error("Discount not found");
+                const effectiveBranchId = branchId || existing.branch_id;
+                yield this.discountsModel.delete(id, effectiveBranchId);
+                if (effectiveBranchId) {
+                    this.socketService.emitToBranch(effectiveBranchId, 'discounts:delete', { id });
+                }
             }
             catch (error) {
                 throw error;

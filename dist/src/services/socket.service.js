@@ -16,11 +16,6 @@ exports.SocketService = void 0;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const database_1 = require("../database/database");
 const Users_1 = require("../entity/Users");
-// Since 'cookie-parser' is installed, 'cookie' is likely available or I can use basic parsing. 
-// I'll try to import 'cookie'. If it fails, I'll use a simple regex or require 'cookie'.
-// Actually 'cookie-parser' uses 'cookie'. I'll assume 'cookie' is hoistable or just use a helper.
-// Better to check if I can import it. I'll rely on 'cookie' package or write a parser helper.
-// For now, I'll write a simple parser to avoid dependency issues if 'cookie' isn't explicitly top-level.
 const parseCookies = (cookieHeader) => {
     const list = {};
     if (!cookieHeader)
@@ -64,7 +59,10 @@ class SocketService {
                 const decoded = jsonwebtoken_1.default.verify(token, secret);
                 // Fetch user to check is_use
                 const userRepository = database_1.AppDataSource.getRepository(Users_1.Users);
-                const user = yield userRepository.findOneBy({ id: decoded.id });
+                const user = yield userRepository.findOne({
+                    where: { id: decoded.id },
+                    relations: ["roles"],
+                });
                 if (!user) {
                     return next(new Error("Authentication error: User not found"));
                 }
@@ -81,17 +79,21 @@ class SocketService {
             }
         }));
         this.io.on('connection', (socket) => __awaiter(this, void 0, void 0, function* () {
-            var _a;
+            var _a, _b;
             const user = socket.user;
             const userId = user.id;
             const branchId = user.branch_id;
+            const roleName = (_a = user.roles) === null || _a === void 0 ? void 0 : _a.roles_name;
             // Join rooms: user-specific and branch-specific
             yield socket.join(userId);
             if (branchId) {
                 yield socket.join(`branch:${branchId}`);
             }
+            if (roleName) {
+                yield socket.join(`role:${roleName}`);
+            }
             // Count sockets in this room
-            const sockets = yield ((_a = this.io) === null || _a === void 0 ? void 0 : _a.in(userId).fetchSockets());
+            const sockets = yield ((_b = this.io) === null || _b === void 0 ? void 0 : _b.in(userId).fetchSockets());
             const count = (sockets === null || sockets === void 0 ? void 0 : sockets.length) || 0;
             console.log(`User connected: ${user.username} (${userId}). Total connections: ${count}`);
             // If this is the only connection (count is 1 because we just joined), set online
@@ -106,6 +108,9 @@ class SocketService {
                 yield socket.join(userId);
                 if (branchId) {
                     yield socket.join(`branch:${branchId}`);
+                }
+                if (roleName) {
+                    yield socket.join(`role:${roleName}`);
                 }
             }));
             socket.on('disconnect', (reason) => __awaiter(this, void 0, void 0, function* () {
@@ -138,12 +143,23 @@ class SocketService {
      * Emit event to all connected clients
      */
     emit(event, data) {
-        if (this.io) {
-            this.io.emit(event, data);
-        }
-        else {
+        if (!this.io) {
             console.warn("Socket.IO not initialized! Event missed:", event);
+            return;
         }
+        // Allowlisted global events only
+        if (SocketService.GLOBAL_EVENTS.has(event)) {
+            this.io.emit(event, data);
+            return;
+        }
+        // Admin-only events default to Admin room (prevents accidental global broadcast)
+        if (SocketService.ADMIN_EVENT_PREFIXES.some((prefix) => event.startsWith(prefix))) {
+            this.emitToRole("Admin", event, data);
+            return;
+        }
+        // Fallback: keep backwards compatibility but warn loudly
+        console.warn(`[SocketPolicy] Non-whitelisted global event emitted: ${event}. Consider emitToBranch/emitToRole.`);
+        this.io.emit(event, data);
     }
     /**
      * Emit event to a specific user
@@ -168,6 +184,17 @@ class SocketService {
         }
     }
     /**
+     * Emit event to all users with a specific role (role room-based broadcasting)
+     */
+    emitToRole(roleName, event, data) {
+        if (this.io) {
+            this.io.to(`role:${roleName}`).emit(event, data);
+        }
+        else {
+            console.warn("Socket.IO not initialized! Event missed:", event);
+        }
+    }
+    /**
      * Emit event to multiple users
      */
     emitToUsers(userIds, event, data) {
@@ -182,3 +209,9 @@ class SocketService {
     }
 }
 exports.SocketService = SocketService;
+// Realtime event governance:
+// - "global" events are rare (system announcements only)
+// - admin events should be emitted to role room: role:Admin
+// - branch events should be emitted to branch room: branch:<branchId>
+SocketService.GLOBAL_EVENTS = new Set(['system:announcement']);
+SocketService.ADMIN_EVENT_PREFIXES = ['users:', 'roles:', 'branches:'];

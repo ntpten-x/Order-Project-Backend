@@ -10,16 +10,14 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.IngredientsUnitModel = void 0;
-const database_1 = require("../../database/database");
 const IngredientsUnit_1 = require("../../entity/stock/IngredientsUnit");
+const dbContext_1 = require("../../database/dbContext");
 class IngredientsUnitModel {
-    constructor() {
-        this.ingredientsUnitRepository = database_1.AppDataSource.getRepository(IngredientsUnit_1.IngredientsUnit);
-    }
     findAll(filters, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const query = this.ingredientsUnitRepository.createQueryBuilder("ingredientsUnit")
+                const ingredientsUnitRepository = (0, dbContext_1.getRepository)(IngredientsUnit_1.IngredientsUnit);
+                const query = ingredientsUnitRepository.createQueryBuilder("ingredientsUnit")
                     .orderBy("ingredientsUnit.create_date", "ASC");
                 // Filter by branch for data isolation
                 if (branchId) {
@@ -40,7 +38,8 @@ class IngredientsUnitModel {
     findOne(id, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const query = this.ingredientsUnitRepository.createQueryBuilder("ingredientsUnit")
+                const ingredientsUnitRepository = (0, dbContext_1.getRepository)(IngredientsUnit_1.IngredientsUnit);
+                const query = ingredientsUnitRepository.createQueryBuilder("ingredientsUnit")
                     .where("ingredientsUnit.id = :id", { id });
                 if (branchId) {
                     query.andWhere("ingredientsUnit.branch_id = :branchId", { branchId });
@@ -55,7 +54,8 @@ class IngredientsUnitModel {
     findOneByUnitName(unit_name, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const query = this.ingredientsUnitRepository.createQueryBuilder("ingredientsUnit")
+                const ingredientsUnitRepository = (0, dbContext_1.getRepository)(IngredientsUnit_1.IngredientsUnit);
+                const query = ingredientsUnitRepository.createQueryBuilder("ingredientsUnit")
                     .where("ingredientsUnit.unit_name = :unit_name", { unit_name });
                 if (branchId) {
                     query.andWhere("ingredientsUnit.branch_id = :branchId", { branchId });
@@ -70,27 +70,33 @@ class IngredientsUnitModel {
     create(ingredientsUnit) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.ingredientsUnitRepository.save(ingredientsUnit);
+                return (0, dbContext_1.getRepository)(IngredientsUnit_1.IngredientsUnit).save(ingredientsUnit);
             }
             catch (error) {
                 throw error;
             }
         });
     }
-    update(id, ingredientsUnit) {
+    update(id, ingredientsUnit, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.ingredientsUnitRepository.save(Object.assign(Object.assign({}, ingredientsUnit), { id }));
+                return (0, dbContext_1.getRepository)(IngredientsUnit_1.IngredientsUnit).save(Object.assign(Object.assign(Object.assign({}, ingredientsUnit), { id }), (branchId ? { branch_id: branchId } : {})));
             }
             catch (error) {
                 throw error;
             }
         });
     }
-    delete(id) {
+    delete(id, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                yield this.ingredientsUnitRepository.delete(id);
+                const ingredientsUnitRepository = (0, dbContext_1.getRepository)(IngredientsUnit_1.IngredientsUnit);
+                if (branchId) {
+                    yield ingredientsUnitRepository.delete({ id, branch_id: branchId });
+                }
+                else {
+                    yield ingredientsUnitRepository.delete(id);
+                }
             }
             catch (error) {
                 throw error;

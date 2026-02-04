@@ -10,14 +10,16 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.BranchService = void 0;
-const database_1 = require("../database/database");
 const Branch_1 = require("../entity/Branch");
 const AppError_1 = require("../utils/AppError");
 const socket_service_1 = require("./socket.service");
+const dbContext_1 = require("../database/dbContext");
 class BranchService {
     constructor() {
-        this.branchRepo = database_1.AppDataSource.getRepository(Branch_1.Branch);
         this.socketService = socket_service_1.SocketService.getInstance();
+    }
+    get branchRepo() {
+        return (0, dbContext_1.getRepository)(Branch_1.Branch);
     }
     findAll() {
         return __awaiter(this, arguments, void 0, function* (isActive = true) {
@@ -36,7 +38,7 @@ class BranchService {
         return __awaiter(this, void 0, void 0, function* () {
             const branch = this.branchRepo.create(data);
             const created = yield this.branchRepo.save(branch);
-            this.socketService.emit("branches:create", created);
+            this.socketService.emitToRole("Admin", "branches:create", created);
             return created;
         });
     }
@@ -48,7 +50,7 @@ class BranchService {
             }
             this.branchRepo.merge(branch, data);
             const updated = yield this.branchRepo.save(branch);
-            this.socketService.emit("branches:update", updated);
+            this.socketService.emitToRole("Admin", "branches:update", updated);
             return updated;
         });
     }
@@ -61,7 +63,7 @@ class BranchService {
             // Soft delete
             branch.is_active = false;
             yield this.branchRepo.save(branch);
-            this.socketService.emit("branches:delete", { id });
+            this.socketService.emitToRole("Admin", "branches:delete", { id });
         });
     }
 }

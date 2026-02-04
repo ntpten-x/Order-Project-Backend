@@ -22,7 +22,7 @@ __decorate([
     __metadata("design:type", String)
 ], Products.prototype, "id", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ name: "branch_id", type: "uuid", nullable: true }),
+    (0, typeorm_1.Column)({ name: "branch_id", type: "uuid" }),
     __metadata("design:type", String)
 ], Products.prototype, "branch_id", void 0);
 __decorate([
@@ -51,6 +51,10 @@ __decorate([
     (0, typeorm_1.Column)({ type: "decimal", precision: 12, scale: 2, default: 0 }),
     __metadata("design:type", Number)
 ], Products.prototype, "cost", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: "price_delivery", type: "decimal", precision: 12, scale: 2, default: 0 }),
+    __metadata("design:type", Number)
+], Products.prototype, "price_delivery", void 0);
 __decorate([
     (0, typeorm_1.Index)(),
     (0, typeorm_1.Column)({ name: "category_id", type: "uuid" }),

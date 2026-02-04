@@ -20,6 +20,10 @@ exports.TopSellingItemsView = TopSellingItemsView;
 __decorate([
     (0, typeorm_1.ViewColumn)(),
     __metadata("design:type", String)
+], TopSellingItemsView.prototype, "branch_id", void 0);
+__decorate([
+    (0, typeorm_1.ViewColumn)(),
+    __metadata("design:type", String)
 ], TopSellingItemsView.prototype, "product_id", void 0);
 __decorate([
     (0, typeorm_1.ViewColumn)(),
@@ -45,7 +49,8 @@ exports.TopSellingItemsView = TopSellingItemsView = __decorate([
     (0, typeorm_1.ViewEntity)({
         expression: (dataSource) => dataSource
             .createQueryBuilder()
-            .select("oi.product_id", "product_id")
+            .select("o.branch_id", "branch_id")
+            .addSelect("oi.product_id", "product_id")
             .addSelect("p.display_name", "product_name")
             .addSelect("p.img_url", "img_url")
             .addSelect("p.category_id", "category_id")
@@ -55,6 +60,7 @@ exports.TopSellingItemsView = TopSellingItemsView = __decorate([
             .innerJoin(SalesOrder_1.SalesOrder, "o", "oi.order_id = o.id")
             .leftJoin(Products_1.Products, "p", "oi.product_id = p.id")
             .where("o.status IN ('Paid', 'Completed')")
+            .addGroupBy("o.branch_id")
             .groupBy("oi.product_id")
             .addGroupBy("p.display_name")
             .addGroupBy("p.img_url")

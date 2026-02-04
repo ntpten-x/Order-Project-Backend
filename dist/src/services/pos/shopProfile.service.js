@@ -14,21 +14,21 @@ class ShopProfileService {
     constructor(model) {
         this.model = model;
     }
-    getProfile() {
+    getProfile(branchId) {
         return __awaiter(this, void 0, void 0, function* () {
-            let profile = yield this.model.getProfile();
+            let profile = yield this.model.getProfile(branchId);
             if (!profile) {
                 // Create default if not exists
-                profile = yield this.model.createOrUpdate({
+                profile = yield this.model.createOrUpdate(branchId, {
                     shop_name: "POS Shop"
                 });
             }
             return profile;
         });
     }
-    updateProfile(data) {
+    updateProfile(branchId, data) {
         return __awaiter(this, void 0, void 0, function* () {
-            return this.model.createOrUpdate(data);
+            return this.model.createOrUpdate(branchId, data);
         });
     }
 }

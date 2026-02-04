@@ -10,7 +10,6 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ShiftsService = void 0;
-const database_1 = require("../../database/database");
 const typeorm_1 = require("typeorm");
 const Shifts_1 = require("../../entity/pos/Shifts");
 const Payments_1 = require("../../entity/pos/Payments");
@@ -19,13 +18,22 @@ const SalesOrder_1 = require("../../entity/pos/SalesOrder");
 const OrderEnums_1 = require("../../entity/pos/OrderEnums");
 const AppError_1 = require("../../utils/AppError");
 const socket_service_1 = require("../socket.service");
+const dbContext_1 = require("../../database/dbContext");
 class ShiftsService {
     constructor() {
-        this.shiftsRepo = database_1.AppDataSource.getRepository(Shifts_1.Shifts);
-        this.paymentsRepo = database_1.AppDataSource.getRepository(Payments_1.Payments);
-        this.salesOrderItemRepo = database_1.AppDataSource.getRepository(SalesOrderItem_1.SalesOrderItem);
-        this.salesOrderRepo = database_1.AppDataSource.getRepository(SalesOrder_1.SalesOrder);
         this.socketService = socket_service_1.SocketService.getInstance();
+    }
+    get shiftsRepo() {
+        return (0, dbContext_1.getRepository)(Shifts_1.Shifts);
+    }
+    get paymentsRepo() {
+        return (0, dbContext_1.getRepository)(Payments_1.Payments);
+    }
+    get salesOrderItemRepo() {
+        return (0, dbContext_1.getRepository)(SalesOrderItem_1.SalesOrderItem);
+    }
+    get salesOrderRepo() {
+        return (0, dbContext_1.getRepository)(SalesOrder_1.SalesOrder);
     }
     openShift(userId, startAmount, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
@@ -47,7 +55,9 @@ class ShiftsService {
             newShift.status = Shifts_1.ShiftStatus.OPEN;
             newShift.open_time = new Date();
             const savedShift = yield this.shiftsRepo.save(newShift);
-            this.socketService.emit('shifts:update', savedShift);
+            if (branchId) {
+                this.socketService.emitToBranch(branchId, 'shifts:update', savedShift);
+            }
             return savedShift;
         });
     }
@@ -71,11 +81,11 @@ class ShiftsService {
             // Only check orders created during this shift
             const pendingOrders = yield this.salesOrderRepo.count({
                 where: [
-                    { status: OrderEnums_1.OrderStatus.Pending, create_date: (0, typeorm_1.MoreThanOrEqual)(activeShift.open_time) },
-                    { status: OrderEnums_1.OrderStatus.Cooking, create_date: (0, typeorm_1.MoreThanOrEqual)(activeShift.open_time) },
-                    { status: OrderEnums_1.OrderStatus.Served, create_date: (0, typeorm_1.MoreThanOrEqual)(activeShift.open_time) },
-                    { status: OrderEnums_1.OrderStatus.WaitingForPayment, create_date: (0, typeorm_1.MoreThanOrEqual)(activeShift.open_time) },
-                    { status: OrderEnums_1.OrderStatus.pending, create_date: (0, typeorm_1.MoreThanOrEqual)(activeShift.open_time) }
+                    { status: OrderEnums_1.OrderStatus.Pending, create_date: (0, typeorm_1.MoreThanOrEqual)(activeShift.open_time), branch_id: activeShift.branch_id },
+                    { status: OrderEnums_1.OrderStatus.Cooking, create_date: (0, typeorm_1.MoreThanOrEqual)(activeShift.open_time), branch_id: activeShift.branch_id },
+                    { status: OrderEnums_1.OrderStatus.Served, create_date: (0, typeorm_1.MoreThanOrEqual)(activeShift.open_time), branch_id: activeShift.branch_id },
+                    { status: OrderEnums_1.OrderStatus.WaitingForPayment, create_date: (0, typeorm_1.MoreThanOrEqual)(activeShift.open_time), branch_id: activeShift.branch_id },
+                    { status: OrderEnums_1.OrderStatus.pending, create_date: (0, typeorm_1.MoreThanOrEqual)(activeShift.open_time), branch_id: activeShift.branch_id }
                 ]
             });
             if (pendingOrders > 0) {
@@ -95,14 +105,17 @@ class ShiftsService {
             activeShift.status = Shifts_1.ShiftStatus.CLOSED;
             activeShift.close_time = new Date();
             const savedShift = yield this.shiftsRepo.save(activeShift);
-            this.socketService.emit('shifts:update', savedShift);
+            const branchId = activeShift.branch_id;
+            if (branchId) {
+                this.socketService.emitToBranch(branchId, 'shifts:update', savedShift);
+            }
             return savedShift;
         });
     }
-    getShiftSummary(shiftId) {
+    getShiftSummary(shiftId, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             const shift = yield this.shiftsRepo.findOne({
-                where: { id: shiftId },
+                where: branchId ? { id: shiftId, branch_id: branchId } : { id: shiftId },
                 relations: ["payments", "payments.payment_method", "payments.order", "payments.order.items", "payments.order.items.product", "payments.order.items.product.category", "payments.order.items.product.unit"]
             });
             if (!shift) {

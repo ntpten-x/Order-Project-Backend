@@ -11,18 +11,22 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DashboardController = void 0;
 const catchAsync_1 = require("../../utils/catchAsync");
+const branch_middleware_1 = require("../../middleware/branch.middleware");
+const ApiResponse_1 = require("../../utils/ApiResponse");
 class DashboardController {
     constructor(dashboardService) {
         this.dashboardService = dashboardService;
         this.getSalesSummary = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
             const { startDate, endDate } = req.query;
-            const result = yield this.dashboardService.getSalesSummary(startDate, endDate);
-            res.status(200).json(result);
+            const branchId = (0, branch_middleware_1.getBranchId)(req);
+            const result = yield this.dashboardService.getSalesSummary(startDate, endDate, branchId);
+            return ApiResponse_1.ApiResponses.ok(res, result);
         }));
         this.getTopSellingItems = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
             const limit = parseInt(req.query.limit) || 10;
-            const result = yield this.dashboardService.getTopSellingItems(limit);
-            res.status(200).json(result);
+            const branchId = (0, branch_middleware_1.getBranchId)(req);
+            const result = yield this.dashboardService.getTopSellingItems(limit, branchId);
+            return ApiResponse_1.ApiResponses.ok(res, result);
         }));
     }
 }

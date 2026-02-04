@@ -10,54 +10,45 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RolesController = void 0;
+const catchAsync_1 = require("../utils/catchAsync");
+const ApiResponse_1 = require("../utils/ApiResponse");
+const AppError_1 = require("../utils/AppError");
+const auditLogger_1 = require("../utils/auditLogger");
+const securityLogger_1 = require("../utils/securityLogger");
 class RolesController {
     constructor(rolesService) {
         this.rolesService = rolesService;
-        this.findAll = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                const roles = yield this.rolesService.findAll();
-                res.status(200).json(roles);
+        this.findAll = (0, catchAsync_1.catchAsync)((_req, res) => __awaiter(this, void 0, void 0, function* () {
+            const roles = yield this.rolesService.findAll();
+            return ApiResponse_1.ApiResponses.ok(res, roles);
+        }));
+        this.findOne = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            const role = yield this.rolesService.findOne(req.params.id);
+            if (!role) {
+                throw AppError_1.AppError.notFound("Role");
             }
-            catch (error) {
-                res.status(500).json({ error: "Internal Server Error" });
-            }
-        });
-        this.findOne = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                const roles = yield this.rolesService.findOne(req.params.id);
-                res.status(200).json(roles);
-            }
-            catch (error) {
-                res.status(500).json({ error: "Internal Server Error" });
-            }
-        });
-        this.create = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                const roles = yield this.rolesService.create(req.body);
-                res.status(201).json(roles);
-            }
-            catch (error) {
-                res.status(500).json({ error: "Internal Server Error" });
-            }
-        });
-        this.update = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                const roles = yield this.rolesService.update(req.params.id, req.body);
-                res.status(200).json(roles);
-            }
-            catch (error) {
-                res.status(500).json({ error: "Internal Server Error" });
-            }
-        });
-        this.delete = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                yield this.rolesService.delete(req.params.id);
-                res.status(204).send();
-            }
-            catch (error) {
-                res.status(500).json({ error: "Internal Server Error" });
-            }
-        });
+            return ApiResponse_1.ApiResponses.ok(res, role);
+        }));
+        this.create = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            const role = yield this.rolesService.create(req.body);
+            const userInfo = (0, auditLogger_1.getUserInfoFromRequest)(req);
+            yield auditLogger_1.auditLogger.log(Object.assign(Object.assign({ action_type: auditLogger_1.AuditActionType.ROLE_CREATE }, userInfo), { ip_address: (0, securityLogger_1.getClientIp)(req), user_agent: req.get("User-Agent"), entity_type: "Roles", entity_id: role.id, branch_id: userInfo.branch_id, new_values: req.body, path: req.originalUrl, method: req.method, description: `Create role ${role.roles_name || role.id}` }));
+            return ApiResponse_1.ApiResponses.created(res, role);
+        }));
+        this.update = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            const oldRole = yield this.rolesService.findOne(req.params.id);
+            const role = yield this.rolesService.update(req.params.id, req.body);
+            const userInfo = (0, auditLogger_1.getUserInfoFromRequest)(req);
+            yield auditLogger_1.auditLogger.log(Object.assign(Object.assign({ action_type: auditLogger_1.AuditActionType.ROLE_UPDATE }, userInfo), { ip_address: (0, securityLogger_1.getClientIp)(req), user_agent: req.get("User-Agent"), entity_type: "Roles", entity_id: req.params.id, branch_id: userInfo.branch_id, old_values: oldRole, new_values: req.body, path: req.originalUrl, method: req.method, description: `Update role ${req.params.id}` }));
+            return ApiResponse_1.ApiResponses.ok(res, role);
+        }));
+        this.delete = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
+            const oldRole = yield this.rolesService.findOne(req.params.id);
+            yield this.rolesService.delete(req.params.id);
+            const userInfo = (0, auditLogger_1.getUserInfoFromRequest)(req);
+            yield auditLogger_1.auditLogger.log(Object.assign(Object.assign({ action_type: auditLogger_1.AuditActionType.ROLE_DELETE }, userInfo), { ip_address: (0, securityLogger_1.getClientIp)(req), user_agent: req.get("User-Agent"), entity_type: "Roles", entity_id: req.params.id, branch_id: userInfo.branch_id, old_values: oldRole, path: req.originalUrl, method: req.method, description: `Delete role ${req.params.id}` }));
+            return ApiResponse_1.ApiResponses.noContent(res);
+        }));
     }
 }
 exports.RolesController = RolesController;

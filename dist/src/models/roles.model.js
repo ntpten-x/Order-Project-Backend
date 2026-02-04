@@ -10,16 +10,13 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RolesModels = void 0;
-const database_1 = require("../database/database");
 const Roles_1 = require("../entity/Roles");
+const dbContext_1 = require("../database/dbContext");
 class RolesModels {
-    constructor() {
-        this.rolesRepository = database_1.AppDataSource.getRepository(Roles_1.Roles);
-    }
     findAll() {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.rolesRepository.createQueryBuilder("roles")
+                return (0, dbContext_1.getRepository)(Roles_1.Roles).createQueryBuilder("roles")
                     .orderBy("roles.create_date", "ASC")
                     .getMany();
             }
@@ -31,7 +28,7 @@ class RolesModels {
     findOne(id) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.rolesRepository.createQueryBuilder("roles").where("roles.id = :id", { id }).getOne();
+                return (0, dbContext_1.getRepository)(Roles_1.Roles).createQueryBuilder("roles").where("roles.id = :id", { id }).getOne();
             }
             catch (error) {
                 throw error;
@@ -41,7 +38,7 @@ class RolesModels {
     create(data) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.rolesRepository.createQueryBuilder("roles").insert().values(data).returning("id").execute().then((result) => result.raw[0]);
+                return (0, dbContext_1.getRepository)(Roles_1.Roles).createQueryBuilder("roles").insert().values(data).returning("id").execute().then((result) => result.raw[0]);
             }
             catch (error) {
                 throw error;
@@ -51,7 +48,7 @@ class RolesModels {
     update(id, data) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.rolesRepository.createQueryBuilder("roles").update(data).where("roles.id = :id", { id }).returning("id").execute().then((result) => result.raw[0]);
+                return (0, dbContext_1.getRepository)(Roles_1.Roles).createQueryBuilder("roles").update(data).where("roles.id = :id", { id }).returning("id").execute().then((result) => result.raw[0]);
             }
             catch (error) {
                 throw error;
@@ -61,7 +58,7 @@ class RolesModels {
     delete(id) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                this.rolesRepository.createQueryBuilder("roles").delete().where("roles.id = :id", { id }).execute();
+                (0, dbContext_1.getRepository)(Roles_1.Roles).createQueryBuilder("roles").delete().where("roles.id = :id", { id }).execute();
             }
             catch (error) {
                 throw error;

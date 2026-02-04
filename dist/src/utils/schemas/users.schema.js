@@ -13,6 +13,7 @@ exports.createUserSchema = zod_1.z.object({
         firstName: zod_1.z.string().optional(),
         lastName: zod_1.z.string().optional(),
         roles_id: zod_1.z.string().uuid("รูปแบบรหัสบทบาทไม่ถูกต้อง"),
+        branch_id: zod_1.z.string().uuid(),
         is_active: zod_1.z.boolean().optional(),
         is_use: zod_1.z.boolean().optional()
     })
@@ -27,6 +28,7 @@ exports.updateUserSchema = zod_1.z.object({
         firstName: zod_1.z.string().optional(),
         lastName: zod_1.z.string().optional(),
         roles_id: zod_1.z.string().uuid().optional(),
+        branch_id: zod_1.z.string().uuid().optional(),
         is_use: zod_1.z.boolean().optional(),
         is_active: zod_1.z.boolean().optional()
     })

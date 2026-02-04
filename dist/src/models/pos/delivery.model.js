@@ -10,17 +10,15 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DeliveryModels = void 0;
-const database_1 = require("../../database/database");
 const Delivery_1 = require("../../entity/pos/Delivery");
+const dbContext_1 = require("../../database/dbContext");
 class DeliveryModels {
-    constructor() {
-        this.deliveryRepository = database_1.AppDataSource.getRepository(Delivery_1.Delivery);
-    }
     findAll() {
         return __awaiter(this, arguments, void 0, function* (page = 1, limit = 50, q, branchId) {
             try {
                 const skip = (page - 1) * limit;
-                const query = this.deliveryRepository.createQueryBuilder("delivery")
+                const deliveryRepository = (0, dbContext_1.getRepository)(Delivery_1.Delivery);
+                const query = deliveryRepository.createQueryBuilder("delivery")
                     .orderBy("delivery.create_date", "ASC");
                 if (branchId) {
                     query.andWhere("delivery.branch_id = :branchId", { branchId });
@@ -44,11 +42,12 @@ class DeliveryModels {
     findOne(id, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
+                const deliveryRepository = (0, dbContext_1.getRepository)(Delivery_1.Delivery);
                 const where = { id };
                 if (branchId) {
                     where.branch_id = branchId;
                 }
-                return this.deliveryRepository.findOneBy(where);
+                return deliveryRepository.findOneBy(where);
             }
             catch (error) {
                 throw error;
@@ -58,11 +57,12 @@ class DeliveryModels {
     findOneByName(delivery_name, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
+                const deliveryRepository = (0, dbContext_1.getRepository)(Delivery_1.Delivery);
                 const where = { delivery_name };
                 if (branchId) {
                     where.branch_id = branchId;
                 }
-                return this.deliveryRepository.findOneBy(where);
+                return deliveryRepository.findOneBy(where);
             }
             catch (error) {
                 throw error;
@@ -72,18 +72,24 @@ class DeliveryModels {
     create(data) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.deliveryRepository.save(data);
+                return (0, dbContext_1.getRepository)(Delivery_1.Delivery).save(data);
             }
             catch (error) {
                 throw error;
             }
         });
     }
-    update(id, data) {
+    update(id, data, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                yield this.deliveryRepository.update(id, data);
-                const updatedDelivery = yield this.findOne(id);
+                const deliveryRepository = (0, dbContext_1.getRepository)(Delivery_1.Delivery);
+                if (branchId) {
+                    yield deliveryRepository.update({ id, branch_id: branchId }, data);
+                }
+                else {
+                    yield deliveryRepository.update(id, data);
+                }
+                const updatedDelivery = yield this.findOne(id, branchId);
                 if (!updatedDelivery) {
                     throw new Error("ไม่พบข้อมูลบริการส่งที่ต้องการค้นหา");
                 }
@@ -94,10 +100,16 @@ class DeliveryModels {
             }
         });
     }
-    delete(id) {
+    delete(id, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                yield this.deliveryRepository.delete(id);
+                const deliveryRepository = (0, dbContext_1.getRepository)(Delivery_1.Delivery);
+                if (branchId) {
+                    yield deliveryRepository.delete({ id, branch_id: branchId });
+                }
+                else {
+                    yield deliveryRepository.delete(id);
+                }
             }
             catch (error) {
                 throw error;

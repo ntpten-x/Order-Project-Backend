@@ -40,7 +40,6 @@ const paymentAccount_routes_1 = __importDefault(require("./src/routes/pos/paymen
 const dashboard_route_1 = __importDefault(require("./src/routes/pos/dashboard.route"));
 const branch_route_1 = __importDefault(require("./src/routes/branch.route"));
 const orderQueue_route_1 = __importDefault(require("./src/routes/pos/orderQueue.route"));
-const promotions_route_1 = __importDefault(require("./src/routes/pos/promotions.route"));
 const error_middleware_1 = require("./src/middleware/error.middleware");
 const AppError_1 = require("./src/utils/AppError");
 const monitoring_middleware_1 = require("./src/middleware/monitoring.middleware");
@@ -318,7 +317,6 @@ app.use("/pos/shopProfile", shopProfile_route_1.default);
 app.use("/pos/payment-accounts", paymentAccount_routes_1.default);
 app.use("/pos/dashboard", dashboard_route_1.default);
 app.use("/pos/queue", orderQueue_route_1.default);
-app.use("/pos/promotions", promotions_route_1.default);
 app.use("/branches", branch_route_1.default);
 // Handle Unhandled Routes
 app.use((req, res, next) => {

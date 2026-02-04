@@ -16,18 +16,24 @@ class OrdersDetailService {
         this.ordersDetailModel = ordersDetailModel;
         this.socketService = socket_service_1.SocketService.getInstance();
     }
-    updatePurchaseDetail(ordersItemId, data) {
+    updatePurchaseDetail(ordersItemId, data, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
+            var _a;
             try {
+                const orderItem = yield this.ordersDetailModel.getOrderItemWithOrder(ordersItemId, branchId);
+                if (!orderItem) {
+                    throw new Error("Order item not found");
+                }
                 const savedDetail = yield this.ordersDetailModel.createOrUpdate(ordersItemId, data);
-                // Fetch related info for socket
-                const orderItem = yield this.ordersDetailModel.getOrderItemWithOrder(ordersItemId);
                 if (orderItem) {
-                    this.socketService.emit("orders_updated", {
-                        action: "update_item_detail",
-                        orderId: orderItem.orders.id,
-                        data: savedDetail
-                    });
+                    const emitBranchId = branchId || ((_a = orderItem.orders) === null || _a === void 0 ? void 0 : _a.branch_id);
+                    if (emitBranchId) {
+                        this.socketService.emitToBranch(emitBranchId, "orders_updated", {
+                            action: "update_item_detail",
+                            orderId: orderItem.orders.id,
+                            data: savedDetail
+                        });
+                    }
                 }
                 return savedDetail;
             }

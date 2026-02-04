@@ -5,6 +5,7 @@ const tables_model_1 = require("../../models/pos/tables.model");
 const tables_service_1 = require("../../services/pos/tables.service");
 const tables_controller_1 = require("../../controllers/pos/tables.controller");
 const auth_middleware_1 = require("../../middleware/auth.middleware");
+const branch_middleware_1 = require("../../middleware/branch.middleware");
 const validate_middleware_1 = require("../../middleware/validate.middleware");
 const common_schema_1 = require("../../utils/schemas/common.schema");
 const posMaster_schema_1 = require("../../utils/schemas/posMaster.schema");
@@ -14,6 +15,7 @@ const tablesService = new tables_service_1.TablesService(tablesModel);
 const tablesController = new tables_controller_1.TablesController(tablesService);
 router.use(auth_middleware_1.authenticateToken);
 router.use((0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]));
+router.use(branch_middleware_1.requireBranch);
 // Authorization: Assuming all authenticated users can view/update status, 
 // but creation/deletion might be restricted. 
 // For now, I will follow the pattern in products.route.ts

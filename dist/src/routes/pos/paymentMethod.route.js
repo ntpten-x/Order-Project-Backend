@@ -6,6 +6,7 @@ const paymentMethod_service_1 = require("../../services/pos/paymentMethod.servic
 const paymentMethod_controller_1 = require("../../controllers/pos/paymentMethod.controller");
 const auth_middleware_1 = require("../../middleware/auth.middleware");
 const validate_middleware_1 = require("../../middleware/validate.middleware");
+const branch_middleware_1 = require("../../middleware/branch.middleware");
 const posMaster_schema_1 = require("../../utils/schemas/posMaster.schema");
 const router = (0, express_1.Router)();
 const paymentMethodModel = new paymentMethod_model_1.PaymentMethodModels();
@@ -13,6 +14,7 @@ const paymentMethodService = new paymentMethod_service_1.PaymentMethodService(pa
 const paymentMethodController = new paymentMethod_controller_1.PaymentMethodController(paymentMethodService);
 router.use(auth_middleware_1.authenticateToken);
 router.use((0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]));
+router.use(branch_middleware_1.requireBranch);
 // Authorization:
 // Admin manage, Employee read.
 router.get("/", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]), paymentMethodController.findAll);

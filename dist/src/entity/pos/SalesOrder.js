@@ -31,7 +31,7 @@ __decorate([
     __metadata("design:type", String)
 ], SalesOrder.prototype, "order_no", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ name: "branch_id", type: "uuid", nullable: true }),
+    (0, typeorm_1.Column)({ name: "branch_id", type: "uuid" }),
     __metadata("design:type", String)
 ], SalesOrder.prototype, "branch_id", void 0);
 __decorate([

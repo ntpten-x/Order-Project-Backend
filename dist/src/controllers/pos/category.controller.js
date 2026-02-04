@@ -14,6 +14,8 @@ const catchAsync_1 = require("../../utils/catchAsync");
 const AppError_1 = require("../../utils/AppError");
 const ApiResponse_1 = require("../../utils/ApiResponse");
 const branch_middleware_1 = require("../../middleware/branch.middleware");
+const auditLogger_1 = require("../../utils/auditLogger");
+const securityLogger_1 = require("../../utils/securityLogger");
 /**
  * Category Controller
  * Following supabase-postgres-best-practices:
@@ -47,21 +49,36 @@ class CategoryController {
         }));
         this.create = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
             const branchId = (0, branch_middleware_1.getBranchId)(req);
-            if (branchId && !req.body.branch_id) {
+            if (branchId) {
                 req.body.branch_id = branchId;
             }
             const category = yield this.categoryService.create(req.body);
+            const userInfo = (0, auditLogger_1.getUserInfoFromRequest)(req);
+            yield auditLogger_1.auditLogger.log(Object.assign(Object.assign({ action_type: auditLogger_1.AuditActionType.CATEGORY_CREATE }, userInfo), { ip_address: (0, securityLogger_1.getClientIp)(req), user_agent: req.get("User-Agent"), entity_type: "Category", entity_id: category.id, branch_id: branchId, new_values: req.body, path: req.originalUrl, method: req.method, description: `Create category ${category.category_name || category.display_name || category.id}` }));
             return ApiResponse_1.ApiResponses.created(res, category);
         }));
         this.update = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
-            const category = yield this.categoryService.update(req.params.id, req.body);
+            const branchId = (0, branch_middleware_1.getBranchId)(req);
+            if (branchId) {
+                req.body.branch_id = branchId;
+            }
+            const oldCategory = yield this.categoryService.findOne(req.params.id, branchId);
+            const category = yield this.categoryService.update(req.params.id, req.body, branchId);
+            if (category) {
+                const userInfo = (0, auditLogger_1.getUserInfoFromRequest)(req);
+                yield auditLogger_1.auditLogger.log(Object.assign(Object.assign({ action_type: auditLogger_1.AuditActionType.CATEGORY_UPDATE }, userInfo), { ip_address: (0, securityLogger_1.getClientIp)(req), user_agent: req.get("User-Agent"), entity_type: "Category", entity_id: req.params.id, branch_id: branchId, old_values: oldCategory, new_values: req.body, path: req.originalUrl, method: req.method, description: `Update category ${req.params.id}` }));
+            }
             if (!category) {
                 throw AppError_1.AppError.notFound("หมวดหมู่");
             }
             return ApiResponse_1.ApiResponses.ok(res, category);
         }));
         this.delete = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
-            yield this.categoryService.delete(req.params.id);
+            const branchId = (0, branch_middleware_1.getBranchId)(req);
+            const oldCategory = yield this.categoryService.findOne(req.params.id, branchId);
+            yield this.categoryService.delete(req.params.id, branchId);
+            const userInfo = (0, auditLogger_1.getUserInfoFromRequest)(req);
+            yield auditLogger_1.auditLogger.log(Object.assign(Object.assign({ action_type: auditLogger_1.AuditActionType.CATEGORY_DELETE }, userInfo), { ip_address: (0, securityLogger_1.getClientIp)(req), user_agent: req.get("User-Agent"), entity_type: "Category", entity_id: req.params.id, branch_id: branchId, old_values: oldCategory, path: req.originalUrl, method: req.method, description: `Delete category ${req.params.id}` }));
             return ApiResponse_1.ApiResponses.ok(res, { message: "หมวดหมู่ลบสำเร็จ" });
         }));
     }

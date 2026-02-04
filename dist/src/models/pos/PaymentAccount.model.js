@@ -10,15 +10,12 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PaymentAccountModel = void 0;
-const database_1 = require("../../database/database");
 const ShopPaymentAccount_1 = require("../../entity/pos/ShopPaymentAccount");
+const dbContext_1 = require("../../database/dbContext");
 class PaymentAccountModel {
-    constructor() {
-        this.repository = database_1.AppDataSource.getRepository(ShopPaymentAccount_1.ShopPaymentAccount);
-    }
     findByShopId(shopId) {
         return __awaiter(this, void 0, void 0, function* () {
-            return yield this.repository.find({
+            return yield (0, dbContext_1.getRepository)(ShopPaymentAccount_1.ShopPaymentAccount).find({
                 where: { shop_id: shopId },
                 order: { is_active: "DESC", created_at: "DESC" }
             });
@@ -26,40 +23,41 @@ class PaymentAccountModel {
     }
     findOne(shopId, accountId) {
         return __awaiter(this, void 0, void 0, function* () {
-            return yield this.repository.findOne({ where: { id: accountId, shop_id: shopId } });
+            return yield (0, dbContext_1.getRepository)(ShopPaymentAccount_1.ShopPaymentAccount).findOne({ where: { id: accountId, shop_id: shopId } });
         });
     }
     findByAccountNumber(shopId, accountNumber) {
         return __awaiter(this, void 0, void 0, function* () {
-            return yield this.repository.findOne({
+            return yield (0, dbContext_1.getRepository)(ShopPaymentAccount_1.ShopPaymentAccount).findOne({
                 where: { shop_id: shopId, account_number: accountNumber }
             });
         });
     }
     create(data) {
         return __awaiter(this, void 0, void 0, function* () {
-            const account = this.repository.create(data);
-            return yield this.repository.save(account);
+            const repository = (0, dbContext_1.getRepository)(ShopPaymentAccount_1.ShopPaymentAccount);
+            const account = repository.create(data);
+            return yield repository.save(account);
         });
     }
     save(account) {
         return __awaiter(this, void 0, void 0, function* () {
-            return yield this.repository.save(account);
+            return yield (0, dbContext_1.getRepository)(ShopPaymentAccount_1.ShopPaymentAccount).save(account);
         });
     }
     deactivateAll(shopId) {
         return __awaiter(this, void 0, void 0, function* () {
-            return yield this.repository.update({ shop_id: shopId }, { is_active: false });
+            return yield (0, dbContext_1.getRepository)(ShopPaymentAccount_1.ShopPaymentAccount).update({ shop_id: shopId }, { is_active: false });
         });
     }
     delete(account) {
         return __awaiter(this, void 0, void 0, function* () {
-            return yield this.repository.remove(account);
+            return yield (0, dbContext_1.getRepository)(ShopPaymentAccount_1.ShopPaymentAccount).remove(account);
         });
     }
     count(shopId) {
         return __awaiter(this, void 0, void 0, function* () {
-            return yield this.repository.count({ where: { shop_id: shopId } });
+            return yield (0, dbContext_1.getRepository)(ShopPaymentAccount_1.ShopPaymentAccount).count({ where: { shop_id: shopId } });
         });
     }
 }

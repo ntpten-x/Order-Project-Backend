@@ -57,9 +57,11 @@ class CategoryService {
                     }
                 }
                 const savedCategory = yield this.categoryModel.create(category);
-                const createdCategory = yield this.categoryModel.findOne(savedCategory.id);
+                const createdCategory = yield this.categoryModel.findOne(savedCategory.id, category.branch_id);
                 if (createdCategory) {
-                    this.socketService.emit('category:create', createdCategory);
+                    if (createdCategory.branch_id) {
+                        this.socketService.emitToBranch(createdCategory.branch_id, 'category:create', createdCategory);
+                    }
                     return createdCategory;
                 }
                 return savedCategory;
@@ -69,13 +71,16 @@ class CategoryService {
             }
         });
     }
-    update(id, category) {
+    update(id, category, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                yield this.categoryModel.update(id, category);
-                const updatedCategory = yield this.categoryModel.findOne(id);
+                yield this.categoryModel.update(id, category, branchId || category.branch_id);
+                const updatedCategory = yield this.categoryModel.findOne(id, branchId || category.branch_id);
                 if (updatedCategory) {
-                    this.socketService.emit('category:update', updatedCategory);
+                    const effectiveBranchId = updatedCategory.branch_id || branchId || category.branch_id;
+                    if (effectiveBranchId) {
+                        this.socketService.emitToBranch(effectiveBranchId, 'category:update', updatedCategory);
+                    }
                     return updatedCategory;
                 }
                 throw new Error("พบข้อผิดพลาดในการอัปเดตหมวดหมู่สินค้า");
@@ -85,11 +90,18 @@ class CategoryService {
             }
         });
     }
-    delete(id) {
+    delete(id, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                yield this.categoryModel.delete(id);
-                this.socketService.emit('category:delete', { id });
+                const existing = yield this.categoryModel.findOne(id, branchId);
+                if (!existing) {
+                    throw new Error("Category not found");
+                }
+                yield this.categoryModel.delete(id, branchId);
+                const effectiveBranchId = existing.branch_id || branchId;
+                if (effectiveBranchId) {
+                    this.socketService.emitToBranch(effectiveBranchId, 'category:delete', { id });
+                }
             }
             catch (error) {
                 throw error;

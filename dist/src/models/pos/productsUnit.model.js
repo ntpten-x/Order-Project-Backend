@@ -10,20 +10,18 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ProductsUnitModels = void 0;
-const database_1 = require("../../database/database");
 const ProductsUnit_1 = require("../../entity/pos/ProductsUnit");
+const dbContext_1 = require("../../database/dbContext");
 class ProductsUnitModels {
-    constructor() {
-        this.productsUnitRepository = database_1.AppDataSource.getRepository(ProductsUnit_1.ProductsUnit);
-    }
     findAll(branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
+                const productsUnitRepository = (0, dbContext_1.getRepository)(ProductsUnit_1.ProductsUnit);
                 const where = {};
                 if (branchId) {
                     where.branch_id = branchId;
                 }
-                return this.productsUnitRepository.find({
+                return productsUnitRepository.find({
                     where,
                     order: {
                         create_date: "ASC"
@@ -38,11 +36,12 @@ class ProductsUnitModels {
     findOne(id, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
+                const productsUnitRepository = (0, dbContext_1.getRepository)(ProductsUnit_1.ProductsUnit);
                 const where = { id };
                 if (branchId) {
                     where.branch_id = branchId;
                 }
-                return this.productsUnitRepository.findOne({
+                return productsUnitRepository.findOne({
                     where
                 });
             }
@@ -54,11 +53,12 @@ class ProductsUnitModels {
     findOneByName(name, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
+                const productsUnitRepository = (0, dbContext_1.getRepository)(ProductsUnit_1.ProductsUnit);
                 const where = { unit_name: name };
                 if (branchId) {
                     where.branch_id = branchId;
                 }
-                return this.productsUnitRepository.findOne({
+                return productsUnitRepository.findOne({
                     where
                 });
             }
@@ -70,29 +70,42 @@ class ProductsUnitModels {
     create(data) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const entity = this.productsUnitRepository.create(data);
-                return this.productsUnitRepository.save(entity);
+                const productsUnitRepository = (0, dbContext_1.getRepository)(ProductsUnit_1.ProductsUnit);
+                const entity = productsUnitRepository.create(data);
+                return productsUnitRepository.save(entity);
             }
             catch (error) {
                 throw error;
             }
         });
     }
-    update(id, data) {
+    update(id, data, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                yield this.productsUnitRepository.update(id, data);
-                return this.findOne(id);
+                const productsUnitRepository = (0, dbContext_1.getRepository)(ProductsUnit_1.ProductsUnit);
+                if (branchId) {
+                    yield productsUnitRepository.update({ id, branch_id: branchId }, data);
+                }
+                else {
+                    yield productsUnitRepository.update(id, data);
+                }
+                return this.findOne(id, branchId);
             }
             catch (error) {
                 throw error;
             }
         });
     }
-    delete(id) {
+    delete(id, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                yield this.productsUnitRepository.delete(id);
+                const productsUnitRepository = (0, dbContext_1.getRepository)(ProductsUnit_1.ProductsUnit);
+                if (branchId) {
+                    yield productsUnitRepository.delete({ id, branch_id: branchId });
+                }
+                else {
+                    yield productsUnitRepository.delete(id);
+                }
             }
             catch (error) {
                 throw error;

@@ -10,25 +10,29 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DashboardService = void 0;
-const database_1 = require("../../database/database");
 const SalesSummaryView_1 = require("../../entity/pos/views/SalesSummaryView");
 const TopSellingItemsView_1 = require("../../entity/pos/views/TopSellingItemsView");
+const dbContext_1 = require("../../database/dbContext");
 class DashboardService {
-    getSalesSummary(startDate, endDate) {
+    getSalesSummary(startDate, endDate, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
-            const salesRepository = database_1.AppDataSource.getRepository(SalesSummaryView_1.SalesSummaryView);
+            const salesRepository = (0, dbContext_1.getRepository)(SalesSummaryView_1.SalesSummaryView);
             const query = salesRepository.createQueryBuilder("sales");
             if (startDate && endDate) {
                 query.where("sales.date BETWEEN :startDate AND :endDate", { startDate, endDate });
+            }
+            if (branchId) {
+                query.andWhere("sales.branch_id = :branchId", { branchId });
             }
             query.orderBy("sales.date", "DESC");
             return yield query.getMany();
         });
     }
     getTopSellingItems() {
-        return __awaiter(this, arguments, void 0, function* (limit = 10) {
-            const topItemsRepository = database_1.AppDataSource.getRepository(TopSellingItemsView_1.TopSellingItemsView);
+        return __awaiter(this, arguments, void 0, function* (limit = 10, branchId) {
+            const topItemsRepository = (0, dbContext_1.getRepository)(TopSellingItemsView_1.TopSellingItemsView);
             return yield topItemsRepository.find({
+                where: branchId ? { branch_id: branchId } : undefined,
                 order: {
                     total_quantity: "DESC"
                 },

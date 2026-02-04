@@ -10,17 +10,15 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PaymentMethodModels = void 0;
-const database_1 = require("../../database/database");
 const PaymentMethod_1 = require("../../entity/pos/PaymentMethod");
+const dbContext_1 = require("../../database/dbContext");
 class PaymentMethodModels {
-    constructor() {
-        this.paymentMethodRepository = database_1.AppDataSource.getRepository(PaymentMethod_1.PaymentMethod);
-    }
     findAll() {
         return __awaiter(this, arguments, void 0, function* (page = 1, limit = 50, q, branchId) {
             try {
                 const skip = (page - 1) * limit;
-                const query = this.paymentMethodRepository.createQueryBuilder("paymentMethod")
+                const paymentMethodRepository = (0, dbContext_1.getRepository)(PaymentMethod_1.PaymentMethod);
+                const query = paymentMethodRepository.createQueryBuilder("paymentMethod")
                     .orderBy("paymentMethod.create_date", "ASC");
                 if (branchId) {
                     query.andWhere("paymentMethod.branch_id = :branchId", { branchId });
@@ -44,11 +42,12 @@ class PaymentMethodModels {
     findOne(id, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
+                const paymentMethodRepository = (0, dbContext_1.getRepository)(PaymentMethod_1.PaymentMethod);
                 const where = { id };
                 if (branchId) {
                     where.branch_id = branchId;
                 }
-                return this.paymentMethodRepository.findOneBy(where);
+                return paymentMethodRepository.findOneBy(where);
             }
             catch (error) {
                 throw error;
@@ -58,11 +57,12 @@ class PaymentMethodModels {
     findOneByName(payment_method_name, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
+                const paymentMethodRepository = (0, dbContext_1.getRepository)(PaymentMethod_1.PaymentMethod);
                 const where = { payment_method_name };
                 if (branchId) {
                     where.branch_id = branchId;
                 }
-                return this.paymentMethodRepository.findOneBy(where);
+                return paymentMethodRepository.findOneBy(where);
             }
             catch (error) {
                 throw error;
@@ -72,18 +72,24 @@ class PaymentMethodModels {
     create(data) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.paymentMethodRepository.save(data);
+                return (0, dbContext_1.getRepository)(PaymentMethod_1.PaymentMethod).save(data);
             }
             catch (error) {
                 throw error;
             }
         });
     }
-    update(id, data) {
+    update(id, data, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                yield this.paymentMethodRepository.update(id, data);
-                const updatedPaymentMethod = yield this.findOne(id);
+                const paymentMethodRepository = (0, dbContext_1.getRepository)(PaymentMethod_1.PaymentMethod);
+                if (branchId) {
+                    yield paymentMethodRepository.update({ id, branch_id: branchId }, data);
+                }
+                else {
+                    yield paymentMethodRepository.update(id, data);
+                }
+                const updatedPaymentMethod = yield this.findOne(id, branchId);
                 if (!updatedPaymentMethod) {
                     throw new Error("ไม่พบข้อมูลวิธีการชำระเงินที่ต้องการค้นหา");
                 }
@@ -94,10 +100,16 @@ class PaymentMethodModels {
             }
         });
     }
-    delete(id) {
+    delete(id, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                yield this.paymentMethodRepository.delete(id);
+                const paymentMethodRepository = (0, dbContext_1.getRepository)(PaymentMethod_1.PaymentMethod);
+                if (branchId) {
+                    yield paymentMethodRepository.delete({ id, branch_id: branchId });
+                }
+                else {
+                    yield paymentMethodRepository.delete(id);
+                }
             }
             catch (error) {
                 throw error;

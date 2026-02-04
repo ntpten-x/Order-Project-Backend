@@ -1,18 +1,9 @@
 "use strict";
 /**
  * Audit Logger
- * Logs all important business actions for compliance and tracking
- * Stores logs in database for persistence
+ * Logs all important business actions for compliance and tracking.
+ * Stores logs in database for persistence.
  */
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var __metadata = (this && this.__metadata) || function (k, v) {
-    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
-};
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -23,130 +14,26 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.auditLogger = exports.AuditLog = exports.AuditActionType = void 0;
+exports.AuditActionType = exports.auditLogger = void 0;
 exports.getUserInfoFromRequest = getUserInfoFromRequest;
-const database_1 = require("../database/database");
-const typeorm_1 = require("typeorm");
-var AuditActionType;
-(function (AuditActionType) {
-    // Order actions
-    AuditActionType["ORDER_CREATE"] = "ORDER_CREATE";
-    AuditActionType["ORDER_UPDATE"] = "ORDER_UPDATE";
-    AuditActionType["ORDER_DELETE"] = "ORDER_DELETE";
-    AuditActionType["ORDER_STATUS_CHANGE"] = "ORDER_STATUS_CHANGE";
-    // Payment actions
-    AuditActionType["PAYMENT_CREATE"] = "PAYMENT_CREATE";
-    AuditActionType["PAYMENT_UPDATE"] = "PAYMENT_UPDATE";
-    AuditActionType["PAYMENT_DELETE"] = "PAYMENT_DELETE";
-    // Item actions
-    AuditActionType["ITEM_ADD"] = "ITEM_ADD";
-    AuditActionType["ITEM_UPDATE"] = "ITEM_UPDATE";
-    AuditActionType["ITEM_DELETE"] = "ITEM_DELETE";
-    // Queue actions
-    AuditActionType["QUEUE_ADD"] = "QUEUE_ADD";
-    AuditActionType["QUEUE_UPDATE"] = "QUEUE_UPDATE";
-    AuditActionType["QUEUE_REMOVE"] = "QUEUE_REMOVE";
-    AuditActionType["QUEUE_REORDER"] = "QUEUE_REORDER";
-    // Product actions
-    AuditActionType["PRODUCT_CREATE"] = "PRODUCT_CREATE";
-    AuditActionType["PRODUCT_UPDATE"] = "PRODUCT_UPDATE";
-    AuditActionType["PRODUCT_DELETE"] = "PRODUCT_DELETE";
-    // User actions
-    AuditActionType["USER_CREATE"] = "USER_CREATE";
-    AuditActionType["USER_UPDATE"] = "USER_UPDATE";
-    AuditActionType["USER_DELETE"] = "USER_DELETE";
-    // Stock actions
-    AuditActionType["STOCK_RECEIVE"] = "STOCK_RECEIVE";
-    AuditActionType["STOCK_TRANSFER"] = "STOCK_TRANSFER";
-    AuditActionType["STOCK_ADJUST"] = "STOCK_ADJUST";
-    // Other important actions
-    AuditActionType["DISCOUNT_APPLY"] = "DISCOUNT_APPLY";
-    AuditActionType["PROMOTION_APPLY"] = "PROMOTION_APPLY";
-    AuditActionType["SHIFT_OPEN"] = "SHIFT_OPEN";
-    AuditActionType["SHIFT_CLOSE"] = "SHIFT_CLOSE";
-})(AuditActionType || (exports.AuditActionType = AuditActionType = {}));
-let AuditLog = class AuditLog {
-};
-exports.AuditLog = AuditLog;
-__decorate([
-    (0, typeorm_1.PrimaryGeneratedColumn)('uuid'),
-    __metadata("design:type", String)
-], AuditLog.prototype, "id", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ type: 'enum', enum: AuditActionType }),
-    __metadata("design:type", String)
-], AuditLog.prototype, "action_type", void 0);
-__decorate([
-    (0, typeorm_1.Index)(),
-    (0, typeorm_1.Column)({ type: 'uuid', nullable: true }),
-    __metadata("design:type", String)
-], AuditLog.prototype, "user_id", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ type: 'varchar', length: 200, nullable: true }),
-    __metadata("design:type", String)
-], AuditLog.prototype, "username", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ type: 'varchar', length: 50 }),
-    __metadata("design:type", String)
-], AuditLog.prototype, "ip_address", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ type: 'text', nullable: true }),
-    __metadata("design:type", String)
-], AuditLog.prototype, "user_agent", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ type: 'varchar', length: 100, nullable: true }),
-    __metadata("design:type", String)
-], AuditLog.prototype, "entity_type", void 0);
-__decorate([
-    (0, typeorm_1.Index)(),
-    (0, typeorm_1.Column)({ type: 'uuid', nullable: true }),
-    __metadata("design:type", String)
-], AuditLog.prototype, "entity_id", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ type: 'uuid', nullable: true }),
-    __metadata("design:type", String)
-], AuditLog.prototype, "branch_id", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ type: 'jsonb', nullable: true }),
-    __metadata("design:type", Object)
-], AuditLog.prototype, "old_values", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ type: 'jsonb', nullable: true }),
-    __metadata("design:type", Object)
-], AuditLog.prototype, "new_values", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ type: 'text', nullable: true }),
-    __metadata("design:type", String)
-], AuditLog.prototype, "description", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ type: 'varchar', length: 500, nullable: true }),
-    __metadata("design:type", String)
-], AuditLog.prototype, "path", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ type: 'varchar', length: 10, nullable: true }),
-    __metadata("design:type", String)
-], AuditLog.prototype, "method", void 0);
-__decorate([
-    (0, typeorm_1.CreateDateColumn)({ type: 'timestamptz' }),
-    __metadata("design:type", Date)
-], AuditLog.prototype, "created_at", void 0);
-exports.AuditLog = AuditLog = __decorate([
-    (0, typeorm_1.Entity)('audit_logs'),
-    (0, typeorm_1.Index)(['user_id', 'created_at']),
-    (0, typeorm_1.Index)(['action_type', 'created_at']),
-    (0, typeorm_1.Index)(['entity_type', 'entity_id'])
-], AuditLog);
+const dbContext_1 = require("../database/dbContext");
+const AuditLog_1 = require("../entity/AuditLog");
+const auditTypes_1 = require("./auditTypes");
+Object.defineProperty(exports, "AuditActionType", { enumerable: true, get: function () { return auditTypes_1.AuditActionType; } });
 class AuditLogger {
-    constructor() {
-        this.repository = database_1.AppDataSource.getRepository(AuditLog);
+    get repository() {
+        return (0, dbContext_1.getRepository)(AuditLog_1.AuditLog);
     }
     /**
      * Log an audit event
      */
     log(params) {
         return __awaiter(this, void 0, void 0, function* () {
+            var _a;
             try {
-                const auditLog = this.repository.create(Object.assign(Object.assign({}, params), { created_at: new Date() }));
+                const ctx = (0, dbContext_1.getDbContext)();
+                const branch_id = (_a = params.branch_id) !== null && _a !== void 0 ? _a : ctx === null || ctx === void 0 ? void 0 : ctx.branchId;
+                const auditLog = this.repository.create(Object.assign(Object.assign({}, params), { branch_id, created_at: new Date() }));
                 yield this.repository.save(auditLog);
                 // Also log to console for development
                 if (process.env.NODE_ENV !== 'production') {
@@ -205,9 +92,11 @@ exports.auditLogger = new AuditLogger();
  */
 function getUserInfoFromRequest(req) {
     const user = req.user || req.user;
+    const ctx = (0, dbContext_1.getDbContext)();
     return {
         user_id: user === null || user === void 0 ? void 0 : user.id,
         username: user === null || user === void 0 ? void 0 : user.username,
-        branch_id: user === null || user === void 0 ? void 0 : user.branch_id,
+        // Prefer DB context branch (supports admin branch switching)
+        branch_id: (ctx === null || ctx === void 0 ? void 0 : ctx.branchId) || (user === null || user === void 0 ? void 0 : user.branch_id),
     };
 }

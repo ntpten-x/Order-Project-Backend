@@ -10,16 +10,14 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DiscountsModels = void 0;
-const database_1 = require("../../database/database");
 const Discounts_1 = require("../../entity/pos/Discounts");
+const dbContext_1 = require("../../database/dbContext");
 class DiscountsModels {
-    constructor() {
-        this.discountsRepository = database_1.AppDataSource.getRepository(Discounts_1.Discounts);
-    }
     findAll(q, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const query = this.discountsRepository.createQueryBuilder("discounts")
+                const discountsRepository = (0, dbContext_1.getRepository)(Discounts_1.Discounts);
+                const query = discountsRepository.createQueryBuilder("discounts")
                     .orderBy("discounts.create_date", "ASC");
                 if (branchId) {
                     query.andWhere("discounts.branch_id = :branchId", { branchId });
@@ -37,11 +35,12 @@ class DiscountsModels {
     findOne(id, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
+                const discountsRepository = (0, dbContext_1.getRepository)(Discounts_1.Discounts);
                 const where = { id };
                 if (branchId) {
                     where.branch_id = branchId;
                 }
-                return this.discountsRepository.findOneBy(where);
+                return discountsRepository.findOneBy(where);
             }
             catch (error) {
                 throw error;
@@ -51,11 +50,12 @@ class DiscountsModels {
     findOneByName(discount_name, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
+                const discountsRepository = (0, dbContext_1.getRepository)(Discounts_1.Discounts);
                 const where = { discount_name };
                 if (branchId) {
                     where.branch_id = branchId;
                 }
-                return this.discountsRepository.findOneBy(where);
+                return discountsRepository.findOneBy(where);
             }
             catch (error) {
                 throw error;
@@ -65,18 +65,24 @@ class DiscountsModels {
     create(data) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                return this.discountsRepository.save(data);
+                return (0, dbContext_1.getRepository)(Discounts_1.Discounts).save(data);
             }
             catch (error) {
                 throw error;
             }
         });
     }
-    update(id, data) {
+    update(id, data, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                yield this.discountsRepository.update(id, data);
-                const updatedDiscount = yield this.findOne(id);
+                const discountsRepository = (0, dbContext_1.getRepository)(Discounts_1.Discounts);
+                if (branchId) {
+                    yield discountsRepository.update({ id, branch_id: branchId }, data);
+                }
+                else {
+                    yield discountsRepository.update(id, data);
+                }
+                const updatedDiscount = yield this.findOne(id, branchId);
                 if (!updatedDiscount) {
                     throw new Error("ไม่พบข้อมูลส่วนลดที่ต้องการค้นหา");
                 }
@@ -87,10 +93,16 @@ class DiscountsModels {
             }
         });
     }
-    delete(id) {
+    delete(id, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                yield this.discountsRepository.delete(id);
+                const discountsRepository = (0, dbContext_1.getRepository)(Discounts_1.Discounts);
+                if (branchId) {
+                    yield discountsRepository.delete({ id, branch_id: branchId });
+                }
+                else {
+                    yield discountsRepository.delete(id);
+                }
             }
             catch (error) {
                 throw error;

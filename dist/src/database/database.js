@@ -77,7 +77,7 @@ const SalesSummaryView_1 = require("../entity/pos/views/SalesSummaryView");
 const TopSellingItemsView_1 = require("../entity/pos/views/TopSellingItemsView");
 const Shifts_1 = require("../entity/pos/Shifts");
 const OrderQueue_1 = require("../entity/pos/OrderQueue");
-const Promotions_1 = require("../entity/pos/Promotions");
+const AuditLog_1 = require("../entity/AuditLog");
 const dotenv = __importStar(require("dotenv"));
 dotenv.config();
 const isProd = process.env.NODE_ENV === "production";
@@ -102,7 +102,7 @@ exports.AppDataSource = new typeorm_1.DataSource({
     username: process.env.DATABASE_USER,
     password: process.env.DATABASE_PASSWORD,
     database: process.env.DATABASE_NAME,
-    entities: [Users_1.Users, Roles_1.Roles, Branch_1.Branch, IngredientsUnit_1.IngredientsUnit, Ingredients_1.Ingredients, PurchaseOrder_1.PurchaseOrder, OrdersItem_1.StockOrdersItem, OrdersDetail_1.StockOrdersDetail, SalesOrder_1.SalesOrder, SalesOrderItem_1.SalesOrderItem, SalesOrderDetail_1.SalesOrderDetail, Category_1.Category, Products_1.Products, ProductsUnit_1.ProductsUnit, Tables_1.Tables, Delivery_1.Delivery, Discounts_1.Discounts, Payments_1.Payments, PaymentMethod_1.PaymentMethod, Shifts_1.Shifts, ShopProfile_1.ShopProfile, ShopPaymentAccount_1.ShopPaymentAccount, SalesSummaryView_1.SalesSummaryView, TopSellingItemsView_1.TopSellingItemsView, OrderQueue_1.OrderQueue, Promotions_1.Promotions],
+    entities: [Users_1.Users, Roles_1.Roles, Branch_1.Branch, IngredientsUnit_1.IngredientsUnit, Ingredients_1.Ingredients, PurchaseOrder_1.PurchaseOrder, OrdersItem_1.StockOrdersItem, OrdersDetail_1.StockOrdersDetail, SalesOrder_1.SalesOrder, SalesOrderItem_1.SalesOrderItem, SalesOrderDetail_1.SalesOrderDetail, Category_1.Category, Products_1.Products, ProductsUnit_1.ProductsUnit, Tables_1.Tables, Delivery_1.Delivery, Discounts_1.Discounts, Payments_1.Payments, PaymentMethod_1.PaymentMethod, Shifts_1.Shifts, ShopProfile_1.ShopProfile, ShopPaymentAccount_1.ShopPaymentAccount, SalesSummaryView_1.SalesSummaryView, TopSellingItemsView_1.TopSellingItemsView, OrderQueue_1.OrderQueue, AuditLog_1.AuditLog],
     synchronize: synchronize,
     logging: isProd ? ["error"] : true,
     ssl: sslOptions,
@@ -144,9 +144,44 @@ exports.AppDataSource = new typeorm_1.DataSource({
     }
 });
 const connectDatabase = () => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
     try {
         yield exports.AppDataSource.initialize();
         console.log("Database connected successfully");
+        // Operational safety checks for multi-tenant RLS deployments
+        const isProdEnv = process.env.NODE_ENV === "production";
+        // 1) Prevent silent RLS bypass at the DB role level
+        try {
+            const bypassRows = yield exports.AppDataSource.query(`SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user`);
+            const bypass = Boolean((_a = bypassRows === null || bypassRows === void 0 ? void 0 : bypassRows[0]) === null || _a === void 0 ? void 0 : _a.rolbypassrls);
+            if (bypass && process.env.ALLOW_BYPASSRLS !== "1") {
+                const msg = "[DB] Current DB role has BYPASSRLS enabled. This can disable branch isolation. Remove BYPASSRLS or set ALLOW_BYPASSRLS=1 to override.";
+                if (isProdEnv) {
+                    throw new Error(msg);
+                }
+                else {
+                    console.warn(msg);
+                }
+            }
+        }
+        catch (error) {
+            console.warn("[DB] Failed to check BYPASSRLS:", error);
+        }
+        // 2) Ensure migrations are applied (optional auto-run)
+        const runOnStart = process.env.RUN_MIGRATIONS_ON_START === "true";
+        const requireNoPending = process.env.REQUIRE_NO_PENDING_MIGRATIONS
+            ? process.env.REQUIRE_NO_PENDING_MIGRATIONS === "true"
+            : isProdEnv;
+        if (runOnStart) {
+            const ran = yield exports.AppDataSource.runMigrations();
+            console.log(`[DB] Migrations applied on start: ${ran.length}`);
+        }
+        else if (requireNoPending) {
+            const hasPending = yield exports.AppDataSource.showMigrations();
+            if (hasPending) {
+                throw new Error("[DB] Pending migrations detected. Run `npm run migration:run` (or set RUN_MIGRATIONS_ON_START=true).");
+            }
+        }
     }
     catch (error) {
         console.error("Error connecting to database:", error);

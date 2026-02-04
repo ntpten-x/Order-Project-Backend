@@ -15,9 +15,12 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthController = void 0;
 const database_1 = require("../database/database");
 const Users_1 = require("../entity/Users");
+const Branch_1 = require("../entity/Branch");
 const bcrypt_1 = __importDefault(require("bcrypt"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const securityLogger_1 = require("../utils/securityLogger");
+const ApiResponse_1 = require("../utils/ApiResponse");
+const dbContext_1 = require("../database/dbContext");
 class AuthController {
     static login(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
@@ -27,7 +30,7 @@ class AuthController {
             try {
                 const user = yield userRepository.findOne({
                     where: { username },
-                    relations: ["roles", "branch"]
+                    relations: ["roles"]
                 });
                 if (!user) {
                     securityLogger_1.securityLogger.log({
@@ -38,7 +41,7 @@ class AuthController {
                         method: req.method,
                         details: { reason: 'User not found', username }
                     });
-                    return res.status(401).json({ message: "ไม่พบข้อมูลผู้ใช้" });
+                    return ApiResponse_1.ApiResponses.unauthorized(res, "ไม่พบข้อมูลผู้ใช้");
                 }
                 // Check if user is disabled
                 if (user.is_use === false) {
@@ -51,7 +54,7 @@ class AuthController {
                         method: req.method,
                         details: { reason: 'Account disabled' }
                     });
-                    return res.status(403).json({ message: "บัญชีถูกปิด" });
+                    return ApiResponse_1.ApiResponses.forbidden(res, "บัญชีถูกปิด");
                 }
                 // Compare password
                 // Note: In a real app, passwords should be hashed. 
@@ -71,7 +74,7 @@ class AuthController {
                     });
                     // Check for suspicious activity
                     securityLogger_1.securityLogger.checkSuspiciousActivity(user.id, ip);
-                    return res.status(401).json({ message: "ไม่พบข้อมูลผู้ใช้" });
+                    return ApiResponse_1.ApiResponses.unauthorized(res, "ไม่พบข้อมูลผู้ใช้");
                 }
                 // Log successful login
                 securityLogger_1.securityLogger.log({
@@ -83,12 +86,19 @@ class AuthController {
                     method: req.method,
                     details: { username }
                 });
+                const role = user.roles.roles_name;
+                const isAdmin = role === "Admin";
+                // branches table is RLS-protected; load branch under branch context
+                let branch;
+                if (user.branch_id) {
+                    branch = yield (0, dbContext_1.runWithDbContext)({ branchId: user.branch_id, userId: user.id, role, isAdmin }, () => __awaiter(this, void 0, void 0, function* () { return (0, dbContext_1.getRepository)(Branch_1.Branch).findOneBy({ id: user.branch_id }); }));
+                }
                 // Generate Token
                 const secret = process.env.JWT_SECRET;
                 if (!secret) {
-                    return res.status(500).json({ message: "Server misconfiguration: JWT_SECRET missing" });
+                    return ApiResponse_1.ApiResponses.internalError(res, "Server misconfiguration: JWT_SECRET missing");
                 }
-                const token = jsonwebtoken_1.default.sign({ id: user.id, username: user.username, role: user.roles.roles_name }, secret, { expiresIn: "10h" } // Token valid for 10 hours
+                const token = jsonwebtoken_1.default.sign({ id: user.id, username: user.username, role }, secret, { expiresIn: "10h" } // Token valid for 10 hours
                 );
                 // Set Cookie
                 res.cookie("token", token, {
@@ -104,29 +114,29 @@ class AuthController {
                 // Notify via Socket
                 const { SocketService } = require("../services/socket.service");
                 SocketService.getInstance().emit('users:update-status', { id: user.id, is_active: true });
-                return res.status(200).json({
-                    message: "เข้าสู่ระบบสำเร็จ",
+                return ApiResponse_1.ApiResponses.ok(res, {
                     token,
                     user: {
                         id: user.id,
                         username: user.username,
-                        role: user.roles.roles_name,
+                        name: user.name,
+                        role,
                         display_name: user.roles.display_name,
                         branch_id: user.branch_id,
-                        branch: user.branch ? {
-                            id: user.branch.id,
-                            branch_name: user.branch.branch_name,
-                            branch_code: user.branch.branch_code,
-                            address: user.branch.address,
-                            phone: user.branch.phone,
-                            is_active: user.branch.is_active
+                        branch: branch ? {
+                            id: branch.id,
+                            branch_name: branch.branch_name,
+                            branch_code: branch.branch_code,
+                            address: branch.address,
+                            phone: branch.phone,
+                            is_active: branch.is_active
                         } : undefined
                     }
                 });
             }
             catch (error) {
-                console.error("เกิดข้อผิดพลาดในการเข้าสู่ระบบ:", error);
-                return res.status(500).json({ message: "เกิดข้อผิดพลาดในการเข้าสู่ระบบ" });
+                console.error("Login error:", error);
+                return ApiResponse_1.ApiResponses.internalError(res, "เกิดข้อผิดพลาดในการเข้าสู่ระบบ");
             }
         });
     }
@@ -169,18 +179,26 @@ class AuthController {
                 sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
                 path: "/"
             });
-            return res.status(200).json({ message: "ออกจากระบบสำเร็จ" });
+            // Clear any selected admin branch context on logout to avoid stale branch selection across sessions.
+            res.clearCookie("active_branch_id", {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === "production",
+                sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+                path: "/"
+            });
+            return ApiResponse_1.ApiResponses.ok(res, { message: "ออกจากระบบสำเร็จ" });
         });
     }
     static getMe(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
             if (!req.user) {
-                return res.status(401).json({ message: "ไม่พบข้อมูลผู้ใช้" });
+                return ApiResponse_1.ApiResponses.unauthorized(res, "ไม่พบข้อมูลผู้ใช้");
             }
             const user = req.user;
-            return res.json({
+            return ApiResponse_1.ApiResponses.ok(res, {
                 id: user.id,
                 username: user.username,
+                name: user.name,
                 role: user.roles ? user.roles.roles_name : "unknown",
                 display_name: user.roles ? user.roles.display_name : user.username,
                 is_active: user.is_active,
@@ -195,6 +213,41 @@ class AuthController {
                     is_active: user.branch.is_active
                 } : undefined
             });
+        });
+    }
+    /**
+     * Admin-only: Switch the active branch context for RLS (stored in a cookie).
+     * - branch_id = uuid: select branch context (admin sees only that branch)
+     * - branch_id = null/undefined: clear selection (admin sees all branches)
+     */
+    static switchBranch(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a, _b, _c;
+            if (!req.user) {
+                return ApiResponse_1.ApiResponses.unauthorized(res, "Authentication required");
+            }
+            const role = (_a = req.user.roles) === null || _a === void 0 ? void 0 : _a.roles_name;
+            if (role !== "Admin") {
+                return ApiResponse_1.ApiResponses.forbidden(res, "Access denied: Admin only");
+            }
+            const branchId = ((_c = (_b = req.body) === null || _b === void 0 ? void 0 : _b.branch_id) !== null && _c !== void 0 ? _c : null);
+            const cookieOptions = {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === "production",
+                sameSite: (process.env.NODE_ENV === "production" ? "none" : "lax"),
+                path: "/",
+                maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+            };
+            if (!branchId) {
+                res.clearCookie("active_branch_id", cookieOptions);
+                return ApiResponse_1.ApiResponses.ok(res, { active_branch_id: null });
+            }
+            const branch = yield (0, dbContext_1.getRepository)(Branch_1.Branch).findOneBy({ id: branchId });
+            if (!branch) {
+                return ApiResponse_1.ApiResponses.notFound(res, "Branch");
+            }
+            res.cookie("active_branch_id", branchId, cookieOptions);
+            return ApiResponse_1.ApiResponses.ok(res, { active_branch_id: branchId });
         });
     }
 }

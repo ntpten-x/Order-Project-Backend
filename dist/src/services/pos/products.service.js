@@ -24,10 +24,10 @@ class ProductsService {
         this.socketService = socket_service_1.SocketService.getInstance();
         this.CACHE_PREFIX = 'products';
     }
-    findAll(page, limit, category_id, q, branchId) {
+    findAll(page, limit, category_id, q, is_active, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             // Caching is handled in ProductsModel
-            return this.productsModel.findAll(page, limit, category_id, q, undefined, branchId);
+            return this.productsModel.findAll(page, limit, category_id, q, is_active, branchId);
         });
     }
     findOne(id, branchId) {
@@ -45,32 +45,45 @@ class ProductsService {
     create(products) {
         return __awaiter(this, void 0, void 0, function* () {
             const savedProducts = yield this.productsModel.create(products);
-            const createdProducts = yield this.productsModel.findOne(savedProducts.id);
+            const createdProducts = yield this.productsModel.findOne(savedProducts.id, products.branch_id);
             if (createdProducts) {
                 // Cache invalidation is handled in ProductsModel
-                this.socketService.emit('products:create', createdProducts);
+                if (createdProducts.branch_id) {
+                    this.socketService.emitToBranch(createdProducts.branch_id, 'products:create', createdProducts);
+                }
                 return createdProducts;
             }
             return savedProducts;
         });
     }
-    update(id, products) {
+    update(id, products, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
-            yield this.productsModel.update(id, products);
-            const updatedProducts = yield this.productsModel.findOne(id);
+            const effectiveBranchId = branchId || products.branch_id;
+            yield this.productsModel.update(id, products, effectiveBranchId);
+            const updatedProducts = yield this.productsModel.findOne(id, effectiveBranchId);
             if (updatedProducts) {
                 // Cache invalidation is handled in ProductsModel
-                this.socketService.emit('products:update', updatedProducts);
+                const emitBranchId = updatedProducts.branch_id || effectiveBranchId;
+                if (emitBranchId) {
+                    this.socketService.emitToBranch(emitBranchId, 'products:update', updatedProducts);
+                }
                 return updatedProducts;
             }
             throw new AppError_1.AppError("พบข้อผิดพลาดในการอัปเดตสินค้า", 500);
         });
     }
-    delete(id) {
+    delete(id, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
-            yield this.productsModel.delete(id);
+            const existing = yield this.productsModel.findOne(id, branchId);
+            if (!existing) {
+                throw new AppError_1.AppError("Product not found", 404);
+            }
+            yield this.productsModel.delete(id, branchId);
             // Cache invalidation is handled in ProductsModel
-            this.socketService.emit('products:delete', { id });
+            const effectiveBranchId = existing.branch_id || branchId;
+            if (effectiveBranchId) {
+                this.socketService.emitToBranch(effectiveBranchId, 'products:delete', { id });
+            }
         });
     }
 }

@@ -20,7 +20,7 @@ __decorate([
     __metadata("design:type", String)
 ], ShopProfile.prototype, "id", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ name: "branch_id", type: "uuid", nullable: true }),
+    (0, typeorm_1.Column)({ name: "branch_id", type: "uuid" }),
     __metadata("design:type", String)
 ], ShopProfile.prototype, "branch_id", void 0);
 __decorate([
