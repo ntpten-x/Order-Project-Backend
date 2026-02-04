@@ -1,21 +1,19 @@
-import { AppDataSource } from "../../database/database";
 import { ShopProfile } from "../../entity/pos/ShopProfile";
+import { getRepository } from "../../database/dbContext";
 
 export class ShopProfileModels {
-    private repo = AppDataSource.getRepository(ShopProfile);
-
-    // Get the first profile (assuming single shop for now)
-    async getProfile(): Promise<ShopProfile | null> {
-        return this.repo.findOne({ where: {} });
+    async getProfile(branchId: string): Promise<ShopProfile | null> {
+        return getRepository(ShopProfile).findOne({ where: { branch_id: branchId } as any });
     }
 
-    async createOrUpdate(data: Partial<ShopProfile>): Promise<ShopProfile> {
-        const existing = await this.getProfile();
+    async createOrUpdate(branchId: string, data: Partial<ShopProfile>): Promise<ShopProfile> {
+        const repo = getRepository(ShopProfile);
+        const existing = await this.getProfile(branchId);
         if (existing) {
-            await this.repo.update(existing.id, data);
-            return this.repo.findOneBy({ id: existing.id }) as Promise<ShopProfile>;
+            await repo.update(existing.id, { ...data, branch_id: branchId });
+            return repo.findOneBy({ id: existing.id }) as Promise<ShopProfile>;
         }
-        const newProfile = this.repo.create(data);
-        return this.repo.save(newProfile);
+        const newProfile = repo.create({ ...data, branch_id: branchId });
+        return repo.save(newProfile);
     }
 }

@@ -1,4 +1,3 @@
-import { AppDataSource } from "../../database/database";
 import { Products } from "../../entity/pos/Products";
 import { 
     paginate, 
@@ -8,6 +7,7 @@ import {
     PaginatedResult 
 } from "../../utils/dbHelpers";
 import { withCache, cacheKey, invalidateCache, queryCache } from "../../utils/cache";
+import { getDbContext, getRepository } from "../../database/dbContext";
 
 /**
  * Products Model with optimized queries
@@ -17,9 +17,16 @@ import { withCache, cacheKey, invalidateCache, queryCache } from "../../utils/ca
  * - Uses parameterized queries to prevent SQL injection
  */
 export class ProductsModels {
-    private productsRepository = AppDataSource.getRepository(Products);
     private readonly CACHE_PREFIX = 'products';
     private readonly CACHE_TTL = 2 * 60 * 1000; // 2 minutes
+
+    private getCacheScopeParts(branchId?: string): Array<string> {
+        const ctx = getDbContext();
+        const effectiveBranchId = branchId ?? ctx?.branchId;
+        if (effectiveBranchId) return ["branch", effectiveBranchId];
+        if (ctx?.isAdmin) return ["admin"];
+        return ["public"];
+    }
 
     /**
      * Find all products with pagination, filtering, and search
@@ -33,7 +40,8 @@ export class ProductsModels {
         is_active?: boolean,
         branchId?: string
     ): Promise<PaginatedResult<Products>> {
-        const key = cacheKey(this.CACHE_PREFIX, 'list', page, limit, category_id, q, is_active, branchId);
+        const scope = this.getCacheScopeParts(branchId);
+        const key = cacheKey(this.CACHE_PREFIX, ...scope, 'list', page, limit, category_id, q, is_active);
         
         // Skip cache if search query exists (too many variants)
         if (q?.trim()) {
@@ -56,7 +64,8 @@ export class ProductsModels {
         is_active?: boolean,
         branchId?: string
     ): Promise<PaginatedResult<Products>> {
-        let query = this.productsRepository.createQueryBuilder("products")
+        const productsRepository = getRepository(Products);
+        let query = productsRepository.createQueryBuilder("products")
             .leftJoinAndSelect("products.category", "category")
             .leftJoinAndSelect("products.unit", "unit")
             .orderBy("products.create_date", "ASC");
@@ -88,12 +97,14 @@ export class ProductsModels {
      * ID is primary key (indexed)
      */
     async findOne(id: string, branchId?: string): Promise<Products | null> {
-        const key = cacheKey(this.CACHE_PREFIX, 'single', id, branchId);
+        const scope = this.getCacheScopeParts(branchId);
+        const key = cacheKey(this.CACHE_PREFIX, ...scope, 'single', id);
         
         return withCache(
             key,
             () => {
-                const query = this.productsRepository.createQueryBuilder("products")
+                const productsRepository = getRepository(Products);
+                const query = productsRepository.createQueryBuilder("products")
                     .leftJoinAndSelect("products.category", "category")
                     .leftJoinAndSelect("products.unit", "unit")
                     .where("products.id = :id", { id });
@@ -114,12 +125,14 @@ export class ProductsModels {
      * Uses indexed product_name column
      */
     async findOneByName(product_name: string, branchId?: string): Promise<Products | null> {
-        const key = cacheKey(this.CACHE_PREFIX, 'name', product_name, branchId);
+        const scope = this.getCacheScopeParts(branchId);
+        const key = cacheKey(this.CACHE_PREFIX, ...scope, 'name', product_name);
         
         return withCache(
             key,
             () => {
-                const query = this.productsRepository.createQueryBuilder("products")
+                const productsRepository = getRepository(Products);
+                const query = productsRepository.createQueryBuilder("products")
                     .leftJoinAndSelect("products.category", "category")
                     .leftJoinAndSelect("products.unit", "unit")
                     .where("products.product_name = :product_name", { product_name });
@@ -140,7 +153,8 @@ export class ProductsModels {
      * Invalidates cache after creation
      */
     async create(data: Products): Promise<Products> {
-        const result = await this.productsRepository
+        const productsRepository = getRepository(Products);
+        const result = await productsRepository
             .createQueryBuilder("products")
             .insert()
             .values(data)
@@ -148,7 +162,7 @@ export class ProductsModels {
             .execute();
         
         // Invalidate list cache
-        this.invalidateProductCache();
+        this.invalidateProductCache(data.branch_id);
         
         return result.raw[0];
     }
@@ -157,16 +171,18 @@ export class ProductsModels {
      * Update existing product
      * Invalidates cache after update
      */
-    async update(id: string, data: Products): Promise<Products> {
-        const result = await this.productsRepository
+    async update(id: string, data: Products, branchId?: string): Promise<Products> {
+        const productsRepository = getRepository(Products);
+        const result = await productsRepository
             .createQueryBuilder("products")
             .update(data)
             .where("products.id = :id", { id })
+            .andWhere(branchId ? "products.branch_id = :branchId" : "1=1", branchId ? { branchId } : {})
             .returning("id")
             .execute();
         
         // Invalidate relevant caches
-        this.invalidateProductCache(id);
+        this.invalidateProductCache(branchId ?? data.branch_id, id);
         
         return result.raw[0];
     }
@@ -175,28 +191,36 @@ export class ProductsModels {
      * Delete product
      * Invalidates cache after deletion
      */
-    async delete(id: string): Promise<void> {
-        await this.productsRepository
+    async delete(id: string, branchId?: string): Promise<void> {
+        const productsRepository = getRepository(Products);
+        await productsRepository
             .createQueryBuilder("products")
             .delete()
             .where("products.id = :id", { id })
+            .andWhere(branchId ? "products.branch_id = :branchId" : "1=1", branchId ? { branchId } : {})
             .execute();
         
         // Invalidate relevant caches
-        this.invalidateProductCache(id);
+        this.invalidateProductCache(branchId, id);
     }
 
     /**
      * Invalidate product cache
      * Called after create/update/delete operations
      */
-    private invalidateProductCache(id?: string): void {
-        const patterns = [`${this.CACHE_PREFIX}:list`];
-        
+    private invalidateProductCache(branchId?: string, id?: string): void {
+        if (!branchId) return;
+
+        const patterns = [
+            cacheKey(this.CACHE_PREFIX, "branch", branchId, "list"),
+            cacheKey(this.CACHE_PREFIX, "branch", branchId, "name"),
+            cacheKey(this.CACHE_PREFIX, "branch", branchId, "count-by-category"),
+        ];
+
         if (id) {
-            patterns.push(`${this.CACHE_PREFIX}:single:${id}`);
+            patterns.push(cacheKey(this.CACHE_PREFIX, "branch", branchId, "single", id));
         }
-        
+
         invalidateCache(patterns);
     }
 
@@ -205,11 +229,12 @@ export class ProductsModels {
      * Useful for dashboard statistics
      */
     async countByCategory(): Promise<{ category_id: string; count: number }[]> {
-        const key = cacheKey(this.CACHE_PREFIX, 'count-by-category');
+        const scope = this.getCacheScopeParts();
+        const key = cacheKey(this.CACHE_PREFIX, ...scope, 'count-by-category');
         
         return withCache(
             key,
-            () => this.productsRepository
+            () => getRepository(Products)
                 .createQueryBuilder("products")
                 .select("products.category_id", "category_id")
                 .addSelect("COUNT(*)", "count")

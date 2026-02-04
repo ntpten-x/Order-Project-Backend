@@ -5,6 +5,8 @@ import { StockOrdersModel } from "../../models/stock/orders.model";
 import { catchAsync } from "../../utils/catchAsync";
 import { AppError } from "../../utils/AppError";
 import { ApiResponses } from "../../utils/ApiResponse";
+import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../../utils/auditLogger";
+import { getClientIp } from "../../utils/securityLogger";
 
 /**
  * Stock Orders Controller
@@ -27,6 +29,22 @@ export class OrdersController {
         }
 
         const order = await this.ordersService.createOrder(ordered_by_id, items, remark, branch_id);
+
+        const userInfo = getUserInfoFromRequest(req as any);
+        await auditLogger.log({
+            action_type: AuditActionType.STOCK_ORDER_CREATE,
+            ...userInfo,
+            ip_address: getClientIp(req),
+            user_agent: req.get("User-Agent"),
+            entity_type: "PurchaseOrder",
+            entity_id: (order as any).id,
+            branch_id: branch_id,
+            new_values: { ordered_by_id, items, remark },
+            path: req.originalUrl,
+            method: req.method,
+            description: `Create stock order ${(order as any).id}`,
+        });
+
         return ApiResponses.created(res, order);
     });
 
@@ -64,7 +82,8 @@ export class OrdersController {
 
     getOrderById = catchAsync(async (req: Request, res: Response) => {
         const { id } = req.params;
-        const order = await this.ordersService.getOrderById(id);
+        const branch_id = (req as any).user?.branch_id;
+        const order = await this.ordersService.getOrderById(id, branch_id);
         if (!order) {
             throw AppError.notFound("การสั่งซื้อ");
         }
@@ -79,7 +98,25 @@ export class OrdersController {
             throw AppError.badRequest("ไม่พบข้อมูลสินค้า");
         }
 
-        const updatedOrder = await this.ordersService.updateOrder(id, items);
+        const branch_id = (req as any).user?.branch_id;
+        const oldOrder = await this.ordersService.getOrderById(id, branch_id);
+        const updatedOrder = await this.ordersService.updateOrder(id, items, branch_id);
+
+        const userInfo = getUserInfoFromRequest(req as any);
+        await auditLogger.log({
+            action_type: AuditActionType.STOCK_ORDER_UPDATE,
+            ...userInfo,
+            ip_address: getClientIp(req),
+            user_agent: req.get("User-Agent"),
+            entity_type: "PurchaseOrder",
+            entity_id: id,
+            branch_id: branch_id,
+            old_values: oldOrder as any,
+            new_values: { items },
+            path: req.originalUrl,
+            method: req.method,
+            description: `Update stock order ${id}`,
+        });
         return ApiResponses.ok(res, updatedOrder);
     });
 
@@ -91,13 +128,50 @@ export class OrdersController {
             throw AppError.badRequest("สถานะไม่ถูกต้อง");
         }
 
-        const updatedOrder = await this.ordersService.updateStatus(id, status);
+        const branch_id = (req as any).user?.branch_id;
+        const oldOrder = await this.ordersService.getOrderById(id, branch_id);
+        const updatedOrder = await this.ordersService.updateStatus(id, status, branch_id);
+
+        const userInfo = getUserInfoFromRequest(req as any);
+        await auditLogger.log({
+            action_type: AuditActionType.STOCK_ORDER_STATUS_UPDATE,
+            ...userInfo,
+            ip_address: getClientIp(req),
+            user_agent: req.get("User-Agent"),
+            entity_type: "PurchaseOrder",
+            entity_id: id,
+            branch_id: branch_id,
+            old_values: oldOrder as any,
+            new_values: { status },
+            path: req.originalUrl,
+            method: req.method,
+            description: `Update stock order status ${id} -> ${status}`,
+        });
         return ApiResponses.ok(res, updatedOrder);
     });
 
     deleteOrder = catchAsync(async (req: Request, res: Response) => {
         const { id } = req.params;
-        const result = await this.ordersService.deleteOrder(id);
+        const branch_id = (req as any).user?.branch_id;
+        const oldOrder = await this.ordersService.getOrderById(id, branch_id);
+        const result = await this.ordersService.deleteOrder(id, branch_id);
+
+        if (result?.affected) {
+            const userInfo = getUserInfoFromRequest(req as any);
+            await auditLogger.log({
+                action_type: AuditActionType.STOCK_ORDER_DELETE,
+                ...userInfo,
+                ip_address: getClientIp(req),
+                user_agent: req.get("User-Agent"),
+                entity_type: "PurchaseOrder",
+                entity_id: id,
+                branch_id: branch_id,
+                old_values: oldOrder as any,
+                path: req.originalUrl,
+                method: req.method,
+                description: `Delete stock order ${id}`,
+            });
+        }
         if (!result || result.affected === 0) {
             throw AppError.notFound("การสั่งซื้อ");
         }
@@ -117,7 +191,25 @@ export class OrdersController {
             throw AppError.badRequest("ไม่พบข้อมูลผู้สั่งซื้อ");
         }
 
-        const updatedOrder = await this.ordersService.confirmPurchase(id, items, purchased_by_id);
+        const branch_id = (req as any).user?.branch_id;
+        const oldOrder = await this.ordersService.getOrderById(id, branch_id);
+        const updatedOrder = await this.ordersService.confirmPurchase(id, items, purchased_by_id, branch_id);
+
+        const userInfo = getUserInfoFromRequest(req as any);
+        await auditLogger.log({
+            action_type: AuditActionType.STOCK_ORDER_CONFIRM_PURCHASE,
+            ...userInfo,
+            ip_address: getClientIp(req),
+            user_agent: req.get("User-Agent"),
+            entity_type: "PurchaseOrder",
+            entity_id: id,
+            branch_id: branch_id,
+            old_values: oldOrder as any,
+            new_values: { items, purchased_by_id },
+            path: req.originalUrl,
+            method: req.method,
+            description: `Confirm purchase for stock order ${id}`,
+        });
         return ApiResponses.ok(res, updatedOrder);
     });
 }

@@ -4,6 +4,8 @@ import { catchAsync } from "../../utils/catchAsync";
 import { AppError } from "../../utils/AppError";
 import { ApiResponses } from "../../utils/ApiResponse";
 import { getBranchId } from "../../middleware/branch.middleware";
+import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../../utils/auditLogger";
+import { getClientIp } from "../../utils/securityLogger";
 
 /**
  * Category Controller
@@ -41,15 +43,55 @@ export class CategoryController {
 
     create = catchAsync(async (req: Request, res: Response) => {
         const branchId = getBranchId(req as any);
-        if (branchId && !req.body.branch_id) {
+        if (branchId) {
             req.body.branch_id = branchId;
         }
         const category = await this.categoryService.create(req.body);
+
+        const userInfo = getUserInfoFromRequest(req as any);
+        await auditLogger.log({
+            action_type: AuditActionType.CATEGORY_CREATE,
+            ...userInfo,
+            ip_address: getClientIp(req),
+            user_agent: req.get("User-Agent"),
+            entity_type: "Category",
+            entity_id: (category as any).id,
+            branch_id: branchId,
+            new_values: req.body,
+            path: req.originalUrl,
+            method: req.method,
+            description: `Create category ${(category as any).category_name || (category as any).display_name || (category as any).id}`,
+        });
+
         return ApiResponses.created(res, category);
     });
 
     update = catchAsync(async (req: Request, res: Response) => {
-        const category = await this.categoryService.update(req.params.id, req.body);
+        const branchId = getBranchId(req as any);
+        if (branchId) {
+            req.body.branch_id = branchId;
+        }
+        const oldCategory = await this.categoryService.findOne(req.params.id, branchId);
+        const category = await this.categoryService.update(req.params.id, req.body, branchId);
+
+        if (category) {
+            const userInfo = getUserInfoFromRequest(req as any);
+            await auditLogger.log({
+                action_type: AuditActionType.CATEGORY_UPDATE,
+                ...userInfo,
+                ip_address: getClientIp(req),
+                user_agent: req.get("User-Agent"),
+                entity_type: "Category",
+                entity_id: req.params.id,
+                branch_id: branchId,
+                old_values: oldCategory as any,
+                new_values: req.body,
+                path: req.originalUrl,
+                method: req.method,
+                description: `Update category ${req.params.id}`,
+            });
+        }
+
         if (!category) {
             throw AppError.notFound("หมวดหมู่");
         }
@@ -57,7 +99,24 @@ export class CategoryController {
     });
 
     delete = catchAsync(async (req: Request, res: Response) => {
-        await this.categoryService.delete(req.params.id);
+        const branchId = getBranchId(req as any);
+        const oldCategory = await this.categoryService.findOne(req.params.id, branchId);
+        await this.categoryService.delete(req.params.id, branchId);
+
+        const userInfo = getUserInfoFromRequest(req as any);
+        await auditLogger.log({
+            action_type: AuditActionType.CATEGORY_DELETE,
+            ...userInfo,
+            ip_address: getClientIp(req),
+            user_agent: req.get("User-Agent"),
+            entity_type: "Category",
+            entity_id: req.params.id,
+            branch_id: branchId,
+            old_values: oldCategory as any,
+            path: req.originalUrl,
+            method: req.method,
+            description: `Delete category ${req.params.id}`,
+        });
         return ApiResponses.ok(res, { message: "หมวดหมู่ลบสำเร็จ" });
     });
 }

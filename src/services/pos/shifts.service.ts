@@ -1,4 +1,3 @@
-import { AppDataSource } from "../../database/database";
 import { MoreThanOrEqual } from "typeorm";
 import { Shifts, ShiftStatus } from "../../entity/pos/Shifts";
 import { Payments } from "../../entity/pos/Payments";
@@ -7,12 +6,21 @@ import { SalesOrder } from "../../entity/pos/SalesOrder";
 import { OrderStatus } from "../../entity/pos/OrderEnums";
 import { AppError } from "../../utils/AppError";
 import { SocketService } from "../socket.service";
+import { getRepository } from "../../database/dbContext";
 
 export class ShiftsService {
-    private shiftsRepo = AppDataSource.getRepository(Shifts);
-    private paymentsRepo = AppDataSource.getRepository(Payments);
-    private salesOrderItemRepo = AppDataSource.getRepository(SalesOrderItem);
-    private salesOrderRepo = AppDataSource.getRepository(SalesOrder);
+    private get shiftsRepo() {
+        return getRepository(Shifts);
+    }
+    private get paymentsRepo() {
+        return getRepository(Payments);
+    }
+    private get salesOrderItemRepo() {
+        return getRepository(SalesOrderItem);
+    }
+    private get salesOrderRepo() {
+        return getRepository(SalesOrder);
+    }
     private socketService = SocketService.getInstance();
 
     async openShift(userId: string, startAmount: number, branchId?: string): Promise<Shifts> {
@@ -36,7 +44,9 @@ export class ShiftsService {
         newShift.open_time = new Date();
 
         const savedShift = await this.shiftsRepo.save(newShift);
-        this.socketService.emit('shifts:update', savedShift);
+        if (branchId) {
+            this.socketService.emitToBranch(branchId, 'shifts:update', savedShift);
+        }
         return savedShift;
     }
 
@@ -59,11 +69,11 @@ export class ShiftsService {
         // Only check orders created during this shift
         const pendingOrders = await this.salesOrderRepo.count({
             where: [
-                { status: OrderStatus.Pending, create_date: MoreThanOrEqual(activeShift.open_time) },
-                { status: OrderStatus.Cooking, create_date: MoreThanOrEqual(activeShift.open_time) },
-                { status: OrderStatus.Served, create_date: MoreThanOrEqual(activeShift.open_time) },
-                { status: OrderStatus.WaitingForPayment, create_date: MoreThanOrEqual(activeShift.open_time) },
-                { status: OrderStatus.pending, create_date: MoreThanOrEqual(activeShift.open_time) }
+                { status: OrderStatus.Pending, create_date: MoreThanOrEqual(activeShift.open_time), branch_id: activeShift.branch_id },
+                { status: OrderStatus.Cooking, create_date: MoreThanOrEqual(activeShift.open_time), branch_id: activeShift.branch_id },
+                { status: OrderStatus.Served, create_date: MoreThanOrEqual(activeShift.open_time), branch_id: activeShift.branch_id },
+                { status: OrderStatus.WaitingForPayment, create_date: MoreThanOrEqual(activeShift.open_time), branch_id: activeShift.branch_id },
+                { status: OrderStatus.pending, create_date: MoreThanOrEqual(activeShift.open_time), branch_id: activeShift.branch_id }
             ]
         });
 
@@ -88,13 +98,16 @@ export class ShiftsService {
         activeShift.close_time = new Date();
 
         const savedShift = await this.shiftsRepo.save(activeShift);
-        this.socketService.emit('shifts:update', savedShift);
+        const branchId = activeShift.branch_id;
+        if (branchId) {
+            this.socketService.emitToBranch(branchId, 'shifts:update', savedShift);
+        }
         return savedShift;
     }
 
-    async getShiftSummary(shiftId: string) {
+    async getShiftSummary(shiftId: string, branchId?: string) {
         const shift = await this.shiftsRepo.findOne({
-            where: { id: shiftId },
+            where: branchId ? ({ id: shiftId, branch_id: branchId } as any) : ({ id: shiftId } as any),
             relations: ["payments", "payments.payment_method", "payments.order", "payments.order.items", "payments.order.items.product", "payments.order.items.product.category", "payments.order.items.product.unit"]
         });
 

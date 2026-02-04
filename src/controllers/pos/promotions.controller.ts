@@ -4,6 +4,8 @@ import { catchAsync } from "../../utils/catchAsync";
 import { AppError } from "../../utils/AppError";
 import { ApiResponses } from "../../utils/ApiResponse";
 import { AuthRequest } from "../../middleware/auth.middleware";
+import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../../utils/auditLogger";
+import { getClientIp } from "../../utils/securityLogger";
 
 export class PromotionsController {
     private promotionsService = new PromotionsService();
@@ -45,6 +47,21 @@ export class PromotionsController {
         }
 
         const promotion = await this.promotionsService.applyPromotion(code, branchId);
+
+        const userInfo = getUserInfoFromRequest(req as any);
+        await auditLogger.log({
+            action_type: AuditActionType.PROMOTION_APPLY,
+            ...userInfo,
+            ip_address: getClientIp(req),
+            user_agent: req.get("User-Agent"),
+            entity_type: "Promotions",
+            entity_id: (promotion as any)?.id,
+            branch_id: branchId,
+            new_values: { code },
+            path: req.originalUrl,
+            method: req.method,
+            description: `Apply promotion ${code}`,
+        });
 
         return ApiResponses.ok(res, promotion);
     });
@@ -112,6 +129,21 @@ export class PromotionsController {
 
         const promotion = await this.promotionsService.create(req.body, branchId);
 
+        const userInfo = getUserInfoFromRequest(req as any);
+        await auditLogger.log({
+            action_type: AuditActionType.PROMOTION_CREATE,
+            ...userInfo,
+            ip_address: getClientIp(req),
+            user_agent: req.get("User-Agent"),
+            entity_type: "Promotions",
+            entity_id: (promotion as any)?.id,
+            branch_id: branchId,
+            new_values: req.body,
+            path: req.originalUrl,
+            method: req.method,
+            description: `Create promotion ${(promotion as any)?.promotion_code || (promotion as any)?.id}`,
+        });
+
         return ApiResponses.created(res, promotion);
     });
 
@@ -122,7 +154,26 @@ export class PromotionsController {
         const { id } = req.params;
         const branchId = req.user?.branch_id;
 
+        const oldPromotion = await this.promotionsService.getById(id, branchId);
         const promotion = await this.promotionsService.update(id, req.body, branchId);
+
+        if (promotion) {
+            const userInfo = getUserInfoFromRequest(req as any);
+            await auditLogger.log({
+                action_type: AuditActionType.PROMOTION_UPDATE,
+                ...userInfo,
+                ip_address: getClientIp(req),
+                user_agent: req.get("User-Agent"),
+                entity_type: "Promotions",
+                entity_id: id,
+                branch_id: branchId,
+                old_values: oldPromotion as any,
+                new_values: req.body,
+                path: req.originalUrl,
+                method: req.method,
+                description: `Update promotion ${id}`,
+            });
+        }
 
         if (!promotion) {
             throw AppError.notFound("Promotion not found");
@@ -138,7 +189,23 @@ export class PromotionsController {
         const { id } = req.params;
         const branchId = req.user?.branch_id;
 
+        const oldPromotion = await this.promotionsService.getById(id, branchId);
         await this.promotionsService.delete(id, branchId);
+
+        const userInfo = getUserInfoFromRequest(req as any);
+        await auditLogger.log({
+            action_type: AuditActionType.PROMOTION_DELETE,
+            ...userInfo,
+            ip_address: getClientIp(req),
+            user_agent: req.get("User-Agent"),
+            entity_type: "Promotions",
+            entity_id: id,
+            branch_id: branchId,
+            old_values: oldPromotion as any,
+            path: req.originalUrl,
+            method: req.method,
+            description: `Delete promotion ${id}`,
+        });
 
         return ApiResponses.ok(res, { message: "Promotion deleted successfully" });
     });

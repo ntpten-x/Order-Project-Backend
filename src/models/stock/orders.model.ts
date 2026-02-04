@@ -1,53 +1,42 @@
-import { AppDataSource } from "../../database/database";
 import { PurchaseOrder, PurchaseOrderStatus } from "../../entity/stock/PurchaseOrder";
 import { StockOrdersItem } from "../../entity/stock/OrdersItem";
 import { StockOrdersDetail } from "../../entity/stock/OrdersDetail";
+import { getRepository, runInTransaction } from "../../database/dbContext";
 
 export class StockOrdersModel {
-    private ordersRepository = AppDataSource.getRepository(PurchaseOrder);
-
     // Creates an order and its items in a transaction
     // Creates an order and its items in a transaction
     async createOrderWithItems(orderedById: string, items: { ingredient_id: string; quantity_ordered: number }[], remark?: string, branchId?: string): Promise<PurchaseOrder> {
-        const queryRunner = AppDataSource.createQueryRunner();
-        await queryRunner.connect();
-        await queryRunner.startTransaction();
-
-        try {
-            const newOrder = queryRunner.manager.create(PurchaseOrder, {
+        return runInTransaction(async (manager) => {
+            const newOrder = manager.create(PurchaseOrder, {
                 ordered_by_id: orderedById,
                 status: PurchaseOrderStatus.PENDING,
-                remark: remark,
-                branch_id: branchId
+                remark,
+                branch_id: branchId,
             });
-            const savedOrder = await queryRunner.manager.save(newOrder);
 
-            const orderItems = items.map(item => queryRunner.manager.create(StockOrdersItem, {
-                orders_id: savedOrder.id,
-                ingredient_id: item.ingredient_id,
-                quantity_ordered: item.quantity_ordered
-            }));
-            await queryRunner.manager.save(orderItems);
+            const savedOrder = await manager.save(newOrder);
 
-            await queryRunner.commitTransaction();
+            const orderItems = items.map((item) =>
+                manager.create(StockOrdersItem, {
+                    orders_id: savedOrder.id,
+                    ingredient_id: item.ingredient_id,
+                    quantity_ordered: item.quantity_ordered,
+                })
+            );
 
-            // Return the complete order with relations (using the same transaction manager or separate generic find)
-            // It is safe to use queryRunner.manager to fetch before release to ensure consistency
-            return await this.findByIdInternal(savedOrder.id, queryRunner.manager);
+            await manager.save(orderItems);
 
-        } catch (error) {
-            await queryRunner.rollbackTransaction();
-            throw error;
-        } finally {
-            await queryRunner.release();
-        }
+            return this.findByIdInternal(savedOrder.id, manager, branchId);
+        });
     }
 
     async findAll(filters?: { status?: PurchaseOrderStatus | PurchaseOrderStatus[] }, page: number = 1, limit: number = 50, branchId?: string): Promise<{ data: PurchaseOrder[], total: number, page: number, limit: number }> {
         // Use QueryBuilder for better control and optimization
         const { In } = require("typeorm");
         
-        let query = this.ordersRepository.createQueryBuilder("order")
+        const ordersRepository = getRepository(PurchaseOrder);
+        let query = ordersRepository.createQueryBuilder("order")
             .leftJoinAndSelect("order.ordered_by", "ordered_by")
             .leftJoinAndSelect("order.ordersItems", "ordersItems")
             .leftJoinAndSelect("ordersItems.ingredient", "ingredient")
@@ -83,8 +72,13 @@ export class StockOrdersModel {
         };
     }
 
-    async updateOrderItems(orderId: string, newItems: { ingredient_id: string; quantity_ordered: number }[]): Promise<PurchaseOrder> {
-        return await AppDataSource.transaction(async (transactionalEntityManager) => {
+    async updateOrderItems(orderId: string, newItems: { ingredient_id: string; quantity_ordered: number }[], branchId?: string): Promise<PurchaseOrder> {
+        return await runInTransaction(async (transactionalEntityManager) => {
+            if (branchId) {
+                const order = await transactionalEntityManager.findOne(PurchaseOrder, { where: { id: orderId, branch_id: branchId } as any });
+                if (!order) throw new Error("Order not found");
+            }
+
             // 1. Fetch existing items
             const existingItems = await transactionalEntityManager.find(StockOrdersItem, {
                 where: { orders_id: orderId }
@@ -120,13 +114,13 @@ export class StockOrdersModel {
             }
 
             // 4. Return updated order
-            return this.findByIdInternal(orderId, transactionalEntityManager);
+            return this.findByIdInternal(orderId, transactionalEntityManager, branchId);
         });
     }
 
-    async findById(id: string): Promise<PurchaseOrder | null> {
-        return await this.ordersRepository.findOne({
-            where: { id },
+    async findById(id: string, branchId?: string): Promise<PurchaseOrder | null> {
+        return await getRepository(PurchaseOrder).findOne({
+            where: branchId ? ({ id, branch_id: branchId } as any) : ({ id } as any),
             relations: {
                 ordered_by: true,
                 ordersItems: {
@@ -141,21 +135,27 @@ export class StockOrdersModel {
         });
     }
 
-    async updateStatus(id: string, status: PurchaseOrderStatus): Promise<PurchaseOrder | null> {
-        const order = await this.ordersRepository.findOneBy({ id });
+    async updateStatus(id: string, status: PurchaseOrderStatus, branchId?: string): Promise<PurchaseOrder | null> {
+        const ordersRepository = getRepository(PurchaseOrder);
+        const order = await ordersRepository.findOneBy(branchId ? ({ id, branch_id: branchId } as any) : ({ id } as any));
         if (!order) return null;
 
         order.status = status;
-        return await this.ordersRepository.save(order);
+        return await ordersRepository.save(order);
     }
 
-    async delete(id: string): Promise<boolean> {
-        const result = await this.ordersRepository.delete(id);
+    async delete(id: string, branchId?: string): Promise<boolean> {
+        const result = await getRepository(PurchaseOrder).delete(branchId ? ({ id, branch_id: branchId } as any) : ({ id } as any));
         return result.affected !== 0;
     }
 
-    async confirmPurchase(orderId: string, items: { ingredient_id: string; actual_quantity: number; is_purchased: boolean }[], purchasedById: string): Promise<PurchaseOrder> {
-        return await AppDataSource.transaction(async (transactionalEntityManager) => {
+    async confirmPurchase(orderId: string, items: { ingredient_id: string; actual_quantity: number; is_purchased: boolean }[], purchasedById: string, branchId?: string): Promise<PurchaseOrder> {
+        return await runInTransaction(async (transactionalEntityManager) => {
+            if (branchId) {
+                const order = await transactionalEntityManager.findOne(PurchaseOrder, { where: { id: orderId, branch_id: branchId } as any });
+                if (!order) throw new Error("Order not found");
+            }
+
             // 1. Fetch Order Items
             const orderItems = await transactionalEntityManager.find(StockOrdersItem, {
                 where: { orders_id: orderId },
@@ -182,17 +182,17 @@ export class StockOrdersModel {
             }
 
             // 3. Update Order Status to COMPLETED
-            await transactionalEntityManager.update(PurchaseOrder, { id: orderId }, { status: PurchaseOrderStatus.COMPLETED });
+            await transactionalEntityManager.update(PurchaseOrder, branchId ? ({ id: orderId, branch_id: branchId } as any) : ({ id: orderId } as any), { status: PurchaseOrderStatus.COMPLETED });
 
             // 4. Return updated order
-            return this.findByIdInternal(orderId, transactionalEntityManager);
+            return this.findByIdInternal(orderId, transactionalEntityManager, branchId);
         });
     }
 
     // internal helper for transaction
-    private async findByIdInternal(id: string, manager: any): Promise<PurchaseOrder> {
+    private async findByIdInternal(id: string, manager: any, branchId?: string): Promise<PurchaseOrder> {
         return await manager.findOne(PurchaseOrder, {
-            where: { id },
+            where: branchId ? ({ id, branch_id: branchId } as any) : ({ id } as any),
             relations: {
                 ordered_by: true,
                 ordersItems: {

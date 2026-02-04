@@ -2,6 +2,7 @@ import { Ingredients } from "../../entity/stock/Ingredients";
 import { IngredientsModel } from "../../models/stock/ingredients.model";
 import { SocketService } from "../socket.service";
 import { withCache, cacheKey, invalidateCache, metadataCache } from "../../utils/cache";
+import { getDbContext } from "../../database/dbContext";
 
 /**
  * Ingredients Service with Caching
@@ -15,8 +16,17 @@ export class IngredientsService {
 
     constructor(private ingredientsModel: IngredientsModel) { }
 
+    private getCacheScopeParts(branchId?: string): Array<string> {
+        const ctx = getDbContext();
+        const effectiveBranchId = branchId ?? ctx?.branchId;
+        if (effectiveBranchId) return ["branch", effectiveBranchId];
+        if (ctx?.isAdmin) return ["admin"];
+        return ["public"];
+    }
+
     async findAll(filters?: { is_active?: boolean }, branchId?: string): Promise<Ingredients[]> {
-        const key = cacheKey(this.CACHE_PREFIX, 'list', JSON.stringify(filters || {}), branchId);
+        const scope = this.getCacheScopeParts(branchId);
+        const key = cacheKey(this.CACHE_PREFIX, ...scope, 'list', JSON.stringify(filters || {}));
         
         return withCache(
             key,
@@ -27,7 +37,8 @@ export class IngredientsService {
     }
 
     async findOne(id: string, branchId?: string): Promise<Ingredients | null> {
-        const key = cacheKey(this.CACHE_PREFIX, 'single', id, branchId);
+        const scope = this.getCacheScopeParts(branchId);
+        const key = cacheKey(this.CACHE_PREFIX, ...scope, 'single', id);
         
         return withCache(
             key,
@@ -38,7 +49,8 @@ export class IngredientsService {
     }
 
     async findOneByName(ingredient_name: string, branchId?: string): Promise<Ingredients | null> {
-        const key = cacheKey(this.CACHE_PREFIX, 'name', ingredient_name, branchId);
+        const scope = this.getCacheScopeParts(branchId);
+        const key = cacheKey(this.CACHE_PREFIX, ...scope, 'name', ingredient_name);
         
         return withCache(
             key,
@@ -62,42 +74,70 @@ export class IngredientsService {
         
         if (createdIngredients) {
             // Invalidate cache
-            this.invalidateCache();
-            this.socketService.emit('ingredients:create', createdIngredients);
+            this.invalidateCache(createdIngredients.branch_id);
+            if (createdIngredients.branch_id) {
+                this.socketService.emitToBranch(createdIngredients.branch_id, 'ingredients:create', createdIngredients);
+            }
             return createdIngredients;
         }
         
         return savedIngredients;
     }
 
-    async update(id: string, ingredients: Ingredients): Promise<Ingredients> {
-        await this.ingredientsModel.update(id, ingredients);
-        const updatedIngredients = await this.ingredientsModel.findOne(id);
+    async update(id: string, ingredients: Ingredients, branchId?: string): Promise<Ingredients> {
+        const existing = await this.ingredientsModel.findOne(id, branchId);
+        if (!existing) throw new Error("Ingredient not found");
+
+        const effectiveBranchId = branchId || existing.branch_id || ingredients.branch_id;
+        if (effectiveBranchId) {
+            ingredients.branch_id = effectiveBranchId;
+        }
+
+        await this.ingredientsModel.update(id, ingredients, effectiveBranchId);
+        const updatedIngredients = await this.ingredientsModel.findOne(id, effectiveBranchId);
         
         if (updatedIngredients) {
             // Invalidate cache
-            this.invalidateCache(id);
-            this.socketService.emit('ingredients:update', updatedIngredients);
+            this.invalidateCache(effectiveBranchId, id);
+            if (effectiveBranchId) {
+                this.socketService.emitToBranch(effectiveBranchId, 'ingredients:update', updatedIngredients);
+            }
             return updatedIngredients;
         }
         
         throw new Error("พบข้อผิดพลาดในการอัปเดตวัตถุดิบ");
     }
 
-    async delete(id: string): Promise<void> {
-        await this.ingredientsModel.delete(id);
+    async delete(id: string, branchId?: string): Promise<void> {
+        const existing = await this.ingredientsModel.findOne(id, branchId);
+        if (!existing) throw new Error("Ingredient not found");
+
+        const effectiveBranchId = branchId || existing.branch_id;
+        await this.ingredientsModel.delete(id, effectiveBranchId);
         // Invalidate cache
-        this.invalidateCache(id);
-        this.socketService.emit('ingredients:delete', { id });
+        this.invalidateCache(effectiveBranchId, id);
+        if (effectiveBranchId) {
+            this.socketService.emitToBranch(effectiveBranchId, 'ingredients:delete', { id });
+        }
     }
 
     /**
      * Invalidate ingredients cache
      */
-    private invalidateCache(id?: string): void {
-        const patterns = [`${this.CACHE_PREFIX}:list`];
+    private invalidateCache(branchId?: string, id?: string): void {
+        const ctx = getDbContext();
+        const effectiveBranchId = branchId ?? ctx?.branchId;
+        if (!effectiveBranchId) {
+            invalidateCache([`${this.CACHE_PREFIX}:`]);
+            return;
+        }
+
+        const patterns = [
+            cacheKey(this.CACHE_PREFIX, "branch", effectiveBranchId, "list"),
+            cacheKey(this.CACHE_PREFIX, "branch", effectiveBranchId, "name"),
+        ];
         if (id) {
-            patterns.push(`${this.CACHE_PREFIX}:single:${id}`);
+            patterns.push(cacheKey(this.CACHE_PREFIX, "branch", effectiveBranchId, "single", id));
         }
         invalidateCache(patterns);
     }

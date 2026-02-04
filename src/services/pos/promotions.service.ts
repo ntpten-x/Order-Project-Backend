@@ -1,9 +1,9 @@
-import { AppDataSource } from "../../database/database";
 import { Promotions, PromotionType, PromotionCondition } from "../../entity/pos/Promotions";
 import { Products } from "../../entity/pos/Products";
 import { Category } from "../../entity/pos/Category";
 import { SocketService } from "../socket.service";
 import { AppError } from "../../utils/AppError";
+import { getRepository } from "../../database/dbContext";
 
 interface PromotionEligibility {
     eligible: boolean;
@@ -12,9 +12,6 @@ interface PromotionEligibility {
 }
 
 export class PromotionsService {
-    private promotionsRepository = AppDataSource.getRepository(Promotions);
-    private productsRepository = AppDataSource.getRepository(Products);
-    private categoryRepository = AppDataSource.getRepository(Category);
     private socketService = SocketService.getInstance();
 
     /**
@@ -26,7 +23,7 @@ export class PromotionsService {
         totalAmount: number,
         branchId?: string
     ): Promise<PromotionEligibility> {
-        const promotion = await this.promotionsRepository.findOne({
+        const promotion = await getRepository(Promotions).findOne({
             where: {
                 promotion_code: code,
                 is_active: true,
@@ -115,7 +112,7 @@ export class PromotionsService {
                 if (!promotion.condition_value) return false;
                 const categoryIds = JSON.parse(promotion.condition_value) as string[];
                 const productIds = orderItems.map(item => item.product_id);
-                const products = await this.productsRepository.find({
+                const products = await getRepository(Products).find({
                     where: { id: productIds as any },
                 });
                 return products.some(p => categoryIds.includes(p.category_id));
@@ -181,7 +178,7 @@ export class PromotionsService {
      * Apply promotion and increment usage count
      */
     async applyPromotion(code: string, branchId?: string): Promise<Promotions> {
-        const promotion = await this.promotionsRepository.findOne({
+        const promotion = await getRepository(Promotions).findOne({
             where: {
                 promotion_code: code,
                 is_active: true,
@@ -195,7 +192,7 @@ export class PromotionsService {
 
         // Increment usage count
         promotion.usage_count = (promotion.usage_count || 0) + 1;
-        const saved = await this.promotionsRepository.save(promotion);
+        const saved = await getRepository(Promotions).save(promotion);
 
         // Emit socket event
         this.socketService.emitToBranch(
@@ -212,14 +209,14 @@ export class PromotionsService {
      */
     async getActivePromotions(branchId?: string): Promise<Promotions[]> {
         const now = new Date();
-        const query = this.promotionsRepository
+        const query = getRepository(Promotions)
             .createQueryBuilder('promotion')
             .where('promotion.is_active = :isActive', { isActive: true })
             .andWhere('(promotion.start_date IS NULL OR promotion.start_date <= :now)', { now })
             .andWhere('(promotion.end_date IS NULL OR promotion.end_date >= :now)', { now });
 
         if (branchId) {
-            query.andWhere('(promotion.branch_id = :branchId OR promotion.branch_id IS NULL)', { branchId });
+            query.andWhere('promotion.branch_id = :branchId', { branchId });
         }
 
         return query.getMany();
@@ -229,10 +226,10 @@ export class PromotionsService {
      * Get all promotions (with optional filters)
      */
     async getAll(branchId?: string, isActive?: boolean): Promise<Promotions[]> {
-        const query = this.promotionsRepository.createQueryBuilder('promotion');
+        const query = getRepository(Promotions).createQueryBuilder('promotion');
 
         if (branchId) {
-            query.andWhere('(promotion.branch_id = :branchId OR promotion.branch_id IS NULL)', { branchId });
+            query.andWhere('promotion.branch_id = :branchId', { branchId });
         }
 
         if (isActive !== undefined) {
@@ -246,12 +243,12 @@ export class PromotionsService {
      * Get promotion by ID
      */
     async getById(id: string, branchId?: string): Promise<Promotions | null> {
-        const query = this.promotionsRepository
+        const query = getRepository(Promotions)
             .createQueryBuilder('promotion')
             .where('promotion.id = :id', { id });
 
         if (branchId) {
-            query.andWhere('(promotion.branch_id = :branchId OR promotion.branch_id IS NULL)', { branchId });
+            query.andWhere('promotion.branch_id = :branchId', { branchId });
         }
 
         return query.getOne();
@@ -262,7 +259,7 @@ export class PromotionsService {
      */
     async create(data: Partial<Promotions>, branchId?: string): Promise<Promotions> {
         // Check if promotion code already exists
-        const existing = await this.promotionsRepository.findOne({
+        const existing = await getRepository(Promotions).findOne({
             where: {
                 promotion_code: data.promotion_code!,
                 branch_id: branchId || undefined,
@@ -273,7 +270,7 @@ export class PromotionsService {
             throw AppError.conflict("Promotion code already exists");
         }
 
-        const promotion = this.promotionsRepository.create({
+        const promotion = getRepository(Promotions).create({
             ...data,
             branch_id: branchId || data.branch_id,
             usage_count: 0,
@@ -281,7 +278,7 @@ export class PromotionsService {
             update_date: new Date(),
         });
 
-        const saved = await this.promotionsRepository.save(promotion);
+        const saved = await getRepository(Promotions).save(promotion);
 
         // Emit socket event
         this.socketService.emitToBranch(
@@ -304,7 +301,7 @@ export class PromotionsService {
 
         // Check if promotion code is being changed and if it conflicts
         if (data.promotion_code && data.promotion_code !== promotion.promotion_code) {
-            const existing = await this.promotionsRepository.findOne({
+            const existing = await getRepository(Promotions).findOne({
                 where: {
                     promotion_code: data.promotion_code,
                     branch_id: branchId || promotion.branch_id || undefined,
@@ -322,7 +319,7 @@ export class PromotionsService {
             update_date: new Date(),
         });
 
-        const saved = await this.promotionsRepository.save(promotion);
+        const saved = await getRepository(Promotions).save(promotion);
 
         // Emit socket event
         this.socketService.emitToBranch(
@@ -343,7 +340,7 @@ export class PromotionsService {
             throw AppError.notFound("Promotion not found");
         }
 
-        await this.promotionsRepository.remove(promotion);
+        await getRepository(Promotions).remove(promotion);
 
         // Emit socket event
         this.socketService.emitToBranch(

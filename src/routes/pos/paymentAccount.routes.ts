@@ -3,17 +3,19 @@ import { PaymentAccountController } from "../../controllers/pos/PaymentAccount.c
 import { authenticateToken, authorizeRole } from "../../middleware/auth.middleware"
 import { validate } from "../../middleware/validate.middleware"
 import { createPaymentAccountSchema, paymentAccountIdParamSchema, updatePaymentAccountSchema } from "../../utils/schemas/posMaster.schema"
+import { requireBranch } from "../../middleware/branch.middleware"
 
 const router = Router()
 const controller = new PaymentAccountController()
 
 router.use(authenticateToken)
 router.use(authorizeRole(["Admin"]))
+router.use(requireBranch)
 
-router.get("/accounts", (req, res) => controller.getAccounts(req, res))
-router.post("/accounts", validate(createPaymentAccountSchema), (req, res) => controller.createAccount(req, res))
-router.put("/accounts/:id", validate(updatePaymentAccountSchema), (req, res) => controller.updateAccount(req, res))
-router.patch("/accounts/:id/activate", validate(paymentAccountIdParamSchema), (req, res) => controller.activateAccount(req, res))
-router.delete("/accounts/:id", validate(paymentAccountIdParamSchema), (req, res) => controller.deleteAccount(req, res))
+router.get("/accounts", controller.getAccounts)
+router.post("/accounts", validate(createPaymentAccountSchema), controller.createAccount)
+router.put("/accounts/:id", validate(updatePaymentAccountSchema), controller.updateAccount)
+router.patch("/accounts/:id/activate", validate(paymentAccountIdParamSchema), controller.activateAccount)
+router.delete("/accounts/:id", validate(paymentAccountIdParamSchema), controller.deleteAccount)
 
 export default router

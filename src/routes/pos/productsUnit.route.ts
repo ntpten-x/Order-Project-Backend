@@ -4,6 +4,7 @@ import { ProductsUnitService } from "../../services/pos/productsUnit.service";
 import { ProductsUnitModels } from "../../models/pos/productsUnit.model";
 import { authenticateToken, authorizeRole } from "../../middleware/auth.middleware";
 import { validate } from "../../middleware/validate.middleware";
+import { requireBranch } from "../../middleware/branch.middleware";
 import {
     createProductsUnitSchema,
     productsUnitIdParamSchema,
@@ -19,6 +20,7 @@ const productsUnitController = new ProductsUnitController(productsUnitService)
 
 router.use(authenticateToken)
 router.use(authorizeRole(["Admin", "Manager", "Employee"]))
+router.use(requireBranch)
 
 router.get("/", productsUnitController.findAll)
 router.get("/:id", validate(productsUnitIdParamSchema), productsUnitController.findOne)

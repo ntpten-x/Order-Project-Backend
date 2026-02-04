@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { AuthRequest } from "./auth.middleware";
+import { ApiResponses } from "../utils/ApiResponse";
 
 /**
  * Branch Context Interface
@@ -28,10 +29,7 @@ export const extractBranch = (req: BranchRequest, res: Response, next: NextFunct
  */
 export const requireBranch = (req: BranchRequest, res: Response, next: NextFunction) => {
     if (!req.user?.branch_id) {
-        return res.status(403).json({ 
-            message: "Access denied: No branch assigned to user",
-            code: "NO_BRANCH_ASSIGNED"
-        });
+        return ApiResponses.forbidden(res, "Access denied: No branch assigned to user");
     }
     req.branchId = req.user.branch_id;
     next();

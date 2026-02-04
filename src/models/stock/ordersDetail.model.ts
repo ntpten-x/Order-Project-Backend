@@ -1,20 +1,18 @@
-import { AppDataSource } from "../../database/database";
 import { StockOrdersDetail } from "../../entity/stock/OrdersDetail";
 import { StockOrdersItem } from "../../entity/stock/OrdersItem";
+import { getRepository } from "../../database/dbContext";
 
 export class StockOrdersDetailModel {
-    private ordersDetailRepository = AppDataSource.getRepository(StockOrdersDetail);
-    private ordersItemRepository = AppDataSource.getRepository(StockOrdersItem);
-
     async findByOrderItemId(ordersItemId: string): Promise<StockOrdersDetail | null> {
-        return await this.ordersDetailRepository.findOneBy({ orders_item_id: ordersItemId });
+        return await getRepository(StockOrdersDetail).findOneBy({ orders_item_id: ordersItemId });
     }
 
     async createOrUpdate(ordersItemId: string, data: { actual_quantity: number; purchased_by_id: string; is_purchased: boolean }): Promise<StockOrdersDetail> {
-        let detail = await this.ordersDetailRepository.findOneBy({ orders_item_id: ordersItemId });
+        const ordersDetailRepository = getRepository(StockOrdersDetail);
+        let detail = await ordersDetailRepository.findOneBy({ orders_item_id: ordersItemId });
 
         if (!detail) {
-            detail = this.ordersDetailRepository.create({
+            detail = ordersDetailRepository.create({
                 orders_item_id: ordersItemId,
                 ...data
             });
@@ -24,13 +22,20 @@ export class StockOrdersDetailModel {
             detail.is_purchased = data.is_purchased;
         }
 
-        return await this.ordersDetailRepository.save(detail);
+        return await ordersDetailRepository.save(detail);
     }
 
-    async getOrderItemWithOrder(ordersItemId: string): Promise<StockOrdersItem | null> {
-        return await this.ordersItemRepository.findOne({
-            where: { id: ordersItemId },
-            relations: { orders: true }
-        });
+    async getOrderItemWithOrder(ordersItemId: string, branchId?: string): Promise<StockOrdersItem | null> {
+        const ordersItemRepository = getRepository(StockOrdersItem);
+        const query = ordersItemRepository
+            .createQueryBuilder("item")
+            .leftJoinAndSelect("item.orders", "orders")
+            .where("item.id = :id", { id: ordersItemId });
+
+        if (branchId) {
+            query.andWhere("orders.branch_id = :branchId", { branchId });
+        }
+
+        return query.getOne();
     }
 }

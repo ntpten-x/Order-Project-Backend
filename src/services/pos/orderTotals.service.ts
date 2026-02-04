@@ -1,13 +1,13 @@
 import { EntityManager } from "typeorm";
-import { AppDataSource } from "../../database/database";
 import { SalesOrder } from "../../entity/pos/SalesOrder";
 import { SalesOrderItem } from "../../entity/pos/SalesOrderItem";
 import { OrderStatus } from "../../entity/pos/OrderEnums";
 import { PriceCalculatorService } from "./priceCalculator.service";
+import { getRepository } from "../../database/dbContext";
 
 export const recalculateOrderTotal = async (orderId: string, manager?: EntityManager): Promise<void> => {
-    const orderRepo = manager ? manager.getRepository(SalesOrder) : AppDataSource.getRepository(SalesOrder);
-    const itemRepo = manager ? manager.getRepository(SalesOrderItem) : AppDataSource.getRepository(SalesOrderItem);
+    const orderRepo = manager ? manager.getRepository(SalesOrder) : getRepository(SalesOrder);
+    const itemRepo = manager ? manager.getRepository(SalesOrderItem) : getRepository(SalesOrderItem);
 
     const order = await orderRepo.findOne({
         where: { id: orderId },

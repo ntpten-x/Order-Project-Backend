@@ -3,6 +3,7 @@ import { TablesModels } from "../../models/pos/tables.model";
 import { TablesService } from "../../services/pos/tables.service";
 import { TablesController } from "../../controllers/pos/tables.controller";
 import { authenticateToken, authorizeRole } from "../../middleware/auth.middleware";
+import { requireBranch } from "../../middleware/branch.middleware";
 import { validate } from "../../middleware/validate.middleware";
 import { paginationQuerySchema } from "../../utils/schemas/common.schema";
 import {
@@ -20,6 +21,7 @@ const tablesController = new TablesController(tablesService)
 
 router.use(authenticateToken)
 router.use(authorizeRole(["Admin", "Manager", "Employee"]))
+router.use(requireBranch)
 // Authorization: Assuming all authenticated users can view/update status, 
 // but creation/deletion might be restricted. 
 // For now, I will follow the pattern in products.route.ts

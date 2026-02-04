@@ -4,6 +4,7 @@ import { SalesOrderDetailService } from "../../services/pos/salesOrderDetail.ser
 import { SalesOrderDetailController } from "../../controllers/pos/salesOrderDetail.controller";
 import { authenticateToken, authorizeRole } from "../../middleware/auth.middleware";
 import { validate } from "../../middleware/validate.middleware";
+import { requireBranch } from "../../middleware/branch.middleware";
 import {
     createSalesOrderDetailSchema,
     salesOrderDetailIdParamSchema,
@@ -18,6 +19,7 @@ const salesOrderDetailController = new SalesOrderDetailController(salesOrderDeta
 
 router.use(authenticateToken)
 router.use(authorizeRole(["Admin", "Manager", "Employee"]))
+router.use(requireBranch)
 
 router.get("/", authorizeRole(["Admin", "Manager", "Employee"]), salesOrderDetailController.findAll)
 router.get("/:id", authorizeRole(["Admin", "Manager", "Employee"]), validate(salesOrderDetailIdParamSchema), salesOrderDetailController.findOne)

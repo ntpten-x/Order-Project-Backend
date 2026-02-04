@@ -62,13 +62,14 @@ export class OrderQueueController {
     updateStatus = catchAsync(async (req: AuthRequest, res: Response) => {
         const { id } = req.params;
         const { status } = req.body;
+        const branchId = req.user?.branch_id;
 
         if (!status || !Object.values(QueueStatus).includes(status)) {
             throw AppError.badRequest("Invalid status");
         }
 
-        const oldQueueItem = await this.queueService.getQueue(req.user?.branch_id).then(q => q.find(item => item.id === id));
-        const updated = await this.queueService.updateStatus(id, status);
+        const oldQueueItem = await this.queueService.getQueueItem(id, branchId);
+        const updated = await this.queueService.updateStatus(id, status, branchId);
 
         // Audit log
         await auditLogger.log({
@@ -79,7 +80,7 @@ export class OrderQueueController {
             user_agent: req.headers['user-agent'],
             entity_type: 'OrderQueue',
             entity_id: id,
-            branch_id: req.user?.branch_id,
+            branch_id: branchId,
             old_values: oldQueueItem ? { status: oldQueueItem.status } : undefined,
             new_values: { status },
             description: `Updated queue status to ${status}`,
@@ -95,8 +96,26 @@ export class OrderQueueController {
      */
     removeFromQueue = catchAsync(async (req: AuthRequest, res: Response) => {
         const { id } = req.params;
+        const branchId = req.user?.branch_id;
 
-        await this.queueService.removeFromQueue(id);
+        const oldQueueItem = await this.queueService.getQueueItem(id, branchId);
+        await this.queueService.removeFromQueue(id, branchId);
+
+        // Audit log
+        await auditLogger.log({
+            action_type: AuditActionType.QUEUE_REMOVE,
+            user_id: req.user?.id,
+            username: req.user?.username,
+            ip_address: getClientIp(req),
+            user_agent: req.headers['user-agent'],
+            entity_type: 'OrderQueue',
+            entity_id: id,
+            branch_id: branchId,
+            old_values: oldQueueItem ? { order_id: oldQueueItem.order_id, status: oldQueueItem.status, priority: oldQueueItem.priority } : undefined,
+            description: oldQueueItem ? `Removed order ${oldQueueItem.order_id} from queue` : `Removed queue item ${id}`,
+            path: req.path,
+            method: req.method,
+        });
 
         return ApiResponses.noContent(res);
     });
@@ -108,6 +127,20 @@ export class OrderQueueController {
         const branchId = req.user?.branch_id;
 
         await this.queueService.reorderQueue(branchId);
+
+        // Audit log
+        await auditLogger.log({
+            action_type: AuditActionType.QUEUE_REORDER,
+            user_id: req.user?.id,
+            username: req.user?.username,
+            ip_address: getClientIp(req),
+            user_agent: req.headers['user-agent'],
+            entity_type: 'OrderQueue',
+            branch_id: branchId,
+            description: `Reordered queue`,
+            path: req.path,
+            method: req.method,
+        });
 
         return ApiResponses.ok(res, { message: "Queue reordered successfully" });
     });

@@ -3,6 +3,8 @@ import { TablesService } from "../../services/pos/tables.service";
 import { catchAsync } from "../../utils/catchAsync";
 import { AppError } from "../../utils/AppError";
 import { ApiResponses } from "../../utils/ApiResponse";
+import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../../utils/auditLogger";
+import { getClientIp } from "../../utils/securityLogger";
 
 /**
  * Tables Controller
@@ -36,7 +38,8 @@ export class TablesController {
     });
 
     findOne = catchAsync(async (req: Request, res: Response) => {
-        const table = await this.tablesService.findOne(req.params.id);
+        const branchId = (req as any).user?.branch_id;
+        const table = await this.tablesService.findOne(req.params.id, branchId);
         if (!table) {
             throw AppError.notFound("โต๊ะ");
         }
@@ -53,15 +56,55 @@ export class TablesController {
 
     create = catchAsync(async (req: Request, res: Response) => {
         const branchId = (req as any).user?.branch_id;
-        if (branchId && !req.body.branch_id) {
+        if (branchId) {
             req.body.branch_id = branchId;
         }
         const table = await this.tablesService.create(req.body);
+
+        const userInfo = getUserInfoFromRequest(req as any);
+        await auditLogger.log({
+            action_type: AuditActionType.TABLE_CREATE,
+            ...userInfo,
+            ip_address: getClientIp(req),
+            user_agent: req.get("User-Agent"),
+            entity_type: "Tables",
+            entity_id: (table as any).id,
+            branch_id: branchId,
+            new_values: req.body,
+            path: req.originalUrl,
+            method: req.method,
+            description: `Create table ${(table as any).table_name || (table as any).id}`,
+        });
+
         return ApiResponses.created(res, table);
     });
 
     update = catchAsync(async (req: Request, res: Response) => {
-        const table = await this.tablesService.update(req.params.id, req.body);
+        const branchId = (req as any).user?.branch_id;
+        if (branchId) {
+            req.body.branch_id = branchId;
+        }
+        const oldTable = await this.tablesService.findOne(req.params.id, branchId);
+        const table = await this.tablesService.update(req.params.id, req.body, branchId);
+
+        if (table) {
+            const userInfo = getUserInfoFromRequest(req as any);
+            await auditLogger.log({
+                action_type: AuditActionType.TABLE_UPDATE,
+                ...userInfo,
+                ip_address: getClientIp(req),
+                user_agent: req.get("User-Agent"),
+                entity_type: "Tables",
+                entity_id: req.params.id,
+                branch_id: branchId,
+                old_values: oldTable as any,
+                new_values: req.body,
+                path: req.originalUrl,
+                method: req.method,
+                description: `Update table ${req.params.id}`,
+            });
+        }
+
         if (!table) {
             throw AppError.notFound("โต๊ะ");
         }
@@ -69,7 +112,24 @@ export class TablesController {
     });
 
     delete = catchAsync(async (req: Request, res: Response) => {
-        await this.tablesService.delete(req.params.id);
+        const branchId = (req as any).user?.branch_id;
+        const oldTable = await this.tablesService.findOne(req.params.id, branchId);
+        await this.tablesService.delete(req.params.id, branchId);
+
+        const userInfo = getUserInfoFromRequest(req as any);
+        await auditLogger.log({
+            action_type: AuditActionType.TABLE_DELETE,
+            ...userInfo,
+            ip_address: getClientIp(req),
+            user_agent: req.get("User-Agent"),
+            entity_type: "Tables",
+            entity_id: req.params.id,
+            branch_id: branchId,
+            old_values: oldTable as any,
+            path: req.originalUrl,
+            method: req.method,
+            description: `Delete table ${req.params.id}`,
+        });
         return ApiResponses.ok(res, { message: "ลบข้อมูลโต๊ะสำเร็จ" });
     });
 }

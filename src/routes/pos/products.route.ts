@@ -3,6 +3,7 @@ import { ProductsModels } from "../../models/pos/products.model";
 import { ProductsService } from "../../services/pos/products.service";
 import { ProductsController } from "../../controllers/pos/products.controller";
 import { authenticateToken, authorizeRole } from "../../middleware/auth.middleware";
+import { requireBranch } from "../../middleware/branch.middleware";
 import { validate } from "../../middleware/validate.middleware";
 import {
     createProductSchema,
@@ -20,6 +21,7 @@ const productsController = new ProductsController(productsService)
 
 router.use(authenticateToken)
 router.use(authorizeRole(["Admin", "Manager", "Employee"]))
+router.use(requireBranch)
 
 router.get("/", validate(paginationQuerySchema), productsController.findAll)
 router.get("/:id", validate(productIdParamSchema), productsController.findOne)

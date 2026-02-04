@@ -1,27 +1,35 @@
-import { Repository } from "typeorm"
-import { AppDataSource } from "../../database/database"
 import { ShopProfile } from "../../entity/pos/ShopProfile"
 import { paymentAccountSchema, CreatePaymentAccountDto } from "../../schemas/paymentAccount.schema"
 import { PaymentAccountModel } from "../../models/pos/PaymentAccount.model"
 import { ShopPaymentAccount } from "../../entity/pos/ShopPaymentAccount"
 import { SocketService } from "../socket.service"
+import { getRepository } from "../../database/dbContext"
 
 
 export class PaymentAccountService {
     private model: PaymentAccountModel
-    private shopRepository: Repository<ShopProfile>
     private socketService = SocketService.getInstance()
 
     constructor(model: PaymentAccountModel) {
         this.model = model
-        this.shopRepository = AppDataSource.getRepository(ShopProfile)
     }
 
-    async getAccounts(shopId: string) {
+    private async getShopIdForBranch(branchId: string): Promise<string> {
+        const shopRepository = getRepository(ShopProfile)
+        const existing = await shopRepository.findOne({ where: { branch_id: branchId } as any });
+        if (existing) return existing.id;
+
+        const created = await shopRepository.save({ branch_id: branchId, shop_name: "POS Shop" } as any);
+        return created.id;
+    }
+
+    async getAccounts(branchId: string) {
+        const shopId = await this.getShopIdForBranch(branchId);
         return await this.model.findByShopId(shopId)
     }
 
-    async createAccount(shopId: string, data: CreatePaymentAccountDto) {
+    async createAccount(branchId: string, data: CreatePaymentAccountDto) {
+        const shopId = await this.getShopIdForBranch(branchId);
         // Zod Validation
         const validation = paymentAccountSchema.safeParse(data);
         if (!validation.success) {
@@ -58,11 +66,12 @@ export class PaymentAccountService {
             await this.syncToShopProfile(shopId, account);
         }
 
-        this.socketService.emit("payment-accounts:create", account);
+        this.socketService.emitToBranch(branchId, "payment-accounts:create", account);
         return account;
     }
 
-    async updateAccount(shopId: string, accountId: string, data: Partial<CreatePaymentAccountDto>) {
+    async updateAccount(branchId: string, accountId: string, data: Partial<CreatePaymentAccountDto>) {
+        const shopId = await this.getShopIdForBranch(branchId);
         const account = await this.model.findOne(shopId, accountId);
         if (!account) throw new Error("Account not found");
 
@@ -93,11 +102,12 @@ export class PaymentAccountService {
             await this.syncToShopProfile(shopId, savedAccount);
         }
 
-        this.socketService.emit("payment-accounts:update", savedAccount);
+        this.socketService.emitToBranch(branchId, "payment-accounts:update", savedAccount);
         return savedAccount;
     }
 
-    async activateAccount(shopId: string, accountId: string) {
+    async activateAccount(branchId: string, accountId: string) {
+        const shopId = await this.getShopIdForBranch(branchId);
         const account = await this.model.findOne(shopId, accountId);
         if (!account) throw new Error("Account not found");
 
@@ -111,11 +121,12 @@ export class PaymentAccountService {
         // Sync with ShopProfile
         await this.syncToShopProfile(shopId, savedAccount);
 
-        this.socketService.emit("payment-accounts:update", savedAccount);
+        this.socketService.emitToBranch(branchId, "payment-accounts:update", savedAccount);
         return savedAccount;
     }
 
-    async deleteAccount(shopId: string, accountId: string) {
+    async deleteAccount(branchId: string, accountId: string) {
+        const shopId = await this.getShopIdForBranch(branchId);
         const account = await this.model.findOne(shopId, accountId);
         if (!account) throw new Error("Account not found");
 
@@ -124,13 +135,13 @@ export class PaymentAccountService {
         }
 
         const result = await this.model.delete(account);
-        this.socketService.emit("payment-accounts:delete", { id: accountId });
+        this.socketService.emitToBranch(branchId, "payment-accounts:delete", { id: accountId });
         return result;
     }
 
     // Helper to sync active account to ShopProfile for backward compatibility
     private async syncToShopProfile(shopId: string, account: ShopPaymentAccount) {
-        await this.shopRepository.update(shopId, {
+        await getRepository(ShopProfile).update(shopId, {
             promptpay_number: account.account_number,
             promptpay_name: account.account_name,
             bank_name: account.bank_name,
@@ -142,7 +153,7 @@ export class PaymentAccountService {
 
     async getDeterministicShopId(): Promise<string | undefined> {
         // Always pick the first shop in alphabetic or creation order to be deterministic
-        const shops = await this.shopRepository.find({
+        const shops = await getRepository(ShopProfile).find({
             order: { id: "ASC" },
             take: 1
         });

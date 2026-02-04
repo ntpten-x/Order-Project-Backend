@@ -31,17 +31,24 @@ export class ProductsUnitService {
         }
     }
 
-    async create(productsUnit: ProductsUnit): Promise<ProductsUnit> {
+    async create(productsUnit: ProductsUnit, branchId?: string): Promise<ProductsUnit> {
         try {
-            const findProductsUnit = await this.productsUnitModel.findOneByName(productsUnit.unit_name, productsUnit.branch_id)
+            const effectiveBranchId = branchId || productsUnit.branch_id;
+            if (effectiveBranchId) {
+                productsUnit.branch_id = effectiveBranchId;
+            }
+
+            const findProductsUnit = await this.productsUnitModel.findOneByName(productsUnit.unit_name, effectiveBranchId)
             if (findProductsUnit) {
                 throw new Error("หน่วยนี้มีอยู่ในระบบแล้ว")
             }
             // @ts-ignore
             const savedProductsUnit = await this.productsUnitModel.create(productsUnit)
-            const createdProductsUnit = await this.productsUnitModel.findOne(savedProductsUnit.id)
+            const createdProductsUnit = await this.productsUnitModel.findOne(savedProductsUnit.id, effectiveBranchId)
             if (createdProductsUnit) {
-                this.socketService.emit('productsUnit:create', createdProductsUnit)
+                if (effectiveBranchId) {
+                    this.socketService.emitToBranch(effectiveBranchId, 'productsUnit:create', createdProductsUnit)
+                }
                 return createdProductsUnit
             }
             return savedProductsUnit
@@ -50,15 +57,27 @@ export class ProductsUnitService {
         }
     }
 
-    async update(id: string, productsUnit: ProductsUnit): Promise<ProductsUnit> {
+    async update(id: string, productsUnit: ProductsUnit, branchId?: string): Promise<ProductsUnit> {
         try {
-            const findProductsUnit = await this.productsUnitModel.findOneByName(productsUnit.unit_name, productsUnit.branch_id)
+            const effectiveBranchId = branchId || productsUnit.branch_id;
+            if (effectiveBranchId) {
+                productsUnit.branch_id = effectiveBranchId;
+            }
+
+            const existingUnit = await this.productsUnitModel.findOne(id, effectiveBranchId)
+            if (!existingUnit) {
+                throw new Error("Products unit not found")
+            }
+
+            const findProductsUnit = await this.productsUnitModel.findOneByName(productsUnit.unit_name, effectiveBranchId)
             if (findProductsUnit && findProductsUnit.id !== id) {
                 throw new Error("หน่วยนี้มีอยู่ในระบบแล้ว")
             }
-            const updatedProductsUnit = await this.productsUnitModel.update(id, productsUnit)
+            const updatedProductsUnit = await this.productsUnitModel.update(id, productsUnit, effectiveBranchId)
             if (updatedProductsUnit) {
-                this.socketService.emit('productsUnit:update', updatedProductsUnit)
+                if (effectiveBranchId) {
+                    this.socketService.emitToBranch(effectiveBranchId, 'productsUnit:update', updatedProductsUnit)
+                }
                 return updatedProductsUnit
             }
             throw new Error("ไม่สามารถอัปเดตข้อมูลได้")
@@ -67,10 +86,16 @@ export class ProductsUnitService {
         }
     }
 
-    async delete(id: string): Promise<void> {
+    async delete(id: string, branchId?: string): Promise<void> {
         try {
-            await this.productsUnitModel.delete(id)
-            this.socketService.emit('productsUnit:delete', { id })
+            const existing = await this.productsUnitModel.findOne(id, branchId);
+            if (!existing) throw new Error("Products unit not found");
+
+            const effectiveBranchId = branchId || existing.branch_id;
+            await this.productsUnitModel.delete(id, effectiveBranchId)
+            if (effectiveBranchId) {
+                this.socketService.emitToBranch(effectiveBranchId, 'productsUnit:delete', { id })
+            }
         } catch (error) {
             throw error
         }

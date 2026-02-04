@@ -10,6 +10,7 @@ import {
 import { CategoryController } from "../../controllers/pos/category.controller";
 import { CategoryService } from "../../services/pos/category.service";
 import { CategoryModels } from "../../models/pos/category.model";
+import { requireBranch } from "../../middleware/branch.middleware";
 
 const router = Router()
 
@@ -19,6 +20,7 @@ const categoryController = new CategoryController(categoryService)
 
 router.use(authenticateToken)
 router.use(authorizeRole(["Admin", "Manager", "Employee"]))
+router.use(requireBranch)
 
 router.get("/", categoryController.findAll)
 router.get("/:id", validate(categoryIdParamSchema), categoryController.findOne)

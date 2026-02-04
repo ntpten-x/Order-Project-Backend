@@ -7,7 +7,8 @@ import { Products } from "../Products";
     expression: (dataSource: DataSource) =>
         dataSource
             .createQueryBuilder()
-            .select("oi.product_id", "product_id")
+            .select("o.branch_id", "branch_id")
+            .addSelect("oi.product_id", "product_id")
             .addSelect("p.display_name", "product_name")
             .addSelect("p.img_url", "img_url")
             .addSelect("p.category_id", "category_id")
@@ -17,6 +18,7 @@ import { Products } from "../Products";
             .innerJoin(SalesOrder, "o", "oi.order_id = o.id")
             .leftJoin(Products, "p", "oi.product_id = p.id")
             .where("o.status IN ('Paid', 'Completed')")
+            .addGroupBy("o.branch_id")
             .groupBy("oi.product_id")
             .addGroupBy("p.display_name")
             .addGroupBy("p.img_url")
@@ -24,6 +26,9 @@ import { Products } from "../Products";
     synchronize: true
 })
 export class TopSellingItemsView {
+    @ViewColumn()
+    branch_id!: string;
+
     @ViewColumn()
     product_id!: string;
 

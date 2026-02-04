@@ -33,7 +33,7 @@ export class UsersService {
             users.password = await bcrypt.hash(users.password, 10)
             await this.usersModel.create(users)
             const createdUser = await this.usersModel.findOneByUsername(users.username)
-            this.socketService.emit('users:create', createdUser)
+            this.socketService.emitToRole('Admin', 'users:create', createdUser)
             return createdUser!
         } catch (error) {
             throw error
@@ -57,7 +57,7 @@ export class UsersService {
             }
             await this.usersModel.update(id, users)
             const updatedUser = await this.usersModel.findOne(id)
-            this.socketService.emit('users:update', updatedUser)
+            this.socketService.emitToRole('Admin', 'users:update', updatedUser)
             return updatedUser!
         } catch (error) {
             throw error
@@ -67,7 +67,7 @@ export class UsersService {
     async delete(id: string): Promise<void> {
         try {
             await this.usersModel.delete(id)
-            this.socketService.emit('users:delete', { id })
+            this.socketService.emitToRole('Admin', 'users:delete', { id })
         } catch (error) {
             throw error
         }

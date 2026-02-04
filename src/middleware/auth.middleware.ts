@@ -3,6 +3,8 @@ import jwt from "jsonwebtoken";
 import { AppDataSource } from "../database/database";
 import { Users } from "../entity/Users";
 import { securityLogger, getClientIp } from "../utils/securityLogger";
+import { runWithDbContext } from "../database/dbContext";
+import { ApiResponses } from "../utils/ApiResponse";
 
 export interface AuthRequest extends Request {
     user?: Users;
@@ -33,14 +35,14 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
             method: req.method,
             details: { reason: 'No token provided' }
         });
-        return res.status(401).json({ message: "Authentication required" });
+        return ApiResponses.unauthorized(res, "Authentication required");
     }
 
     try {
         // 2. Verify token
         const secret = process.env.JWT_SECRET;
         if (!secret) {
-            return res.status(500).json({ message: "Server misconfiguration: JWT_SECRET missing" });
+            return ApiResponses.internalError(res, "Server misconfiguration: JWT_SECRET missing");
         }
         const decoded: any = jwt.verify(token, secret);
 
@@ -60,7 +62,7 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
                 method: req.method,
                 details: { tokenAge, sessionTimeout: SESSION_TIMEOUT }
             });
-            return res.status(401).json({ message: "Session expired. Please login again." });
+            return ApiResponses.unauthorized(res, "Session expired. Please login again.");
         }
 
         // 3. Attach user to request (including branch relation for branch-based filtering)
@@ -81,7 +83,7 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
                 method: req.method,
                 details: { reason: 'User not found' }
             });
-            return res.status(401).json({ message: "User not found" });
+            return ApiResponses.unauthorized(res, "User not found");
         }
         if (!user.is_use) {
             const ip = getClientIp(req);
@@ -94,12 +96,28 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
                 method: req.method,
                 details: { reason: 'Account disabled' }
             });
-            return res.status(403).json({ message: "Account disabled" });
+            return ApiResponses.forbidden(res, "Account disabled");
         }
 
         req.user = user;
         req.tokenExpiry = tokenIssuedAt + SESSION_TIMEOUT;
-        next();
+
+        const role = user.roles?.roles_name;
+        const isAdmin = role === "Admin";
+
+        // Run the rest of the request inside a DB context so Postgres RLS (if enabled)
+        // can enforce branch isolation even if a future query forgets branch_id filters.
+        return runWithDbContext(
+            { branchId: user.branch_id, userId: user.id, role, isAdmin },
+            async () => {
+                await new Promise<void>((resolve) => {
+                    const done = () => resolve();
+                    res.once("finish", done);
+                    res.once("close", done);
+                    next();
+                });
+            }
+        ).catch(next);
     } catch (err) {
         const ip = getClientIp(req);
         if (err instanceof jwt.JsonWebTokenError) {
@@ -111,7 +129,7 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
                 method: req.method,
                 details: { reason: 'Invalid token', error: err.message }
             });
-            return res.status(403).json({ message: "Invalid or expired token" });
+            return ApiResponses.unauthorized(res, "Invalid or expired token");
         }
         if (err instanceof jwt.TokenExpiredError) {
             securityLogger.log({
@@ -122,7 +140,7 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
                 method: req.method,
                 details: { reason: 'Token expired' }
             });
-            return res.status(403).json({ message: "Token expired" });
+            return ApiResponses.unauthorized(res, "Token expired");
         }
         console.error("Authentication Error (System):", err);
         securityLogger.log({
@@ -133,20 +151,20 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
             method: req.method,
             details: { reason: 'System error', error: (err as any).message }
         });
-        return res.status(500).json({ message: "Authentication system error", error: (err as any).message });
+        return ApiResponses.internalError(res, "Authentication system error", { error: (err as any).message });
     }
 };
 
 export const authorizeRole = (allowedRoles: string[]) => {
     return (req: AuthRequest, res: Response, next: NextFunction) => {
         if (!req.user) {
-            return res.status(401).json({ message: "Authentication required" });
+            return ApiResponses.unauthorized(res, "Authentication required");
         }
 
         const userRole = req.user.roles?.roles_name;
 
         if (!userRole || !allowedRoles.includes(userRole)) {
-            return res.status(403).json({ message: "Access denied: Insufficient permissions" });
+            return ApiResponses.forbidden(res, "Access denied: Insufficient permissions");
         }
 
         next();

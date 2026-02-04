@@ -1,12 +1,11 @@
-import { AppDataSource } from "../../database/database";
 import { IngredientsUnit } from "../../entity/stock/IngredientsUnit";
+import { getRepository } from "../../database/dbContext";
 
 export class IngredientsUnitModel {
-    private ingredientsUnitRepository = AppDataSource.getRepository(IngredientsUnit)
-
     async findAll(filters?: { is_active?: boolean }, branchId?: string): Promise<IngredientsUnit[]> {
         try {
-            const query = this.ingredientsUnitRepository.createQueryBuilder("ingredientsUnit")
+            const ingredientsUnitRepository = getRepository(IngredientsUnit);
+            const query = ingredientsUnitRepository.createQueryBuilder("ingredientsUnit")
                 .orderBy("ingredientsUnit.create_date", "ASC");
 
             // Filter by branch for data isolation
@@ -29,7 +28,8 @@ export class IngredientsUnitModel {
 
     async findOne(id: string, branchId?: string): Promise<IngredientsUnit | null> {
         try {
-            const query = this.ingredientsUnitRepository.createQueryBuilder("ingredientsUnit")
+            const ingredientsUnitRepository = getRepository(IngredientsUnit);
+            const query = ingredientsUnitRepository.createQueryBuilder("ingredientsUnit")
                 .where("ingredientsUnit.id = :id", { id });
             
             if (branchId) {
@@ -44,7 +44,8 @@ export class IngredientsUnitModel {
 
     async findOneByUnitName(unit_name: string, branchId?: string): Promise<IngredientsUnit | null> {
         try {
-            const query = this.ingredientsUnitRepository.createQueryBuilder("ingredientsUnit")
+            const ingredientsUnitRepository = getRepository(IngredientsUnit);
+            const query = ingredientsUnitRepository.createQueryBuilder("ingredientsUnit")
                 .where("ingredientsUnit.unit_name = :unit_name", { unit_name });
             
             if (branchId) {
@@ -59,23 +60,28 @@ export class IngredientsUnitModel {
 
     async create(ingredientsUnit: IngredientsUnit): Promise<IngredientsUnit> {
         try {
-            return this.ingredientsUnitRepository.save(ingredientsUnit)
+            return getRepository(IngredientsUnit).save(ingredientsUnit)
         } catch (error) {
             throw error
         }
     }
 
-    async update(id: string, ingredientsUnit: IngredientsUnit): Promise<IngredientsUnit> {
+    async update(id: string, ingredientsUnit: IngredientsUnit, branchId?: string): Promise<IngredientsUnit> {
         try {
-            return this.ingredientsUnitRepository.save({ ...ingredientsUnit, id })
+            return getRepository(IngredientsUnit).save({ ...ingredientsUnit, id, ...(branchId ? { branch_id: branchId } : {}) } as any)
         } catch (error) {
             throw error
         }
     }
 
-    async delete(id: string): Promise<void> {
+    async delete(id: string, branchId?: string): Promise<void> {
         try {
-            await this.ingredientsUnitRepository.delete(id)
+            const ingredientsUnitRepository = getRepository(IngredientsUnit);
+            if (branchId) {
+                await ingredientsUnitRepository.delete({ id, branch_id: branchId } as any)
+            } else {
+                await ingredientsUnitRepository.delete(id)
+            }
         } catch (error) {
             throw error
         }

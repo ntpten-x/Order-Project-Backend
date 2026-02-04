@@ -4,6 +4,8 @@ import { catchAsync } from "../../utils/catchAsync";
 import { AppError } from "../../utils/AppError";
 import { ApiResponses } from "../../utils/ApiResponse";
 import { getBranchId } from "../../middleware/branch.middleware";
+import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../../utils/auditLogger";
+import { getClientIp } from "../../utils/securityLogger";
 
 /**
  * Ingredients Unit Controller
@@ -45,15 +47,55 @@ export class IngredientsUnitController {
 
     create = catchAsync(async (req: Request, res: Response) => {
         const branchId = getBranchId(req as any);
-        if (branchId && !req.body.branch_id) {
+        if (branchId) {
             req.body.branch_id = branchId;
         }
-        const ingredientsUnit = await this.ingredientsUnitService.create(req.body);
+        const ingredientsUnit = await this.ingredientsUnitService.create(req.body, branchId);
+
+        const userInfo = getUserInfoFromRequest(req as any);
+        await auditLogger.log({
+            action_type: AuditActionType.STOCK_INGREDIENT_UNIT_CREATE,
+            ...userInfo,
+            ip_address: getClientIp(req),
+            user_agent: req.get("User-Agent"),
+            entity_type: "IngredientsUnit",
+            entity_id: (ingredientsUnit as any).id,
+            branch_id: branchId,
+            new_values: req.body,
+            path: req.originalUrl,
+            method: req.method,
+            description: `Create ingredient unit ${(ingredientsUnit as any).unit_name || (ingredientsUnit as any).display_name || (ingredientsUnit as any).id}`,
+        });
+
         return ApiResponses.created(res, ingredientsUnit);
     });
 
     update = catchAsync(async (req: Request, res: Response) => {
-        const ingredientsUnit = await this.ingredientsUnitService.update(req.params.id, req.body);
+        const branchId = getBranchId(req as any);
+        if (branchId) {
+            req.body.branch_id = branchId;
+        }
+        const oldIngredientsUnit = await this.ingredientsUnitService.findOne(req.params.id, branchId);
+        const ingredientsUnit = await this.ingredientsUnitService.update(req.params.id, req.body, branchId);
+
+        if (ingredientsUnit) {
+            const userInfo = getUserInfoFromRequest(req as any);
+            await auditLogger.log({
+                action_type: AuditActionType.STOCK_INGREDIENT_UNIT_UPDATE,
+                ...userInfo,
+                ip_address: getClientIp(req),
+                user_agent: req.get("User-Agent"),
+                entity_type: "IngredientsUnit",
+                entity_id: req.params.id,
+                branch_id: branchId,
+                old_values: oldIngredientsUnit as any,
+                new_values: req.body,
+                path: req.originalUrl,
+                method: req.method,
+                description: `Update ingredient unit ${req.params.id}`,
+            });
+        }
+
         if (!ingredientsUnit) {
             throw AppError.notFound("หน่วยนับวัตถุดิบ");
         }
@@ -61,7 +103,24 @@ export class IngredientsUnitController {
     });
 
     delete = catchAsync(async (req: Request, res: Response) => {
-        await this.ingredientsUnitService.delete(req.params.id);
+        const branchId = getBranchId(req as any);
+        const oldIngredientsUnit = await this.ingredientsUnitService.findOne(req.params.id, branchId);
+        await this.ingredientsUnitService.delete(req.params.id, branchId);
+
+        const userInfo = getUserInfoFromRequest(req as any);
+        await auditLogger.log({
+            action_type: AuditActionType.STOCK_INGREDIENT_UNIT_DELETE,
+            ...userInfo,
+            ip_address: getClientIp(req),
+            user_agent: req.get("User-Agent"),
+            entity_type: "IngredientsUnit",
+            entity_id: req.params.id,
+            branch_id: branchId,
+            old_values: oldIngredientsUnit as any,
+            path: req.originalUrl,
+            method: req.method,
+            description: `Delete ingredient unit ${req.params.id}`,
+        });
         return ApiResponses.ok(res, { message: "หน่วยนับวัตถุดิบลบสำเร็จ" });
     });
 }

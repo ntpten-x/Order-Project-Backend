@@ -1,6 +1,6 @@
-import { AppDataSource } from "../../database/database";
 import { Ingredients } from "../../entity/stock/Ingredients";
 import { addBooleanFilter } from "../../utils/dbHelpers";
+import { getRepository } from "../../database/dbContext";
 
 /**
  * Ingredients Model
@@ -10,10 +10,9 @@ import { addBooleanFilter } from "../../utils/dbHelpers";
  * - Branch-based data isolation support
  */
 export class IngredientsModel {
-    private ingredientsRepository = AppDataSource.getRepository(Ingredients)
-
     async findAll(filters?: { is_active?: boolean }, branchId?: string): Promise<Ingredients[]> {
-        let query = this.ingredientsRepository.createQueryBuilder("ingredients")
+        const ingredientsRepository = getRepository(Ingredients);
+        let query = ingredientsRepository.createQueryBuilder("ingredients")
             .leftJoinAndSelect("ingredients.unit", "unit")
             .orderBy("ingredients.create_date", "ASC");
 
@@ -33,7 +32,8 @@ export class IngredientsModel {
 
     async findOne(id: string, branchId?: string): Promise<Ingredients | null> {
         try {
-            const query = this.ingredientsRepository.createQueryBuilder("ingredients")
+            const ingredientsRepository = getRepository(Ingredients);
+            const query = ingredientsRepository.createQueryBuilder("ingredients")
                 .leftJoinAndSelect("ingredients.unit", "unit")
                 .where("ingredients.id = :id", { id });
             
@@ -49,7 +49,8 @@ export class IngredientsModel {
 
     async findOneByName(ingredient_name: string, branchId?: string): Promise<Ingredients | null> {
         try {
-            const query = this.ingredientsRepository.createQueryBuilder("ingredients")
+            const ingredientsRepository = getRepository(Ingredients);
+            const query = ingredientsRepository.createQueryBuilder("ingredients")
                 .leftJoinAndSelect("ingredients.unit", "unit")
                 .where("ingredients.ingredient_name = :ingredient_name", { ingredient_name });
             
@@ -65,23 +66,28 @@ export class IngredientsModel {
 
     async create(ingredients: Ingredients): Promise<Ingredients> {
         try {
-            return this.ingredientsRepository.save(ingredients)
+            return getRepository(Ingredients).save(ingredients)
         } catch (error) {
             throw error
         }
     }
 
-    async update(id: string, ingredients: Ingredients): Promise<Ingredients> {
+    async update(id: string, ingredients: Ingredients, branchId?: string): Promise<Ingredients> {
         try {
-            return this.ingredientsRepository.save({ ...ingredients, id })
+            return getRepository(Ingredients).save({ ...ingredients, id, ...(branchId ? { branch_id: branchId } : {}) } as any)
         } catch (error) {
             throw error
         }
     }
 
-    async delete(id: string): Promise<void> {
+    async delete(id: string, branchId?: string): Promise<void> {
         try {
-            await this.ingredientsRepository.delete(id)
+            const ingredientsRepository = getRepository(Ingredients);
+            if (branchId) {
+                await ingredientsRepository.delete({ id, branch_id: branchId } as any)
+            } else {
+                await ingredientsRepository.delete(id)
+            }
         } catch (error) {
             throw error
         }

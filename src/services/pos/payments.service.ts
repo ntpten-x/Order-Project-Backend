@@ -3,28 +3,29 @@ import { SocketService } from "../socket.service";
 import { Payments, PaymentStatus } from "../../entity/pos/Payments";
 import { ShiftsService } from "./shifts.service";
 import { AppError } from "../../utils/AppError";
-import { AppDataSource } from "../../database/database";
 import { SalesOrder } from "../../entity/pos/SalesOrder";
 import { OrderStatus } from "../../entity/pos/OrderEnums";
 import { Tables, TableStatus } from "../../entity/pos/Tables";
 import { EntityManager } from "typeorm";
+import { PaymentMethod } from "../../entity/pos/PaymentMethod";
+import { getDbManager, runInTransaction } from "../../database/dbContext";
 
 export class PaymentsService {
     private socketService = SocketService.getInstance();
 
     constructor(private paymentsModel: PaymentsModels) { }
 
-    async findAll(): Promise<Payments[]> {
+    async findAll(branchId?: string): Promise<Payments[]> {
         try {
-            return this.paymentsModel.findAll()
+            return this.paymentsModel.findAll(branchId)
         } catch (error) {
             throw error
         }
     }
 
-    async findOne(id: string): Promise<Payments | null> {
+    async findOne(id: string, branchId?: string): Promise<Payments | null> {
         try {
-            return this.paymentsModel.findOne(id)
+            return this.paymentsModel.findOne(id, branchId)
         } catch (error) {
             throw error
         }
@@ -32,12 +33,12 @@ export class PaymentsService {
 
     private shiftsService = new ShiftsService();
 
-    private async refreshOrderPaymentSummary(orderId: string, manager: EntityManager = AppDataSource.manager): Promise<void> {
+    private async refreshOrderPaymentSummary(orderId: string, manager: EntityManager = getDbManager(), branchId?: string): Promise<void> {
         const orderRepo = manager.getRepository(SalesOrder);
         const paymentsRepo = manager.getRepository(Payments);
         const tablesRepo = manager.getRepository(Tables);
 
-        const order = await orderRepo.findOne({ where: { id: orderId } });
+        const order = await orderRepo.findOne({ where: branchId ? ({ id: orderId, branch_id: branchId } as any) : { id: orderId } });
         if (!order) return;
 
         const payments = await paymentsRepo.find({
@@ -67,7 +68,10 @@ export class PaymentsService {
             // ideally we explicitly update them as per requirement "Items... Paid"
             // But let's first check if we should do it here. The prompt says "Items ... Paid".
             // We can do a bulk update.
-            await this.socketService.emit('orders:update', { ...order, status: nextStatus } as SalesOrder); // Optimistic emit before heavy update? No, let's wait.
+            const effectiveBranchId = order.branch_id || branchId;
+            if (effectiveBranchId) {
+                this.socketService.emitToBranch(effectiveBranchId, 'orders:update', { ...order, status: nextStatus } as SalesOrder);
+            }
 
             // Update all items to Paid
             //  const itemsRepo = manager.getRepository(SalesOrderItem); // Need to import or use QueryBuilder
@@ -81,15 +85,25 @@ export class PaymentsService {
         if (nextStatus === OrderStatus.Completed && order.table_id) {
             await tablesRepo.update(order.table_id, { status: TableStatus.Available });
             const t = await tablesRepo.findOneBy({ id: order.table_id });
-            if (t) this.socketService.emit("tables:update", t);
+            if (t) {
+                const effectiveBranchId = order.branch_id || branchId;
+                if (effectiveBranchId) {
+                    this.socketService.emitToBranch(effectiveBranchId, "tables:update", t);
+                }
+            }
         }
 
-        const refreshedOrder = await orderRepo.findOne({ where: { id: orderId } });
-        if (refreshedOrder) this.socketService.emit("orders:update", refreshedOrder);
+        const refreshedOrder = await orderRepo.findOne({ where: branchId ? ({ id: orderId, branch_id: branchId } as any) : { id: orderId } });
+        if (refreshedOrder) {
+            const effectiveBranchId = refreshedOrder.branch_id || branchId;
+            if (effectiveBranchId) {
+                this.socketService.emitToBranch(effectiveBranchId, "orders:update", refreshedOrder);
+            }
+        }
     }
 
-    async create(payments: Payments, userId: string): Promise<Payments> {
-        return await AppDataSource.transaction(async (manager) => {
+    async create(payments: Payments, userId: string, branchId?: string): Promise<Payments> {
+        return await runInTransaction(async (manager) => {
             try {
                 if (!payments.order_id) {
                     throw new Error("กรุณาระบุรหัสออเดอร์")
@@ -104,12 +118,23 @@ export class PaymentsService {
                 }
 
                 const orderRepo = manager.getRepository(SalesOrder);
-                const order = await orderRepo.findOne({ where: { id: payments.order_id } });
+                const order = await orderRepo.findOne({ where: branchId ? ({ id: payments.order_id, branch_id: branchId } as any) : { id: payments.order_id } });
                 if (!order) {
                     throw new AppError("ไม่พบออเดอร์", 404);
                 }
                 if (order.status === OrderStatus.Cancelled) {
                     throw new AppError("ออเดอร์ถูกยกเลิกแล้ว", 400);
+                }
+
+                const effectiveBranchId = order.branch_id || branchId;
+                if (effectiveBranchId) {
+                    payments.branch_id = effectiveBranchId;
+                }
+
+                // Validate payment method belongs to branch
+                if (effectiveBranchId) {
+                    const pm = await manager.getRepository(PaymentMethod).findOneBy({ id: payments.payment_method_id, branch_id: effectiveBranchId } as any);
+                    if (!pm) throw new AppError("Payment method not found for this branch", 404);
                 }
 
                 const amountReceived = payments.amount_received !== undefined ? Number(payments.amount_received) : amount;
@@ -130,7 +155,7 @@ export class PaymentsService {
 
                 const createdPayment = await this.paymentsModel.create(payments, manager)
 
-                await this.refreshOrderPaymentSummary(createdPayment.order_id, manager);
+                await this.refreshOrderPaymentSummary(createdPayment.order_id, manager, branchId);
 
                 return createdPayment;
             } catch (error) {
@@ -138,25 +163,28 @@ export class PaymentsService {
             }
         }).then(async (createdPayment) => {
             // Fetch complete data with relations to return AFTER transaction commits
-            const completePayment = await this.paymentsModel.findOne(createdPayment.id)
+            const completePayment = await this.paymentsModel.findOne(createdPayment.id, branchId)
             if (completePayment) {
-                this.socketService.emit('payments:create', completePayment)
+                const effectiveBranchId = completePayment.branch_id || branchId;
+                if (effectiveBranchId) {
+                    this.socketService.emitToBranch(effectiveBranchId, 'payments:create', completePayment);
+                }
                 return completePayment
             }
             return createdPayment
         })
     }
 
-    async update(id: string, payments: Payments): Promise<Payments> {
-        return await AppDataSource.transaction(async (manager) => {
+    async update(id: string, payments: Payments, branchId?: string): Promise<Payments> {
+        return await runInTransaction(async (manager) => {
             try {
-                const paymentToUpdate = await this.paymentsModel.findOne(id) // Read-only is fine outside, but for strictness we could re-query inside. 
+                const paymentToUpdate = await this.paymentsModel.findOne(id, branchId) // Read-only is fine outside, but for strictness we could re-query inside. 
                 // However, findOne in model typically uses default repo. Let's assume concurrency is handled by optimistic check or DB locks if critical.
                 // For now, re-reading inside isn't easy without exposing manager to model fully.
                 // But we CAN use manager here.
 
                 const paymentsRepo = manager.getRepository(Payments);
-                const existingPayment = await paymentsRepo.findOneBy({ id });
+                const existingPayment = await paymentsRepo.findOneBy(branchId ? ({ id, branch_id: branchId } as any) : { id });
 
                 if (!existingPayment) {
                     throw new Error("ไม่พบข้อมูลการชำระเงินที่ต้องการแก้ไข")
@@ -184,41 +212,58 @@ export class PaymentsService {
                     payments.change_amount = Number((amountReceived - amount).toFixed(2));
                 }
 
+                const effectiveBranchId = existingPayment.branch_id || branchId;
+                if (effectiveBranchId) {
+                    payments.branch_id = effectiveBranchId;
+                }
+
+                if (payments.payment_method_id && effectiveBranchId) {
+                    const pm = await manager.getRepository(PaymentMethod).findOneBy({ id: payments.payment_method_id, branch_id: effectiveBranchId } as any);
+                    if (!pm) throw new AppError("Payment method not found for this branch", 404);
+                }
+
                 // Use model update with manager if possible, or repo update
                 await this.paymentsModel.update(id, payments, manager)
-                await this.refreshOrderPaymentSummary(existingPayment.order_id, manager);
+                await this.refreshOrderPaymentSummary(existingPayment.order_id, manager, branchId);
 
                 return existingPayment; // return placeholder, will refresh outside
             } catch (error) {
                 throw error
             }
         }).then(async () => {
-            const updatedPayment = await this.paymentsModel.findOne(id)
+            const updatedPayment = await this.paymentsModel.findOne(id, branchId)
             if (updatedPayment) {
-                this.socketService.emit('payments:update', updatedPayment)
+                const effectiveBranchId = updatedPayment.branch_id || branchId;
+                if (effectiveBranchId) {
+                    this.socketService.emitToBranch(effectiveBranchId, 'payments:update', updatedPayment);
+                }
                 return updatedPayment
             }
             throw new Error("Critical: Failed to retrieve updated payment");
         })
     }
 
-    async delete(id: string): Promise<void> {
-        return await AppDataSource.transaction(async (manager) => {
+    async delete(id: string, branchId?: string): Promise<void> {
+        return await runInTransaction(async (manager) => {
             try {
                 const paymentsRepo = manager.getRepository(Payments);
-                const payment = await paymentsRepo.findOneBy({ id });
+                const payment = await paymentsRepo.findOneBy(branchId ? ({ id, branch_id: branchId } as any) : { id });
 
-                if (payment) {
-                    await this.paymentsModel.delete(id, manager)
-                    if (payment.order_id) {
-                        await this.refreshOrderPaymentSummary(payment.order_id, manager);
-                    }
+                if (!payment) {
+                    throw new AppError("Payment not found", 404);
+                }
+
+                await this.paymentsModel.delete(id, manager)
+                if (payment.order_id) {
+                    await this.refreshOrderPaymentSummary(payment.order_id, manager, branchId);
                 }
             } catch (error) {
                 throw error
             }
         }).then(() => {
-            this.socketService.emit('payments:delete', { id })
+            if (branchId) {
+                this.socketService.emitToBranch(branchId, 'payments:delete', { id })
+            }
         })
     }
 }

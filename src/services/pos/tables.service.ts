@@ -15,9 +15,9 @@ export class TablesService {
         }
     }
 
-    async findOne(id: string): Promise<Tables | null> {
+    async findOne(id: string, branchId?: string): Promise<Tables | null> {
         try {
-            return this.tablesModel.findOne(id)
+            return this.tablesModel.findOne(id, branchId)
         } catch (error) {
             throw error
         }
@@ -43,16 +43,18 @@ export class TablesService {
             }
 
             const createdTable = await this.tablesModel.create(tables)
-            this.socketService.emit('tables:create', createdTable)
+            if (createdTable.branch_id) {
+                this.socketService.emitToBranch(createdTable.branch_id, 'tables:create', createdTable)
+            }
             return createdTable
         } catch (error) {
             throw error
         }
     }
 
-    async update(id: string, tables: Tables): Promise<Tables> {
+    async update(id: string, tables: Tables, branchId?: string): Promise<Tables> {
         try {
-            const tableToUpdate = await this.tablesModel.findOne(id)
+            const tableToUpdate = await this.tablesModel.findOne(id, branchId)
             if (!tableToUpdate) {
                 throw new Error("ไม่พบข้อมูลโต๊ะที่ต้องการแก้ไข")
             }
@@ -64,18 +66,26 @@ export class TablesService {
                 }
             }
 
-            const updatedTable = await this.tablesModel.update(id, tables)
-            this.socketService.emit('tables:update', updatedTable)
+            const effectiveBranchId = tableToUpdate.branch_id || branchId || tables.branch_id;
+            const updatedTable = await this.tablesModel.update(id, tables, effectiveBranchId)
+            if (effectiveBranchId) {
+                this.socketService.emitToBranch(effectiveBranchId, 'tables:update', updatedTable)
+            }
             return updatedTable
         } catch (error) {
             throw error
         }
     }
 
-    async delete(id: string): Promise<void> {
+    async delete(id: string, branchId?: string): Promise<void> {
         try {
-            await this.tablesModel.delete(id)
-            this.socketService.emit('tables:delete', { id })
+            const existing = await this.tablesModel.findOne(id, branchId);
+            if (!existing) throw new Error("Table not found");
+            await this.tablesModel.delete(id, branchId)
+            const effectiveBranchId = existing.branch_id || branchId;
+            if (effectiveBranchId) {
+                this.socketService.emitToBranch(effectiveBranchId, 'tables:delete', { id })
+            }
         } catch (error) {
             throw error
         }

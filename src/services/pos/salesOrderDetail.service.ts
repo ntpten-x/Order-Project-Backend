@@ -1,9 +1,9 @@
 import { SalesOrderDetailModels } from "../../models/pos/salesOrderDetail.model";
 import { SocketService } from "../socket.service";
 import { SalesOrderDetail } from "../../entity/pos/SalesOrderDetail";
-import { AppDataSource } from "../../database/database";
 import { SalesOrderItem } from "../../entity/pos/SalesOrderItem";
 import { recalculateOrderTotal } from "./orderTotals.service";
+import { getRepository } from "../../database/dbContext";
 
 export class SalesOrderDetailService {
     private socketService = SocketService.getInstance();
@@ -12,41 +12,57 @@ export class SalesOrderDetailService {
 
     private async recalcByItemId(ordersItemId?: string | null): Promise<void> {
         if (!ordersItemId) return;
-        const itemRepo = AppDataSource.getRepository(SalesOrderItem);
+        const itemRepo = getRepository(SalesOrderItem);
         const item = await itemRepo.findOneBy({ id: ordersItemId });
         if (item) {
             await recalculateOrderTotal(item.order_id);
         }
     }
 
-    async findAll(): Promise<SalesOrderDetail[]> {
+    async findAll(branchId?: string): Promise<SalesOrderDetail[]> {
         try {
-            return this.salesOrderDetailModel.findAll()
+            return this.salesOrderDetailModel.findAll(branchId)
         } catch (error) {
             throw error
         }
     }
 
-    async findOne(id: string): Promise<SalesOrderDetail | null> {
+    async findOne(id: string, branchId?: string): Promise<SalesOrderDetail | null> {
         try {
-            return this.salesOrderDetailModel.findOne(id)
+            return this.salesOrderDetailModel.findOne(id, branchId)
         } catch (error) {
             throw error
         }
     }
 
-    async create(salesOrderDetail: SalesOrderDetail): Promise<SalesOrderDetail> {
+    async create(salesOrderDetail: SalesOrderDetail, branchId?: string): Promise<SalesOrderDetail> {
         try {
             if (!salesOrderDetail.orders_item_id) {
                 throw new Error("เธเธฃเธธเธ“เธฒเธฃเธฐเธเธธเธฃเธซเธฑเธชเธฃเธฒเธขเธเธฒเธฃเธชเธดเธเธเนเธฒเนเธกเนเธเนเธฒเธข")
             }
 
+            if (branchId) {
+                const itemRepo = getRepository(SalesOrderItem);
+                const item = await itemRepo
+                    .createQueryBuilder("item")
+                    .innerJoin("item.order", "order")
+                    .where("item.id = :id", { id: salesOrderDetail.orders_item_id })
+                    .andWhere("order.branch_id = :branchId", { branchId })
+                    .getOne();
+
+                if (!item) {
+                    throw new Error("Order item not found for this branch");
+                }
+            }
+
             const createdDetail = await this.salesOrderDetailModel.create(salesOrderDetail)
             await this.recalcByItemId(createdDetail.orders_item_id);
 
-            const completeDetail = await this.salesOrderDetailModel.findOne(createdDetail.id)
+            const completeDetail = await this.salesOrderDetailModel.findOne(createdDetail.id, branchId)
             if (completeDetail) {
-                this.socketService.emit('salesOrderDetail:create', completeDetail)
+                if (branchId) {
+                    this.socketService.emitToBranch(branchId, 'salesOrderDetail:create', completeDetail)
+                }
                 return completeDetail
             }
             return createdDetail
@@ -55,28 +71,32 @@ export class SalesOrderDetailService {
         }
     }
 
-    async update(id: string, salesOrderDetail: SalesOrderDetail): Promise<SalesOrderDetail> {
+    async update(id: string, salesOrderDetail: SalesOrderDetail, branchId?: string): Promise<SalesOrderDetail> {
         try {
-            const detailToUpdate = await this.salesOrderDetailModel.findOne(id)
+            const detailToUpdate = await this.salesOrderDetailModel.findOne(id, branchId)
             if (!detailToUpdate) {
                 throw new Error("ไม่พบรายละเอียดเพิ่มเติมที่ต้องการแก้ไข")
             }
 
-            const updatedDetail = await this.salesOrderDetailModel.update(id, salesOrderDetail)
+            const updatedDetail = await this.salesOrderDetailModel.update(id, salesOrderDetail, branchId)
             await this.recalcByItemId(detailToUpdate.orders_item_id);
-            this.socketService.emit('salesOrderDetail:update', updatedDetail)
+            if (branchId) {
+                this.socketService.emitToBranch(branchId, 'salesOrderDetail:update', updatedDetail)
+            }
             return updatedDetail
         } catch (error) {
             throw error
         }
     }
 
-    async delete(id: string): Promise<void> {
+    async delete(id: string, branchId?: string): Promise<void> {
         try {
-            const detailToDelete = await this.salesOrderDetailModel.findOne(id)
-            await this.salesOrderDetailModel.delete(id)
+            const detailToDelete = await this.salesOrderDetailModel.findOne(id, branchId)
+            await this.salesOrderDetailModel.delete(id, branchId)
             await this.recalcByItemId(detailToDelete?.orders_item_id);
-            this.socketService.emit('salesOrderDetail:delete', { id })
+            if (branchId) {
+                this.socketService.emitToBranch(branchId, 'salesOrderDetail:delete', { id })
+            }
         } catch (error) {
             throw error
         }

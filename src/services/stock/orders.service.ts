@@ -1,7 +1,8 @@
-import { PurchaseOrder, PurchaseOrderStatus } from "../../entity/stock/PurchaseOrder";
+import { PurchaseOrderStatus } from "../../entity/stock/PurchaseOrder";
 import { StockOrdersModel } from "../../models/stock/orders.model";
 import { SocketService } from "../socket.service";
 import { withCache, cacheKey, invalidateCache, queryCache } from "../../utils/cache";
+import { getDbContext } from "../../database/dbContext";
 
 /**
  * Orders Service with Caching
@@ -14,11 +15,22 @@ export class OrdersService {
 
     constructor(private ordersModel: StockOrdersModel) { }
 
+    private getCacheScopeParts(branchId?: string): Array<string> {
+        const ctx = getDbContext();
+        const effectiveBranchId = branchId ?? ctx?.branchId;
+        if (effectiveBranchId) return ["branch", effectiveBranchId];
+        if (ctx?.isAdmin) return ["admin"];
+        return ["public"];
+    }
+
     async createOrder(orderedById: string, items: { ingredient_id: string; quantity_ordered: number }[], remark?: string, branchId?: string) {
         const completeOrder = await this.ordersModel.createOrderWithItems(orderedById, items, remark, branchId);
+        const emitBranchId = branchId || (completeOrder as any).branch_id;
         // Invalidate list cache
-        this.invalidateCache();
-        this.socketService.emit("orders_updated", { action: "create", data: completeOrder });
+        this.invalidateCache(emitBranchId);
+        if (emitBranchId) {
+            this.socketService.emitToBranch(emitBranchId, "orders_updated", { action: "create", data: completeOrder });
+        }
         return completeOrder;
     }
 
@@ -26,7 +38,8 @@ export class OrdersService {
         const filterKey = filters?.status 
             ? (Array.isArray(filters.status) ? filters.status.join(',') : filters.status)
             : 'all';
-        const key = cacheKey(this.CACHE_PREFIX, 'list', page, limit, filterKey, branchId || 'all');
+        const scope = this.getCacheScopeParts(branchId);
+        const key = cacheKey(this.CACHE_PREFIX, ...scope, 'list', page, limit, filterKey);
         
         // Skip cache if page > 1 (too many variants)
         if (page > 1) {
@@ -41,56 +54,75 @@ export class OrdersService {
         );
     }
 
-    async getOrderById(id: string) {
-        const key = cacheKey(this.CACHE_PREFIX, 'single', id);
+    async getOrderById(id: string, branchId?: string) {
+        const scope = this.getCacheScopeParts(branchId);
+        const key = cacheKey(this.CACHE_PREFIX, ...scope, 'single', id);
         
         return withCache(
             key,
-            () => this.ordersModel.findById(id),
+            () => this.ordersModel.findById(id, branchId),
             this.CACHE_TTL,
             queryCache as any
         );
     }
 
-    async updateOrder(id: string, items: { ingredient_id: string; quantity_ordered: number }[]) {
-        const updatedOrder = await this.ordersModel.updateOrderItems(id, items);
-        this.invalidateCache(id);
-        this.socketService.emit("orders_updated", { action: "update_order", data: updatedOrder });
+    async updateOrder(id: string, items: { ingredient_id: string; quantity_ordered: number }[], branchId?: string) {
+        const updatedOrder = await this.ordersModel.updateOrderItems(id, items, branchId);
+        const effectiveBranchId = branchId || (updatedOrder as any)?.branch_id;
+        this.invalidateCache(effectiveBranchId, id);
+        if (effectiveBranchId) {
+            this.socketService.emitToBranch(effectiveBranchId, "orders_updated", { action: "update_order", data: updatedOrder });
+        }
         return updatedOrder;
     }
 
-    async updateStatus(id: string, status: PurchaseOrderStatus) {
-        const updatedOrder = await this.ordersModel.updateStatus(id, status);
+    async updateStatus(id: string, status: PurchaseOrderStatus, branchId?: string) {
+        const updatedOrder = await this.ordersModel.updateStatus(id, status, branchId);
         if (!updatedOrder) throw new Error("ไม่พบข้อมูลการสั่งซื้อ");
 
-        this.invalidateCache(id);
-        this.socketService.emit("orders_updated", { action: "update_status", data: updatedOrder });
+        const effectiveBranchId = branchId || (updatedOrder as any)?.branch_id;
+        this.invalidateCache(effectiveBranchId, id);
+        if (effectiveBranchId) {
+            this.socketService.emitToBranch(effectiveBranchId, "orders_updated", { action: "update_status", data: updatedOrder });
+        }
         return updatedOrder;
     }
 
-    async deleteOrder(id: string) {
-        const deleted = await this.ordersModel.delete(id);
+    async deleteOrder(id: string, branchId?: string) {
+        const deleted = await this.ordersModel.delete(id, branchId);
         if (deleted) {
-            this.invalidateCache(id);
-            this.socketService.emit("orders_updated", { action: "delete", id });
+            this.invalidateCache(branchId, id);
+            if (branchId) {
+                this.socketService.emitToBranch(branchId, "orders_updated", { action: "delete", id });
+            }
         }
         return { affected: deleted ? 1 : 0 };
     }
 
-    async confirmPurchase(id: string, items: { ingredient_id: string; actual_quantity: number; is_purchased: boolean }[], purchasedById: string) {
-        const updatedOrder = await this.ordersModel.confirmPurchase(id, items, purchasedById);
-        this.invalidateCache(id);
-        this.socketService.emit("orders_updated", { action: "update_status", data: updatedOrder });
+    async confirmPurchase(id: string, items: { ingredient_id: string; actual_quantity: number; is_purchased: boolean }[], purchasedById: string, branchId?: string) {
+        const updatedOrder = await this.ordersModel.confirmPurchase(id, items, purchasedById, branchId);
+        const effectiveBranchId = branchId || (updatedOrder as any)?.branch_id;
+        this.invalidateCache(effectiveBranchId, id);
+        if (effectiveBranchId) {
+            this.socketService.emitToBranch(effectiveBranchId, "orders_updated", { action: "update_status", data: updatedOrder });
+        }
         return updatedOrder;
     }
 
     /**
      * Invalidate orders cache
      */
-    private invalidateCache(id?: string): void {
-        const patterns = [`${this.CACHE_PREFIX}:list`];
+    private invalidateCache(branchId?: string, id?: string): void {
+        const ctx = getDbContext();
+        const effectiveBranchId = branchId ?? ctx?.branchId;
+        if (!effectiveBranchId) {
+            invalidateCache([`${this.CACHE_PREFIX}:`]);
+            return;
+        }
+
+        const patterns = [cacheKey(this.CACHE_PREFIX, "branch", effectiveBranchId, "list")];
         if (id) {
-            patterns.push(`${this.CACHE_PREFIX}:single:${id}`);
+            patterns.push(cacheKey(this.CACHE_PREFIX, "branch", effectiveBranchId, "single", id));
         }
         invalidateCache(patterns);
     }

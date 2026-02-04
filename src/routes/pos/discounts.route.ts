@@ -4,6 +4,7 @@ import { DiscountsService } from "../../services/pos/discounts.service";
 import { DiscountsController } from "../../controllers/pos/discounts.controller";
 import { authenticateToken, authorizeRole } from "../../middleware/auth.middleware";
 import { validate } from "../../middleware/validate.middleware";
+import { requireBranch } from "../../middleware/branch.middleware";
 import {
     createDiscountSchema,
     discountIdParamSchema,
@@ -19,6 +20,7 @@ const discountsController = new DiscountsController(discountsService)
 
 router.use(authenticateToken)
 router.use(authorizeRole(["Admin", "Manager", "Employee"]))
+router.use(requireBranch)
 // Authorization:
 // Admin/Manager can Manage
 // Employee can Read

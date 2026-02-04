@@ -3,6 +3,7 @@ import { OrdersModels } from "../../models/pos/orders.model";
 import { OrdersService } from "../../services/pos/orders.service";
 import { OrdersController } from "../../controllers/pos/orders.controller";
 import { authenticateToken, authorizeRole } from "../../middleware/auth.middleware";
+import { requireBranch } from "../../middleware/branch.middleware";
 import { validate } from "../../middleware/validate.middleware";
 import { addOrderItemSchema, createOrderSchema, orderIdParamSchema, orderItemIdParamSchema, updateOrderItemSchema, updateOrderItemStatusSchema, updateOrderSchema } from "../../utils/schemas/posOrders.schema";
 
@@ -14,6 +15,7 @@ const ordersController = new OrdersController(ordersService)
 
 router.use(authenticateToken)
 router.use(authorizeRole(["Admin", "Manager", "Employee"]))
+router.use(requireBranch)
 
 // Specific routes must come before dynamic routes like /:id
 router.get("/stats", authorizeRole(["Admin", "Manager", "Employee"]), ordersController.getStats)

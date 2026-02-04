@@ -3,6 +3,7 @@ import { IngredientsUnitModel } from "../../models/stock/ingredientsUnit.model";
 import { IngredientsUnitService } from "../../services/stock/ingredientsUnit.service";
 import { IngredientsUnitController } from "../../controllers/stock/ingredientsUnit.controller";
 import { authenticateToken, authorizeRole } from "../../middleware/auth.middleware";
+import { requireBranch } from "../../middleware/branch.middleware";
 import { validate } from "../../middleware/validate.middleware";
 import {
     createIngredientUnitSchema,
@@ -20,6 +21,7 @@ const ingredientsUnitController = new IngredientsUnitController(ingredientsUnitS
 // Protect all routes
 router.use(authenticateToken)
 router.use(authorizeRole(["Admin"]))
+router.use(requireBranch)
 
 router.get("/", ingredientsUnitController.findAll)
 router.get("/:id", validate(ingredientUnitIdParamSchema), ingredientsUnitController.findOne)

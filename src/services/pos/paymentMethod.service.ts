@@ -31,51 +31,75 @@ export class PaymentMethodService {
         }
     }
 
-    async create(paymentMethod: PaymentMethod): Promise<PaymentMethod> {
+    async create(paymentMethod: PaymentMethod, branchId?: string): Promise<PaymentMethod> {
         try {
             if (!paymentMethod.payment_method_name) {
                 throw new Error("กรุณาระบุชื่อวิธีการชำระเงิน")
             }
 
-            const existingPaymentMethod = await this.paymentMethodModel.findOneByName(paymentMethod.payment_method_name, paymentMethod.branch_id)
+            const effectiveBranchId = branchId || paymentMethod.branch_id;
+            if (effectiveBranchId) {
+                paymentMethod.branch_id = effectiveBranchId;
+            }
+
+            const existingPaymentMethod = await this.paymentMethodModel.findOneByName(paymentMethod.payment_method_name, effectiveBranchId)
             if (existingPaymentMethod) {
                 throw new Error("ชื่อวิธีการชำระเงินนี้มีอยู่ในระบบแล้ว")
             }
 
             const createdPaymentMethod = await this.paymentMethodModel.create(paymentMethod)
-            this.socketService.emit('paymentMethod:create', createdPaymentMethod)
+            if (effectiveBranchId) {
+                this.socketService.emitToBranch(effectiveBranchId, 'paymentMethod:create', createdPaymentMethod)
+            }
             return createdPaymentMethod
         } catch (error) {
             throw error
         }
     }
 
-    async update(id: string, paymentMethod: PaymentMethod): Promise<PaymentMethod> {
+    async update(id: string, paymentMethod: PaymentMethod, branchId?: string): Promise<PaymentMethod> {
         try {
-            const paymentMethodToUpdate = await this.paymentMethodModel.findOne(id)
+            const paymentMethodToUpdate = await this.paymentMethodModel.findOne(id, branchId)
             if (!paymentMethodToUpdate) {
                 throw new Error("ไม่พบข้อมูลวิธีการชำระเงินที่ต้องการแก้ไข")
             }
 
             if (paymentMethod.payment_method_name && paymentMethod.payment_method_name !== paymentMethodToUpdate.payment_method_name) {
-                const existingPaymentMethod = await this.paymentMethodModel.findOneByName(paymentMethod.payment_method_name, paymentMethod.branch_id || paymentMethodToUpdate.branch_id)
+                const effectiveBranchId = branchId || paymentMethodToUpdate.branch_id || paymentMethod.branch_id;
+                if (effectiveBranchId) {
+                    paymentMethod.branch_id = effectiveBranchId;
+                }
+                const existingPaymentMethod = await this.paymentMethodModel.findOneByName(paymentMethod.payment_method_name, effectiveBranchId)
                 if (existingPaymentMethod) {
                     throw new Error("ชื่อวิธีการชำระเงินนี้มีอยู่ในระบบแล้ว")
                 }
             }
 
-            const updatedPaymentMethod = await this.paymentMethodModel.update(id, paymentMethod)
-            this.socketService.emit('paymentMethod:update', updatedPaymentMethod)
+            const effectiveBranchId = branchId || paymentMethodToUpdate.branch_id || paymentMethod.branch_id;
+            if (effectiveBranchId) {
+                paymentMethod.branch_id = effectiveBranchId;
+            }
+
+            const updatedPaymentMethod = await this.paymentMethodModel.update(id, paymentMethod, effectiveBranchId)
+            if (effectiveBranchId) {
+                this.socketService.emitToBranch(effectiveBranchId, 'paymentMethod:update', updatedPaymentMethod)
+            }
             return updatedPaymentMethod
         } catch (error) {
             throw error
         }
     }
 
-    async delete(id: string): Promise<void> {
+    async delete(id: string, branchId?: string): Promise<void> {
         try {
-            await this.paymentMethodModel.delete(id)
-            this.socketService.emit('paymentMethod:delete', { id })
+            const existing = await this.paymentMethodModel.findOne(id, branchId);
+            if (!existing) throw new Error("Payment method not found");
+
+            const effectiveBranchId = branchId || existing.branch_id;
+            await this.paymentMethodModel.delete(id, effectiveBranchId)
+            if (effectiveBranchId) {
+                this.socketService.emitToBranch(effectiveBranchId, 'paymentMethod:delete', { id })
+            }
         } catch (error) {
             throw error
         }

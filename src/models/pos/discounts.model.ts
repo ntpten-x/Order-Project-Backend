@@ -1,12 +1,11 @@
-import { AppDataSource } from "../../database/database";
 import { Discounts } from "../../entity/pos/Discounts";
+import { getRepository } from "../../database/dbContext";
 
 export class DiscountsModels {
-    private discountsRepository = AppDataSource.getRepository(Discounts)
-
     async findAll(q?: string, branchId?: string): Promise<Discounts[]> {
         try {
-            const query = this.discountsRepository.createQueryBuilder("discounts")
+            const discountsRepository = getRepository(Discounts);
+            const query = discountsRepository.createQueryBuilder("discounts")
                 .orderBy("discounts.create_date", "ASC");
 
             if (branchId) {
@@ -28,11 +27,12 @@ export class DiscountsModels {
 
     async findOne(id: string, branchId?: string): Promise<Discounts | null> {
         try {
+            const discountsRepository = getRepository(Discounts);
             const where: any = { id };
             if (branchId) {
                 where.branch_id = branchId;
             }
-            return this.discountsRepository.findOneBy(where)
+            return discountsRepository.findOneBy(where)
         } catch (error) {
             throw error
         }
@@ -40,11 +40,12 @@ export class DiscountsModels {
 
     async findOneByName(discount_name: string, branchId?: string): Promise<Discounts | null> {
         try {
+            const discountsRepository = getRepository(Discounts);
             const where: any = { discount_name };
             if (branchId) {
                 where.branch_id = branchId;
             }
-            return this.discountsRepository.findOneBy(where)
+            return discountsRepository.findOneBy(where)
         } catch (error) {
             throw error
         }
@@ -52,16 +53,22 @@ export class DiscountsModels {
 
     async create(data: Discounts): Promise<Discounts> {
         try {
-            return this.discountsRepository.save(data)
+            return getRepository(Discounts).save(data)
         } catch (error) {
             throw error
         }
     }
 
-    async update(id: string, data: Discounts): Promise<Discounts> {
+    async update(id: string, data: Discounts, branchId?: string): Promise<Discounts> {
         try {
-            await this.discountsRepository.update(id, data)
-            const updatedDiscount = await this.findOne(id)
+            const discountsRepository = getRepository(Discounts);
+            if (branchId) {
+                await discountsRepository.update({ id, branch_id: branchId } as any, data)
+            } else {
+                await discountsRepository.update(id, data)
+            }
+
+            const updatedDiscount = await this.findOne(id, branchId)
             if (!updatedDiscount) {
                 throw new Error("ไม่พบข้อมูลส่วนลดที่ต้องการค้นหา")
             }
@@ -71,9 +78,14 @@ export class DiscountsModels {
         }
     }
 
-    async delete(id: string): Promise<void> {
+    async delete(id: string, branchId?: string): Promise<void> {
         try {
-            await this.discountsRepository.delete(id)
+            const discountsRepository = getRepository(Discounts);
+            if (branchId) {
+                await discountsRepository.delete({ id, branch_id: branchId } as any)
+            } else {
+                await discountsRepository.delete(id)
+            }
         } catch (error) {
             throw error
         }

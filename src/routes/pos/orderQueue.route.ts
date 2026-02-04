@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { OrderQueueController } from "../../controllers/pos/orderQueue.controller";
 import { authenticateToken, authorizeRole } from "../../middleware/auth.middleware";
+import { requireBranch } from "../../middleware/branch.middleware";
 
 const router = Router();
 const orderQueueController = new OrderQueueController();
@@ -8,6 +9,7 @@ const orderQueueController = new OrderQueueController();
 // Protect all routes
 router.use(authenticateToken);
 router.use(authorizeRole(["Admin", "Manager", "Employee"]));
+router.use(requireBranch);
 
 // Routes
 router.post("/", orderQueueController.addToQueue);

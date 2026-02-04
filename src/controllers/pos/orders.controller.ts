@@ -1,9 +1,10 @@
-import { Request, Response, NextFunction } from "express";
+import { Request, Response } from "express";
 import { OrdersService } from "../../services/pos/orders.service";
 import { catchAsync } from "../../utils/catchAsync";
 import { AppError } from "../../utils/AppError";
 import { auditLogger, AuditActionType } from "../../utils/auditLogger";
 import { getClientIp } from "../../utils/securityLogger";
+import { ApiResponses } from "../../utils/ApiResponse";
 
 export class OrdersController {
     constructor(private ordersService: OrdersService) { }
@@ -17,8 +18,12 @@ export class OrdersController {
         const query = req.query.q as string | undefined;
         const branchId = (req as any).user?.branch_id;
 
-        const result = await this.ordersService.findAll(page, limit, statuses, type, query, branchId)
-        res.status(200).json(result)
+        const result = await this.ordersService.findAll(page, limit, statuses, type, query, branchId);
+        return ApiResponses.paginated(res, result.data, {
+            page: result.page,
+            limit: result.limit,
+            total: result.total,
+        });
     })
 
     findSummary = catchAsync(async (req: Request, res: Response) => {
@@ -31,13 +36,17 @@ export class OrdersController {
         const branchId = (req as any).user?.branch_id;
 
         const result = await this.ordersService.findAllSummary(page, limit, statuses, type, query, branchId);
-        res.status(200).json(result);
+        return ApiResponses.paginated(res, result.data, {
+            page: result.page,
+            limit: result.limit,
+            total: result.total,
+        });
     })
 
     getStats = catchAsync(async (req: Request, res: Response) => {
         const branchId = (req as any).user?.branch_id;
         const stats = await this.ordersService.getStats(branchId);
-        res.status(200).json(stats);
+        return ApiResponses.ok(res, stats);
     })
 
     findAllItems = catchAsync(async (req: Request, res: Response) => {
@@ -48,31 +57,38 @@ export class OrdersController {
         const branchId = (req as any).user?.branch_id;
 
         const result = await this.ordersService.findAllItems(status, page, limit, branchId);
-        res.status(200).json(result);
+        return ApiResponses.paginated(res, result.data, {
+            page: result.page,
+            limit: result.limit,
+            total: result.total,
+        });
     })
 
     findOne = catchAsync(async (req: Request, res: Response) => {
-        const order = await this.ordersService.findOne(req.params.id)
+        const branchId = (req as any).user?.branch_id;
+        const order = await this.ordersService.findOne(req.params.id, branchId)
         if (!order) {
             throw new AppError("ไม่พบข้อมูลออเดอร์", 404);
         }
-        res.status(200).json(order)
+        return ApiResponses.ok(res, order);
     })
 
     create = catchAsync(async (req: Request, res: Response) => {
         const user = (req as any).user;
-        if (user?.id && !req.body.created_by_id) {
+        const branchId = user?.branch_id;
+        if (user?.id) {
             req.body.created_by_id = user.id;
         }
-        if (user?.branch_id && !req.body.branch_id) {
-            req.body.branch_id = user.branch_id;
+        if (branchId) {
+            // Always enforce branch isolation server-side (ignore client-provided branch_id)
+            req.body.branch_id = branchId;
         }
         // Check if input has items, if so use createFullOrder
         let order;
         if (req.body.items && Array.isArray(req.body.items) && req.body.items.length > 0) {
-            order = await this.ordersService.createFullOrder(req.body)
+            order = await this.ordersService.createFullOrder(req.body, branchId)
         } else {
-            order = await this.ordersService.create(req.body)
+            order = await this.ordersService.create(req.body, branchId)
         }
         
         // Audit log
@@ -91,13 +107,19 @@ export class OrdersController {
             method: req.method,
         });
         
-        res.status(201).json(order)
+        return ApiResponses.created(res, order);
     })
 
     update = catchAsync(async (req: Request, res: Response) => {
         const user = (req as any).user;
-        const oldOrder = await this.ordersService.findOne(req.params.id);
-        const order = await this.ordersService.update(req.params.id, req.body)
+        const branchId = user?.branch_id;
+        if (branchId) {
+            // Prevent branch_id tampering
+            req.body.branch_id = branchId;
+        }
+
+        const oldOrder = await this.ordersService.findOne(req.params.id, branchId);
+        const order = await this.ordersService.update(req.params.id, req.body, branchId)
         
         // Audit log
         await auditLogger.log({
@@ -115,27 +137,68 @@ export class OrdersController {
             path: req.path,
             method: req.method,
         });
+
+        // Extra audit for status changes (important operational event)
+        if (oldOrder?.status && req.body?.status && String(oldOrder.status) !== String(req.body.status)) {
+            await auditLogger.log({
+                action_type: AuditActionType.ORDER_STATUS_CHANGE,
+                user_id: user?.id,
+                username: user?.username,
+                ip_address: getClientIp(req),
+                user_agent: req.headers['user-agent'],
+                entity_type: 'SalesOrder',
+                entity_id: order.id,
+                branch_id: user?.branch_id,
+                old_values: { status: oldOrder.status },
+                new_values: { status: req.body.status },
+                description: `Changed order status ${order.order_no}: ${oldOrder.status} -> ${req.body.status}`,
+                path: req.path,
+                method: req.method,
+            });
+        }
         
-        res.status(200).json(order)
+        return ApiResponses.ok(res, order);
     })
 
     delete = catchAsync(async (req: Request, res: Response) => {
-        await this.ordersService.delete(req.params.id)
-        res.status(200).json({ message: "ลบข้อมูลออเดอร์สำเร็จ" })
+        const user = (req as any).user;
+        const branchId = user?.branch_id;
+        const oldOrder = await this.ordersService.findOne(req.params.id, branchId);
+
+        await this.ordersService.delete(req.params.id, branchId)
+
+        // Audit log - important destructive action
+        await auditLogger.log({
+            action_type: AuditActionType.ORDER_DELETE,
+            user_id: user?.id,
+            username: user?.username,
+            ip_address: getClientIp(req),
+            user_agent: req.headers['user-agent'],
+            entity_type: 'SalesOrder',
+            entity_id: req.params.id,
+            branch_id: branchId,
+            old_values: oldOrder ? { order_no: oldOrder.order_no, status: oldOrder.status } : undefined,
+            description: oldOrder ? `Deleted order ${oldOrder.order_no}` : `Deleted order ${req.params.id}`,
+            path: req.path,
+            method: req.method,
+        });
+        return ApiResponses.ok(res, { message: "ลบข้อมูลออเดอร์สำเร็จ" });
     })
 
     updateItemStatus = catchAsync(async (req: Request, res: Response) => {
+        const branchId = (req as any).user?.branch_id;
         const { status } = req.body
         if (!status) {
             throw new AppError("กรุณาระบุสถานะ", 400);
         }
-        await this.ordersService.updateItemStatus(req.params.id, status)
-        res.status(200).json({ message: "อัปเดตสถานะสำเร็จ" })
+        await this.ordersService.updateItemStatus(req.params.id, status, branchId)
+        return ApiResponses.ok(res, { message: "อัปเดตสถานะสำเร็จ" });
     })
 
     addItem = catchAsync(async (req: Request, res: Response) => {
         const user = (req as any).user;
-        const order = await this.ordersService.addItem(req.params.id, req.body);
+        const branchId = user?.branch_id;
+        const order = await this.ordersService.addItem(req.params.id, req.body, branchId);
         
         // Audit log
         await auditLogger.log({
@@ -153,16 +216,51 @@ export class OrdersController {
             method: req.method,
         });
         
-        res.status(201).json(order);
+        return ApiResponses.created(res, order);
     })
 
     updateItem = catchAsync(async (req: Request, res: Response) => {
-        const order = await this.ordersService.updateItemDetails(req.params.itemId, req.body);
-        res.status(200).json(order);
+        const user = (req as any).user;
+        const branchId = user?.branch_id;
+        const order = await this.ordersService.updateItemDetails(req.params.itemId, req.body, branchId);
+
+        // Audit log - item modifications affect bill/operations
+        await auditLogger.log({
+            action_type: AuditActionType.ITEM_UPDATE,
+            user_id: user?.id,
+            username: user?.username,
+            ip_address: getClientIp(req),
+            user_agent: req.headers['user-agent'],
+            entity_type: 'SalesOrderItem',
+            entity_id: req.params.itemId,
+            branch_id: branchId,
+            new_values: req.body,
+            description: order?.order_no ? `Updated item in order ${order.order_no}` : `Updated order item ${req.params.itemId}`,
+            path: req.path,
+            method: req.method,
+        });
+        return ApiResponses.ok(res, order);
     })
 
     deleteItem = catchAsync(async (req: Request, res: Response) => {
-        const order = await this.ordersService.deleteItem(req.params.itemId);
-        res.status(200).json(order);
+        const user = (req as any).user;
+        const branchId = user?.branch_id;
+        const order = await this.ordersService.deleteItem(req.params.itemId, branchId);
+
+        // Audit log - important destructive action
+        await auditLogger.log({
+            action_type: AuditActionType.ITEM_DELETE,
+            user_id: user?.id,
+            username: user?.username,
+            ip_address: getClientIp(req),
+            user_agent: req.headers['user-agent'],
+            entity_type: 'SalesOrderItem',
+            entity_id: req.params.itemId,
+            branch_id: branchId,
+            description: order?.order_no ? `Deleted item from order ${order.order_no}` : `Deleted order item ${req.params.itemId}`,
+            path: req.path,
+            method: req.method,
+        });
+        return ApiResponses.ok(res, order);
     })
 }

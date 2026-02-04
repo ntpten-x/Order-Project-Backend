@@ -6,19 +6,24 @@ export class OrdersDetailService {
 
     constructor(private ordersDetailModel: StockOrdersDetailModel) { }
 
-    async updatePurchaseDetail(ordersItemId: string, data: { actual_quantity: number; purchased_by_id: string; is_purchased: boolean }) {
+    async updatePurchaseDetail(ordersItemId: string, data: { actual_quantity: number; purchased_by_id: string; is_purchased: boolean }, branchId?: string) {
         try {
+            const orderItem = await this.ordersDetailModel.getOrderItemWithOrder(ordersItemId, branchId);
+            if (!orderItem) {
+                throw new Error("Order item not found");
+            }
+
             const savedDetail = await this.ordersDetailModel.createOrUpdate(ordersItemId, data);
 
-            // Fetch related info for socket
-            const orderItem = await this.ordersDetailModel.getOrderItemWithOrder(ordersItemId);
-
             if (orderItem) {
-                this.socketService.emit("orders_updated", {
-                    action: "update_item_detail",
-                    orderId: orderItem.orders.id,
-                    data: savedDetail
-                });
+                const emitBranchId = branchId || (orderItem.orders as any)?.branch_id;
+                if (emitBranchId) {
+                    this.socketService.emitToBranch(emitBranchId, "orders_updated", {
+                        action: "update_item_detail",
+                        orderId: orderItem.orders.id,
+                        data: savedDetail
+                    });
+                }
             }
 
             return savedDetail;

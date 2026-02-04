@@ -1,12 +1,14 @@
 import { Router } from "express";
 import { PromotionsController } from "../../controllers/pos/promotions.controller";
 import { authenticateToken, authorizeRole } from "../../middleware/auth.middleware";
+import { requireBranch } from "../../middleware/branch.middleware";
 
 const router = Router();
 const promotionsController = new PromotionsController();
 
 // Protect all routes
 router.use(authenticateToken);
+router.use(requireBranch);
 
 // Public routes (for validation and viewing)
 router.post("/validate", promotionsController.validatePromotion);

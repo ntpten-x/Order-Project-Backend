@@ -31,51 +31,75 @@ export class DiscountsService {
         }
     }
 
-    async create(discounts: Discounts): Promise<Discounts> {
+    async create(discounts: Discounts, branchId?: string): Promise<Discounts> {
         try {
             if (!discounts.discount_name) {
                 throw new Error("กรุณาระบุชื่อส่วนลด")
             }
 
-            const existingDiscount = await this.discountsModel.findOneByName(discounts.discount_name, discounts.branch_id)
+            const effectiveBranchId = branchId || discounts.branch_id;
+            if (effectiveBranchId) {
+                discounts.branch_id = effectiveBranchId;
+            }
+
+            const existingDiscount = await this.discountsModel.findOneByName(discounts.discount_name, effectiveBranchId)
             if (existingDiscount) {
                 throw new Error("ชื่อส่วนลดนี้มีอยู่ในระบบแล้ว")
             }
 
             const createdDiscount = await this.discountsModel.create(discounts)
-            this.socketService.emit('discounts:create', createdDiscount)
+            if (effectiveBranchId) {
+                this.socketService.emitToBranch(effectiveBranchId, 'discounts:create', createdDiscount)
+            }
             return createdDiscount
         } catch (error) {
             throw error
         }
     }
 
-    async update(id: string, discounts: Discounts): Promise<Discounts> {
+    async update(id: string, discounts: Discounts, branchId?: string): Promise<Discounts> {
         try {
-            const discountToUpdate = await this.discountsModel.findOne(id)
+            const discountToUpdate = await this.discountsModel.findOne(id, branchId)
             if (!discountToUpdate) {
                 throw new Error("ไม่พบข้อมูลส่วนลดที่ต้องการแก้ไข")
             }
 
             if (discounts.discount_name && discounts.discount_name !== discountToUpdate.discount_name) {
-                const existingDiscount = await this.discountsModel.findOneByName(discounts.discount_name, discounts.branch_id || discountToUpdate.branch_id)
+                const effectiveBranchId = branchId || discountToUpdate.branch_id || discounts.branch_id;
+                if (effectiveBranchId) {
+                    discounts.branch_id = effectiveBranchId;
+                }
+                const existingDiscount = await this.discountsModel.findOneByName(discounts.discount_name, effectiveBranchId)
                 if (existingDiscount) {
                     throw new Error("ชื่อส่วนลดนี้มีอยู่ในระบบแล้ว")
                 }
             }
 
-            const updatedDiscount = await this.discountsModel.update(id, discounts)
-            this.socketService.emit('discounts:update', updatedDiscount)
+            const effectiveBranchId = branchId || discountToUpdate.branch_id || discounts.branch_id;
+            if (effectiveBranchId) {
+                discounts.branch_id = effectiveBranchId;
+            }
+
+            const updatedDiscount = await this.discountsModel.update(id, discounts, effectiveBranchId)
+            if (effectiveBranchId) {
+                this.socketService.emitToBranch(effectiveBranchId, 'discounts:update', updatedDiscount)
+            }
             return updatedDiscount
         } catch (error) {
             throw error
         }
     }
 
-    async delete(id: string): Promise<void> {
+    async delete(id: string, branchId?: string): Promise<void> {
         try {
-            await this.discountsModel.delete(id)
-            this.socketService.emit('discounts:delete', { id })
+            const existing = await this.discountsModel.findOne(id, branchId);
+            if (!existing) throw new Error("Discount not found");
+
+            const effectiveBranchId = branchId || existing.branch_id;
+            await this.discountsModel.delete(id, effectiveBranchId)
+            if (effectiveBranchId) {
+                this.socketService.emitToBranch(effectiveBranchId, 'discounts:delete', { id })
+            }
         } catch (error) {
             throw error
         }

@@ -43,16 +43,18 @@ export class DeliveryService {
             }
 
             const createdDelivery = await this.deliveryModel.create(delivery)
-            this.socketService.emit('delivery:create', createdDelivery)
+            if (createdDelivery.branch_id) {
+                this.socketService.emitToBranch(createdDelivery.branch_id, 'delivery:create', createdDelivery)
+            }
             return createdDelivery
         } catch (error) {
             throw error
         }
     }
 
-    async update(id: string, delivery: Delivery): Promise<Delivery> {
+    async update(id: string, delivery: Delivery, branchId?: string): Promise<Delivery> {
         try {
-            const deliveryToUpdate = await this.deliveryModel.findOne(id)
+            const deliveryToUpdate = await this.deliveryModel.findOne(id, branchId)
             if (!deliveryToUpdate) {
                 throw new Error("ไม่พบข้อมูลบริการส่งที่ต้องการแก้ไข")
             }
@@ -64,18 +66,26 @@ export class DeliveryService {
                 }
             }
 
-            const updatedDelivery = await this.deliveryModel.update(id, delivery)
-            this.socketService.emit('delivery:update', updatedDelivery)
+            const effectiveBranchId = deliveryToUpdate.branch_id || branchId || delivery.branch_id;
+            const updatedDelivery = await this.deliveryModel.update(id, delivery, effectiveBranchId)
+            if (effectiveBranchId) {
+                this.socketService.emitToBranch(effectiveBranchId, 'delivery:update', updatedDelivery)
+            }
             return updatedDelivery
         } catch (error) {
             throw error
         }
     }
 
-    async delete(id: string): Promise<void> {
+    async delete(id: string, branchId?: string): Promise<void> {
         try {
-            await this.deliveryModel.delete(id)
-            this.socketService.emit('delivery:delete', { id })
+            const existing = await this.deliveryModel.findOne(id, branchId);
+            if (!existing) throw new Error("Delivery not found");
+            await this.deliveryModel.delete(id, branchId)
+            const effectiveBranchId = existing.branch_id || branchId;
+            if (effectiveBranchId) {
+                this.socketService.emitToBranch(effectiveBranchId, 'delivery:delete', { id })
+            }
         } catch (error) {
             throw error
         }

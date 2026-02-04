@@ -31,11 +31,16 @@ export class IngredientsUnitService {
         }
     }
 
-    async create(ingredientsUnit: IngredientsUnit): Promise<IngredientsUnit> {
+    async create(ingredientsUnit: IngredientsUnit, branchId?: string): Promise<IngredientsUnit> {
         try {
+            const effectiveBranchId = branchId || ingredientsUnit.branch_id;
+            if (effectiveBranchId) {
+                ingredientsUnit.branch_id = effectiveBranchId;
+            }
+
             // Check for duplicate name within the same branch
-            if (ingredientsUnit.unit_name && ingredientsUnit.branch_id) {
-                const existing = await this.ingredientsUnitModel.findOneByUnitName(ingredientsUnit.unit_name, ingredientsUnit.branch_id);
+            if (ingredientsUnit.unit_name && effectiveBranchId) {
+                const existing = await this.ingredientsUnitModel.findOneByUnitName(ingredientsUnit.unit_name, effectiveBranchId);
                 if (existing) {
                     throw new Error("ชื่อหน่วยนับนี้มีอยู่ในระบบแล้ว");
                 }
@@ -43,9 +48,11 @@ export class IngredientsUnitService {
             
             // @ts-ignore - model returns {id} essentially
             const savedIngredientsUnit = await this.ingredientsUnitModel.create(ingredientsUnit)
-            const createdIngredientsUnit = await this.ingredientsUnitModel.findOne(savedIngredientsUnit.id)
+            const createdIngredientsUnit = await this.ingredientsUnitModel.findOne(savedIngredientsUnit.id, effectiveBranchId)
             if (createdIngredientsUnit) {
-                this.socketService.emit('ingredientsUnit:create', createdIngredientsUnit)
+                if (effectiveBranchId) {
+                    this.socketService.emitToBranch(effectiveBranchId, 'ingredientsUnit:create', createdIngredientsUnit)
+                }
                 return createdIngredientsUnit
             }
             return savedIngredientsUnit
@@ -54,12 +61,22 @@ export class IngredientsUnitService {
         }
     }
 
-    async update(id: string, ingredientsUnit: IngredientsUnit): Promise<IngredientsUnit> {
+    async update(id: string, ingredientsUnit: IngredientsUnit, branchId?: string): Promise<IngredientsUnit> {
         try {
-            await this.ingredientsUnitModel.update(id, ingredientsUnit)
-            const updatedIngredientsUnit = await this.ingredientsUnitModel.findOne(id)
+            const existing = await this.ingredientsUnitModel.findOne(id, branchId);
+            if (!existing) throw new Error("Ingredients unit not found");
+
+            const effectiveBranchId = branchId || existing.branch_id || ingredientsUnit.branch_id;
+            if (effectiveBranchId) {
+                ingredientsUnit.branch_id = effectiveBranchId;
+            }
+
+            await this.ingredientsUnitModel.update(id, ingredientsUnit, effectiveBranchId)
+            const updatedIngredientsUnit = await this.ingredientsUnitModel.findOne(id, effectiveBranchId)
             if (updatedIngredientsUnit) {
-                this.socketService.emit('ingredientsUnit:update', updatedIngredientsUnit)
+                if (effectiveBranchId) {
+                    this.socketService.emitToBranch(effectiveBranchId, 'ingredientsUnit:update', updatedIngredientsUnit)
+                }
                 return updatedIngredientsUnit
             }
             throw new Error("พบข้อผิดพลาดในการอัปเดตหน่วยนับวัตถุดิบ")
@@ -68,10 +85,16 @@ export class IngredientsUnitService {
         }
     }
 
-    async delete(id: string): Promise<void> {
+    async delete(id: string, branchId?: string): Promise<void> {
         try {
-            await this.ingredientsUnitModel.delete(id)
-            this.socketService.emit('ingredientsUnit:delete', { id })
+            const existing = await this.ingredientsUnitModel.findOne(id, branchId);
+            if (!existing) throw new Error("Ingredients unit not found");
+
+            const effectiveBranchId = branchId || existing.branch_id;
+            await this.ingredientsUnitModel.delete(id, effectiveBranchId)
+            if (effectiveBranchId) {
+                this.socketService.emitToBranch(effectiveBranchId, 'ingredientsUnit:delete', { id })
+            }
         } catch (error) {
             throw error
         }

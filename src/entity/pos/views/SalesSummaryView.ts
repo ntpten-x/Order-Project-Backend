@@ -7,7 +7,8 @@ import { PaymentMethod } from "../PaymentMethod";
     expression: (dataSource: DataSource) =>
         dataSource
             .createQueryBuilder()
-            .select("DATE(o.create_date)", "date")
+            .select("o.branch_id", "branch_id")
+            .addSelect("DATE(o.create_date)", "date")
             .addSelect("COUNT(DISTINCT o.id)", "total_orders")
             .addSelect("SUM(o.total_amount)", "total_sales")
             .addSelect("SUM(o.discount_amount)", "total_discount")
@@ -24,10 +25,14 @@ import { PaymentMethod } from "../PaymentMethod";
             .leftJoin(Payments, "p", "p.order_id = o.id AND p.status = 'Success'")
             .leftJoin(PaymentMethod, "pm", "p.payment_method_id = pm.id")
             .where("o.status IN ('Paid', 'Completed')")
-            .groupBy("DATE(o.create_date)"),
+            .groupBy("o.branch_id")
+            .addGroupBy("DATE(o.create_date)"),
     synchronize: true
 })
 export class SalesSummaryView {
+    @ViewColumn()
+    branch_id!: string;
+
     @ViewColumn()
     date!: string;
 

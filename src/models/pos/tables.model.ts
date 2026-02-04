@@ -1,13 +1,12 @@
-import { AppDataSource } from "../../database/database";
 import { Tables } from "../../entity/pos/Tables";
+import { getRepository } from "../../database/dbContext";
 
 export class TablesModels {
-    private tablesRepository = AppDataSource.getRepository(Tables)
-
     async findAll(page: number = 1, limit: number = 50, q?: string, branchId?: string): Promise<{ data: any[], total: number, page: number, last_page: number }> {
         try {
             const skip = (page - 1) * limit;
-            const query = this.tablesRepository.createQueryBuilder("tables")
+            const tablesRepository = getRepository(Tables);
+            const query = tablesRepository.createQueryBuilder("tables")
                 .leftJoinAndMapOne("tables.active_order", "SalesOrder", "so", "so.table_id = tables.id AND so.status NOT IN (:...statuses)", { statuses: ['Paid', 'Cancelled', 'completed'] })
                 .orderBy("tables.create_date", "ASC");
 
@@ -42,9 +41,9 @@ export class TablesModels {
         }
     }
 
-    async findOne(id: string): Promise<Tables | null> {
+    async findOne(id: string, branchId?: string): Promise<Tables | null> {
         try {
-            return this.tablesRepository.findOneBy({ id })
+            return getRepository(Tables).findOneBy(branchId ? ({ id, branch_id: branchId } as any) : { id })
         } catch (error) {
             throw error
         }
@@ -54,7 +53,7 @@ export class TablesModels {
         try {
             const where: any = { table_name };
             if (branchId) where.branch_id = branchId;
-            return this.tablesRepository.findOneBy(where)
+            return getRepository(Tables).findOneBy(where)
         } catch (error) {
             throw error
         }
@@ -62,16 +61,20 @@ export class TablesModels {
 
     async create(data: Tables): Promise<Tables> {
         try {
-            return this.tablesRepository.save(data)
+            return getRepository(Tables).save(data)
         } catch (error) {
             throw error
         }
     }
 
-    async update(id: string, data: Tables): Promise<Tables> {
+    async update(id: string, data: Tables, branchId?: string): Promise<Tables> {
         try {
-            await this.tablesRepository.update(id, data)
-            const updatedTable = await this.findOne(id)
+            if (branchId) {
+                await getRepository(Tables).update({ id, branch_id: branchId } as any, data)
+            } else {
+                await getRepository(Tables).update(id, data)
+            }
+            const updatedTable = await this.findOne(id, branchId)
             if (!updatedTable) {
                 throw new Error("ไม่พบข้อมูลโต๊ะที่ต้องการค้นหา")
             }
@@ -81,9 +84,13 @@ export class TablesModels {
         }
     }
 
-    async delete(id: string): Promise<void> {
+    async delete(id: string, branchId?: string): Promise<void> {
         try {
-            await this.tablesRepository.delete(id)
+            if (branchId) {
+                await getRepository(Tables).delete({ id, branch_id: branchId } as any)
+            } else {
+                await getRepository(Tables).delete(id)
+            }
         } catch (error) {
             throw error
         }

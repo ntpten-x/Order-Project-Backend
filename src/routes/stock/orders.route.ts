@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { OrdersController } from "../../controllers/stock/orders.controller";
 import { authenticateToken, authorizeRole } from "../../middleware/auth.middleware";
+import { requireBranch } from "../../middleware/branch.middleware";
 import { validate } from "../../middleware/validate.middleware";
 import { paginationQuerySchema } from "../../utils/schemas/common.schema";
 import {
@@ -17,6 +18,7 @@ const ordersController = new OrdersController();
 // Protect all routes
 router.use(authenticateToken)
 router.use(authorizeRole(["Admin", "Manager", "Employee"]))
+router.use(requireBranch)
 
 router.post("/", validate(createStockOrderSchema), ordersController.createOrder);
 router.get("/", validate(paginationQuerySchema), ordersController.getAllOrders);

@@ -1,29 +1,39 @@
-import { AppDataSource } from "../../database/database";
 import { Payments } from "../../entity/pos/Payments";
 import { EntityManager } from "typeorm";
+import { getRepository } from "../../database/dbContext";
 
 export class PaymentsModels {
-    private paymentsRepository = AppDataSource.getRepository(Payments)
-
-    async findAll(): Promise<Payments[]> {
+    async findAll(branchId?: string): Promise<Payments[]> {
         try {
-            return this.paymentsRepository.find({
-                order: {
-                    payment_date: "DESC"
-                },
-                relations: ["order", "payment_method"]
-            })
+            const paymentsRepository = getRepository(Payments);
+            const query = paymentsRepository.createQueryBuilder("payments")
+                .leftJoinAndSelect("payments.order", "order")
+                .leftJoinAndSelect("payments.payment_method", "payment_method")
+                .orderBy("payments.payment_date", "DESC");
+
+            if (branchId) {
+                query.andWhere("payments.branch_id = :branchId", { branchId });
+            }
+
+            return query.getMany();
         } catch (error) {
             throw error
         }
     }
 
-    async findOne(id: string): Promise<Payments | null> {
+    async findOne(id: string, branchId?: string): Promise<Payments | null> {
         try {
-            return this.paymentsRepository.findOne({
-                where: { id },
-                relations: ["order", "payment_method"]
-            })
+            const paymentsRepository = getRepository(Payments);
+            const query = paymentsRepository.createQueryBuilder("payments")
+                .leftJoinAndSelect("payments.order", "order")
+                .leftJoinAndSelect("payments.payment_method", "payment_method")
+                .where("payments.id = :id", { id });
+
+            if (branchId) {
+                query.andWhere("payments.branch_id = :branchId", { branchId });
+            }
+
+            return query.getOne();
         } catch (error) {
             throw error
         }
@@ -31,7 +41,7 @@ export class PaymentsModels {
 
     async create(data: Payments, manager?: EntityManager): Promise<Payments> {
         try {
-            const repo = manager ? manager.getRepository(Payments) : this.paymentsRepository;
+            const repo = manager ? manager.getRepository(Payments) : getRepository(Payments);
             return repo.save(data)
         } catch (error) {
             throw error
@@ -40,7 +50,7 @@ export class PaymentsModels {
 
     async update(id: string, data: Payments, manager?: EntityManager): Promise<Payments> {
         try {
-            const repo = manager ? manager.getRepository(Payments) : this.paymentsRepository;
+            const repo = manager ? manager.getRepository(Payments) : getRepository(Payments);
             await repo.update(id, data)
             // Note: findOne typically relies on default repo. In transaction, we might want to query using manager.
             // But reuse findOne here is okay if we are careful or if strict read consistency isn't violated.
@@ -61,7 +71,7 @@ export class PaymentsModels {
 
     async delete(id: string, manager?: EntityManager): Promise<void> {
         try {
-            const repo = manager ? manager.getRepository(Payments) : this.paymentsRepository;
+            const repo = manager ? manager.getRepository(Payments) : getRepository(Payments);
             await repo.delete(id)
         } catch (error) {
             throw error

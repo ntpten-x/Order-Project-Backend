@@ -1,112 +1,17 @@
 /**
  * Audit Logger
- * Logs all important business actions for compliance and tracking
- * Stores logs in database for persistence
+ * Logs all important business actions for compliance and tracking.
+ * Stores logs in database for persistence.
  */
 
-import { AppDataSource } from "../database/database";
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index } from "typeorm";
-
-export enum AuditActionType {
-    // Order actions
-    ORDER_CREATE = 'ORDER_CREATE',
-    ORDER_UPDATE = 'ORDER_UPDATE',
-    ORDER_DELETE = 'ORDER_DELETE',
-    ORDER_STATUS_CHANGE = 'ORDER_STATUS_CHANGE',
-    
-    // Payment actions
-    PAYMENT_CREATE = 'PAYMENT_CREATE',
-    PAYMENT_UPDATE = 'PAYMENT_UPDATE',
-    PAYMENT_DELETE = 'PAYMENT_DELETE',
-    
-    // Item actions
-    ITEM_ADD = 'ITEM_ADD',
-    ITEM_UPDATE = 'ITEM_UPDATE',
-    ITEM_DELETE = 'ITEM_DELETE',
-    
-    // Queue actions
-    QUEUE_ADD = 'QUEUE_ADD',
-    QUEUE_UPDATE = 'QUEUE_UPDATE',
-    QUEUE_REMOVE = 'QUEUE_REMOVE',
-    QUEUE_REORDER = 'QUEUE_REORDER',
-    
-    // Product actions
-    PRODUCT_CREATE = 'PRODUCT_CREATE',
-    PRODUCT_UPDATE = 'PRODUCT_UPDATE',
-    PRODUCT_DELETE = 'PRODUCT_DELETE',
-    
-    // User actions
-    USER_CREATE = 'USER_CREATE',
-    USER_UPDATE = 'USER_UPDATE',
-    USER_DELETE = 'USER_DELETE',
-    
-    // Stock actions
-    STOCK_RECEIVE = 'STOCK_RECEIVE',
-    STOCK_TRANSFER = 'STOCK_TRANSFER',
-    STOCK_ADJUST = 'STOCK_ADJUST',
-    
-    // Other important actions
-    DISCOUNT_APPLY = 'DISCOUNT_APPLY',
-    PROMOTION_APPLY = 'PROMOTION_APPLY',
-    SHIFT_OPEN = 'SHIFT_OPEN',
-    SHIFT_CLOSE = 'SHIFT_CLOSE',
-}
-
-@Entity('audit_logs')
-@Index(['user_id', 'created_at'])
-@Index(['action_type', 'created_at'])
-@Index(['entity_type', 'entity_id'])
-export class AuditLog {
-    @PrimaryGeneratedColumn('uuid')
-    id!: string;
-
-    @Column({ type: 'enum', enum: AuditActionType })
-    action_type!: AuditActionType;
-
-    @Index()
-    @Column({ type: 'uuid', nullable: true })
-    user_id?: string;
-
-    @Column({ type: 'varchar', length: 200, nullable: true })
-    username?: string;
-
-    @Column({ type: 'varchar', length: 50 })
-    ip_address!: string;
-
-    @Column({ type: 'text', nullable: true })
-    user_agent?: string;
-
-    @Column({ type: 'varchar', length: 100, nullable: true })
-    entity_type?: string; // e.g., 'SalesOrder', 'Payments', 'Products'
-
-    @Index()
-    @Column({ type: 'uuid', nullable: true })
-    entity_id?: string; // ID of the affected entity
-
-    @Column({ type: 'uuid', nullable: true })
-    branch_id?: string;
-
-    @Column({ type: 'jsonb', nullable: true })
-    old_values?: Record<string, any>; // Previous state
-
-    @Column({ type: 'jsonb', nullable: true })
-    new_values?: Record<string, any>; // New state
-
-    @Column({ type: 'text', nullable: true })
-    description?: string;
-
-    @Column({ type: 'varchar', length: 500, nullable: true })
-    path?: string; // API path
-
-    @Column({ type: 'varchar', length: 10, nullable: true })
-    method?: string; // HTTP method
-
-    @CreateDateColumn({ type: 'timestamptz' })
-    created_at!: Date;
-}
+import { getRepository } from "../database/dbContext";
+import { AuditLog } from "../entity/AuditLog";
+import { AuditActionType } from "./auditTypes";
 
 class AuditLogger {
-    private repository = AppDataSource.getRepository(AuditLog);
+    private get repository() {
+        return getRepository(AuditLog);
+    }
 
     /**
      * Log an audit event
@@ -198,6 +103,7 @@ class AuditLogger {
 
 // Singleton instance
 export const auditLogger = new AuditLogger();
+export { AuditActionType };
 
 /**
  * Helper function to extract user info from request

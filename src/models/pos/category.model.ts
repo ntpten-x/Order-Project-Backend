@@ -1,12 +1,11 @@
-import { AppDataSource } from "../../database/database";
 import { Category } from "../../entity/pos/Category";
+import { getRepository } from "../../database/dbContext";
 
 export class CategoryModels {
-    private categoryRepository = AppDataSource.getRepository(Category)
-
     async findAll(branchId?: string): Promise<Category[]> {
         try {
-            const query = this.categoryRepository.createQueryBuilder("category")
+            const categoryRepository = getRepository(Category);
+            const query = categoryRepository.createQueryBuilder("category")
                 .orderBy("category.create_date", "ASC");
             
             if (branchId) {
@@ -21,7 +20,8 @@ export class CategoryModels {
 
     async findOne(id: string, branchId?: string): Promise<Category | null> {
         try {
-            const query = this.categoryRepository.createQueryBuilder("category")
+            const categoryRepository = getRepository(Category);
+            const query = categoryRepository.createQueryBuilder("category")
                 .where("category.id = :id", { id });
             
             if (branchId) {
@@ -36,7 +36,8 @@ export class CategoryModels {
 
     async findOneByName(category_name: string, branchId?: string): Promise<Category | null> {
         try {
-            const query = this.categoryRepository.createQueryBuilder("category")
+            const categoryRepository = getRepository(Category);
+            const query = categoryRepository.createQueryBuilder("category")
                 .where("category.category_name = :category_name", { category_name });
             
             if (branchId) {
@@ -51,23 +52,42 @@ export class CategoryModels {
 
     async create(data: Category): Promise<Category> {
         try {
-            return this.categoryRepository.createQueryBuilder("category").insert().values(data).returning("id").execute().then((result) => result.raw[0])
+            const categoryRepository = getRepository(Category);
+            return categoryRepository.createQueryBuilder("category").insert().values(data).returning("id").execute().then((result) => result.raw[0])
         } catch (error) {
             throw error
         }
     }
 
-    async update(id: string, data: Category): Promise<Category> {
+    async update(id: string, data: Category, branchId?: string): Promise<Category> {
         try {
-            return this.categoryRepository.createQueryBuilder("category").update(data).where("category.id = :id", { id }).returning("id").execute().then((result) => result.raw[0])
+            const categoryRepository = getRepository(Category);
+            const qb = categoryRepository.createQueryBuilder("category")
+                .update(data)
+                .where("category.id = :id", { id });
+
+            if (branchId) {
+                qb.andWhere("category.branch_id = :branchId", { branchId });
+            }
+
+            return qb.returning("id").execute().then((result) => result.raw[0])
         } catch (error) {
             throw error
         }
     }
 
-    async delete(id: string): Promise<void> {
+    async delete(id: string, branchId?: string): Promise<void> {
         try {
-            this.categoryRepository.createQueryBuilder("category").delete().where("category.id = :id", { id }).execute()
+            const categoryRepository = getRepository(Category);
+            const qb = categoryRepository.createQueryBuilder("category")
+                .delete()
+                .where("category.id = :id", { id });
+
+            if (branchId) {
+                qb.andWhere("category.branch_id = :branchId", { branchId });
+            }
+
+            qb.execute()
         } catch (error) {
             throw error
         }

@@ -1,50 +1,43 @@
-import { Repository } from "typeorm"
-import { AppDataSource } from "../../database/database"
 import { ShopPaymentAccount } from "../../entity/pos/ShopPaymentAccount"
-import { CreatePaymentAccountDto } from "../../schemas/paymentAccount.schema"
+import { getRepository } from "../../database/dbContext"
 
 export class PaymentAccountModel {
-    private repository: Repository<ShopPaymentAccount>
-
-    constructor() {
-        this.repository = AppDataSource.getRepository(ShopPaymentAccount)
-    }
-
     async findByShopId(shopId: string) {
-        return await this.repository.find({
+        return await getRepository(ShopPaymentAccount).find({
             where: { shop_id: shopId },
             order: { is_active: "DESC", created_at: "DESC" }
         })
     }
 
     async findOne(shopId: string, accountId: string) {
-        return await this.repository.findOne({ where: { id: accountId, shop_id: shopId } })
+        return await getRepository(ShopPaymentAccount).findOne({ where: { id: accountId, shop_id: shopId } })
     }
 
     async findByAccountNumber(shopId: string, accountNumber: string) {
-        return await this.repository.findOne({
+        return await getRepository(ShopPaymentAccount).findOne({
             where: { shop_id: shopId, account_number: accountNumber }
         })
     }
 
     async create(data: Partial<ShopPaymentAccount>) {
-        const account = this.repository.create(data)
-        return await this.repository.save(account)
+        const repository = getRepository(ShopPaymentAccount)
+        const account = repository.create(data)
+        return await repository.save(account)
     }
 
     async save(account: ShopPaymentAccount) {
-        return await this.repository.save(account)
+        return await getRepository(ShopPaymentAccount).save(account)
     }
 
     async deactivateAll(shopId: string) {
-        return await this.repository.update({ shop_id: shopId }, { is_active: false })
+        return await getRepository(ShopPaymentAccount).update({ shop_id: shopId }, { is_active: false })
     }
 
     async delete(account: ShopPaymentAccount) {
-        return await this.repository.remove(account)
+        return await getRepository(ShopPaymentAccount).remove(account)
     }
 
     async count(shopId: string) {
-        return await this.repository.count({ where: { shop_id: shopId } })
+        return await getRepository(ShopPaymentAccount).count({ where: { shop_id: shopId } })
     }
 }

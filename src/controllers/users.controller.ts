@@ -1,54 +1,99 @@
 import { UsersService } from "../services/users.service";
 import { Request, Response } from "express";
+import { catchAsync } from "../utils/catchAsync";
+import { ApiResponses } from "../utils/ApiResponse";
+import { AppError } from "../utils/AppError";
+import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../utils/auditLogger";
+import { getClientIp } from "../utils/securityLogger";
 
 export class UsersController {
     constructor(private usersService: UsersService) { }
 
-    findAll = async (req: Request, res: Response) => {
-        try {
-            const role = req.query.role as string;
-            const users = await this.usersService.findAll(role ? { role } : undefined)
-            res.status(200).json(users)
-        } catch (error: any) {
-            res.status(500).json({ error: error.message })
-        }
+    private sanitizeUserPayload(payload: any) {
+        if (!payload || typeof payload !== "object") return payload;
+        const { password: _password, ...rest } = payload;
+        return rest;
     }
 
-    findOne = async (req: Request, res: Response) => {
-        try {
-            const users = await this.usersService.findOne(req.params.id)
-            res.status(200).json(users)
-        } catch (error: any) {
-            res.status(500).json({ error: error.message })
-        }
-    }
+    findAll = catchAsync(async (req: Request, res: Response) => {
+        const role = req.query.role as string;
+        const users = await this.usersService.findAll(role ? { role } : undefined);
+        return ApiResponses.ok(res, users);
+    })
 
-    create = async (req: Request, res: Response) => {
-        try {
-            const users = await this.usersService.create(req.body)
-            res.status(201).json(users)
-        } catch (error: any) {
-            res.status(500).json({ error: error.message })
+    findOne = catchAsync(async (req: Request, res: Response) => {
+        const user = await this.usersService.findOne(req.params.id);
+        if (!user) {
+            throw AppError.notFound("User");
         }
-    }
+        return ApiResponses.ok(res, user);
+    })
 
-    update = async (req: Request, res: Response) => {
-        try {
-            const users = await this.usersService.update(req.params.id, req.body)
-            res.status(200).json(users)
-        } catch (error: any) {
-            res.status(500).json({ error: error.message })
-        }
-    }
+    create = catchAsync(async (req: Request, res: Response) => {
+        const user = await this.usersService.create(req.body);
 
-    delete = async (req: Request, res: Response) => {
-        try {
-            await this.usersService.delete(req.params.id)
-            res.status(204).json({ message: "User deleted successfully" })
-        } catch (error: any) {
-            res.status(500).json({ error: error.message })
-        }
-    }
+        const userInfo = getUserInfoFromRequest(req as any);
+        await auditLogger.log({
+            action_type: AuditActionType.USER_CREATE,
+            ...userInfo,
+            ip_address: getClientIp(req),
+            user_agent: req.get("User-Agent"),
+            entity_type: "Users",
+            entity_id: user.id,
+            branch_id: user.branch_id || userInfo.branch_id,
+            new_values: this.sanitizeUserPayload(req.body),
+            path: req.originalUrl,
+            method: req.method,
+            description: `Create user ${user.username || user.id}`,
+        });
+
+        return ApiResponses.created(res, user);
+    })
+
+    update = catchAsync(async (req: Request, res: Response) => {
+        const oldUser = await this.usersService.findOne(req.params.id);
+        const user = await this.usersService.update(req.params.id, req.body);
+
+        const userInfo = getUserInfoFromRequest(req as any);
+        await auditLogger.log({
+            action_type: AuditActionType.USER_UPDATE,
+            ...userInfo,
+            ip_address: getClientIp(req),
+            user_agent: req.get("User-Agent"),
+            entity_type: "Users",
+            entity_id: req.params.id,
+            branch_id: user.branch_id || userInfo.branch_id,
+            old_values: this.sanitizeUserPayload(oldUser),
+            new_values: this.sanitizeUserPayload(req.body),
+            path: req.originalUrl,
+            method: req.method,
+            description: `Update user ${user.username || user.id}`,
+        });
+
+        return ApiResponses.ok(res, user);
+    })
+
+    delete = catchAsync(async (req: Request, res: Response) => {
+        const oldUser = await this.usersService.findOne(req.params.id);
+        await this.usersService.delete(req.params.id);
+
+        const userInfo = getUserInfoFromRequest(req as any);
+        await auditLogger.log({
+            action_type: AuditActionType.USER_DELETE,
+            ...userInfo,
+            ip_address: getClientIp(req),
+            user_agent: req.get("User-Agent"),
+            entity_type: "Users",
+            entity_id: req.params.id,
+            branch_id: oldUser?.branch_id || userInfo.branch_id,
+            old_values: this.sanitizeUserPayload(oldUser),
+            path: req.originalUrl,
+            method: req.method,
+            description: `Delete user ${req.params.id}`,
+        });
+
+        return ApiResponses.noContent(res);
+    })
 
 
 }

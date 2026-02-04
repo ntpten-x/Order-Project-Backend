@@ -4,6 +4,7 @@ import { DeliveryService } from "../../services/pos/delivery.service";
 import { DeliveryController } from "../../controllers/pos/delivery.controller";
 import { authenticateToken, authorizeRole } from "../../middleware/auth.middleware";
 import { validate } from "../../middleware/validate.middleware";
+import { requireBranch } from "../../middleware/branch.middleware";
 import { paginationQuerySchema } from "../../utils/schemas/common.schema";
 import {
     createDeliverySchema,
@@ -20,6 +21,7 @@ const deliveryController = new DeliveryController(deliveryService)
 
 router.use(authenticateToken)
 router.use(authorizeRole(["Admin", "Manager", "Employee"]))
+router.use(requireBranch)
 // Authorization: 
 // Admin/Manager can Manage
 // Employee can View

@@ -5,6 +5,7 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { AuthRequest } from "../middleware/auth.middleware";
 import { securityLogger, getClientIp } from "../utils/securityLogger";
+import { ApiResponses } from "../utils/ApiResponse";
 
 export class AuthController {
 
@@ -28,7 +29,7 @@ export class AuthController {
                     method: req.method,
                     details: { reason: 'User not found', username }
                 });
-                return res.status(401).json({ message: "ไม่พบข้อมูลผู้ใช้" });
+                return ApiResponses.unauthorized(res, "ไม่พบข้อมูลผู้ใช้");
             }
 
             // Check if user is disabled
@@ -42,7 +43,7 @@ export class AuthController {
                     method: req.method,
                     details: { reason: 'Account disabled' }
                 });
-                return res.status(403).json({ message: "บัญชีถูกปิด" });
+                return ApiResponses.forbidden(res, "บัญชีถูกปิด");
             }
 
             // Compare password
@@ -65,8 +66,7 @@ export class AuthController {
 
                 // Check for suspicious activity
                 securityLogger.checkSuspiciousActivity(user.id, ip);
-
-                return res.status(401).json({ message: "ไม่พบข้อมูลผู้ใช้" });
+                return ApiResponses.unauthorized(res, "ไม่พบข้อมูลผู้ใช้");
             }
 
             // Log successful login
@@ -83,7 +83,7 @@ export class AuthController {
             // Generate Token
             const secret = process.env.JWT_SECRET;
             if (!secret) {
-                return res.status(500).json({ message: "Server misconfiguration: JWT_SECRET missing" });
+                return ApiResponses.internalError(res, "Server misconfiguration: JWT_SECRET missing");
             }
             const token = jwt.sign(
                 { id: user.id, username: user.username, role: user.roles.roles_name },
@@ -108,8 +108,7 @@ export class AuthController {
             const { SocketService } = require("../services/socket.service");
             SocketService.getInstance().emit('users:update-status', { id: user.id, is_active: true });
 
-            return res.status(200).json({
-                message: "เข้าสู่ระบบสำเร็จ",
+            return ApiResponses.ok(res, {
                 token,
                 user: {
                     id: user.id,
@@ -130,8 +129,8 @@ export class AuthController {
             });
 
         } catch (error) {
-            console.error("เกิดข้อผิดพลาดในการเข้าสู่ระบบ:", error);
-            return res.status(500).json({ message: "เกิดข้อผิดพลาดในการเข้าสู่ระบบ" });
+            console.error("Login error:", error);
+            return ApiResponses.internalError(res, "เกิดข้อผิดพลาดในการเข้าสู่ระบบ");
         }
     }
 
@@ -174,16 +173,16 @@ export class AuthController {
             sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
             path: "/"
         });
-        return res.status(200).json({ message: "ออกจากระบบสำเร็จ" });
+        return ApiResponses.ok(res, { message: "ออกจากระบบสำเร็จ" });
     }
 
     static async getMe(req: AuthRequest, res: Response) {
         if (!req.user) {
-            return res.status(401).json({ message: "ไม่พบข้อมูลผู้ใช้" });
+            return ApiResponses.unauthorized(res, "ไม่พบข้อมูลผู้ใช้");
         }
 
         const user = req.user;
-        return res.json({
+        return ApiResponses.ok(res, {
             id: user.id,
             username: user.username,
             name: user.name,

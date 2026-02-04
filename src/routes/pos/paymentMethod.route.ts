@@ -4,6 +4,7 @@ import { PaymentMethodService } from "../../services/pos/paymentMethod.service";
 import { PaymentMethodController } from "../../controllers/pos/paymentMethod.controller";
 import { authenticateToken, authorizeRole } from "../../middleware/auth.middleware";
 import { validate } from "../../middleware/validate.middleware";
+import { requireBranch } from "../../middleware/branch.middleware";
 import {
     createPaymentMethodSchema,
     paymentMethodIdParamSchema,
@@ -19,6 +20,7 @@ const paymentMethodController = new PaymentMethodController(paymentMethodService
 
 router.use(authenticateToken)
 router.use(authorizeRole(["Admin", "Manager", "Employee"]))
+router.use(requireBranch)
 // Authorization:
 // Admin manage, Employee read.
 

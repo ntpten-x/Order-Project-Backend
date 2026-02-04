@@ -1,46 +1,70 @@
-import { AppDataSource } from "../../database/database";
 import { OrderQueue, QueueStatus, QueuePriority } from "../../entity/pos/OrderQueue";
 import { SalesOrder } from "../../entity/pos/SalesOrder";
 import { SocketService } from "../socket.service";
 import { AppError } from "../../utils/AppError";
+import { withCache, cacheKey, invalidateCache, queryCache } from "../../utils/cache";
+import { getDbContext, getRepository, runInTransaction } from "../../database/dbContext";
 
 export class OrderQueueService {
-    private queueRepository = AppDataSource.getRepository(OrderQueue);
-    private orderRepository = AppDataSource.getRepository(SalesOrder);
     private socketService = SocketService.getInstance();
+    private readonly CACHE_PREFIX = 'order-queue';
+    private readonly CACHE_TTL = 2 * 1000; // 2 seconds
+
+    private getCacheScopeParts(branchId?: string): Array<string> {
+        const ctx = getDbContext();
+        const effectiveBranchId = branchId ?? ctx?.branchId;
+        if (effectiveBranchId) return ["branch", effectiveBranchId];
+        if (ctx?.isAdmin) return ["admin"];
+        return ["public"];
+    }
+
+    private invalidateQueueCache(branchId?: string): void {
+        const ctx = getDbContext();
+        const effectiveBranchId = branchId ?? ctx?.branchId;
+        if (!effectiveBranchId) {
+            invalidateCache([`${this.CACHE_PREFIX}:`]);
+            return;
+        }
+        invalidateCache([cacheKey(this.CACHE_PREFIX, "branch", effectiveBranchId, "list")]);
+    }
 
     /**
      * Add order to queue
      */
     async addToQueue(orderId: string, priority: QueuePriority = QueuePriority.Normal, branchId?: string): Promise<OrderQueue> {
+        const queueRepository = getRepository(OrderQueue);
+        const orderRepository = getRepository(SalesOrder);
         // Check if order exists
-        const order = await this.orderRepository.findOne({ where: { id: orderId } });
+        const order = await orderRepository.findOne({ where: { id: orderId } });
         if (!order) {
             throw AppError.notFound("Order not found");
         }
 
+        const effectiveBranchId = branchId || order.branch_id;
+
         // Check if already in queue
-        const existing = await this.queueRepository.findOne({ where: { order_id: orderId } });
+        const existing = await queueRepository.findOne({ where: { order_id: orderId } });
         if (existing) {
             throw AppError.conflict("Order already in queue");
         }
 
         // Get next queue position
-        const queuePosition = await this.getNextQueuePosition(branchId);
+        const queuePosition = await this.getNextQueuePosition(effectiveBranchId);
 
-        const queueItem = this.queueRepository.create({
+        const queueItem = queueRepository.create({
             order_id: orderId,
-            branch_id: branchId || order.branch_id,
+            branch_id: effectiveBranchId,
             status: QueueStatus.Pending,
             priority,
             queue_position: queuePosition,
         });
 
-        const saved = await this.queueRepository.save(queueItem);
+        const saved = await queueRepository.save(queueItem);
+        this.invalidateQueueCache(effectiveBranchId);
         
         // Emit socket event
         this.socketService.emitToBranch(
-            saved.branch_id || '',
+            effectiveBranchId || "",
             'order-queue:added',
             saved
         );
@@ -52,7 +76,8 @@ export class OrderQueueService {
      * Get next queue position
      */
     private async getNextQueuePosition(branchId?: string): Promise<number> {
-        const query = this.queueRepository
+        const queueRepository = getRepository(OrderQueue);
+        const query = queueRepository
             .createQueryBuilder('queue')
             .select('MAX(queue.queue_position)', 'max');
 
@@ -68,28 +93,48 @@ export class OrderQueueService {
      * Get queue list
      */
     async getQueue(branchId?: string, status?: QueueStatus): Promise<OrderQueue[]> {
-        const query = this.queueRepository
-            .createQueryBuilder('queue')
-            .leftJoinAndSelect('queue.order', 'order')
-            .orderBy('queue.priority', 'DESC')
-            .addOrderBy('queue.queue_position', 'ASC');
+        const scope = this.getCacheScopeParts(branchId);
+        const key = cacheKey(this.CACHE_PREFIX, ...scope, "list", status || "all");
 
-        if (branchId) {
-            query.where('queue.branch_id = :branchId', { branchId });
-        }
+        return withCache(
+            key,
+            async () => {
+                const queueRepository = getRepository(OrderQueue);
+                const query = queueRepository
+                    .createQueryBuilder('queue')
+                    .leftJoinAndSelect('queue.order', 'order')
+                    .orderBy('queue.priority', 'DESC')
+                    .addOrderBy('queue.queue_position', 'ASC');
 
-        if (status) {
-            query.andWhere('queue.status = :status', { status });
-        }
+                if (branchId) {
+                    query.where('queue.branch_id = :branchId', { branchId });
+                }
 
-        return query.getMany();
+                if (status) {
+                    query.andWhere('queue.status = :status', { status });
+                }
+
+                return query.getMany();
+            },
+            this.CACHE_TTL,
+            queryCache as any
+        );
+    }
+
+    /**
+     * Get a single queue item by ID (optionally scoped to a branch)
+     */
+    async getQueueItem(queueId: string, branchId?: string): Promise<OrderQueue | null> {
+        return getRepository(OrderQueue).findOne({
+            where: branchId ? { id: queueId, branch_id: branchId } : { id: queueId },
+        });
     }
 
     /**
      * Update queue status
      */
-    async updateStatus(queueId: string, status: QueueStatus): Promise<OrderQueue> {
-        const queueItem = await this.queueRepository.findOne({ where: { id: queueId } });
+    async updateStatus(queueId: string, status: QueueStatus, branchId?: string): Promise<OrderQueue> {
+        const queueItem = await this.getQueueItem(queueId, branchId);
         if (!queueItem) {
             throw AppError.notFound("Queue item not found");
         }
@@ -102,7 +147,8 @@ export class OrderQueueService {
             queueItem.completed_at = new Date();
         }
 
-        const saved = await this.queueRepository.save(queueItem);
+        const saved = await getRepository(OrderQueue).save(queueItem);
+        this.invalidateQueueCache(saved.branch_id || branchId);
 
         // Emit socket event
         this.socketService.emitToBranch(
@@ -117,13 +163,14 @@ export class OrderQueueService {
     /**
      * Remove from queue
      */
-    async removeFromQueue(queueId: string): Promise<void> {
-        const queueItem = await this.queueRepository.findOne({ where: { id: queueId } });
+    async removeFromQueue(queueId: string, branchId?: string): Promise<void> {
+        const queueItem = await this.getQueueItem(queueId, branchId);
         if (!queueItem) {
             throw AppError.notFound("Queue item not found");
         }
 
-        await this.queueRepository.remove(queueItem);
+        await getRepository(OrderQueue).remove(queueItem);
+        this.invalidateQueueCache(queueItem.branch_id || branchId);
 
         // Emit socket event
         this.socketService.emitToBranch(
@@ -137,7 +184,11 @@ export class OrderQueueService {
      * Reorder queue positions
      */
     async reorderQueue(branchId?: string): Promise<void> {
-        const queueItems = await this.getQueue(branchId, QueueStatus.Pending);
+        const queueRepository = getRepository(OrderQueue);
+        const queueItems = await queueRepository.find({
+            where: branchId ? { branch_id: branchId, status: QueueStatus.Pending } : { status: QueueStatus.Pending },
+            order: { priority: "DESC", queue_position: "ASC" },
+        });
         
         // Sort by priority and current position
         queueItems.sort((a, b) => {
@@ -155,14 +206,21 @@ export class OrderQueueService {
         // Update positions
         for (let i = 0; i < queueItems.length; i++) {
             queueItems[i].queue_position = i + 1;
-            await this.queueRepository.save(queueItems[i]);
         }
 
-        // Emit socket event
+        await runInTransaction(async (manager) => {
+            await manager.getRepository(OrderQueue).save(queueItems);
+        });
+        this.invalidateQueueCache(branchId);
+
+        // Emit socket event with minimal payload so clients can patch cache without full refetch
         this.socketService.emitToBranch(
             branchId || '',
             'order-queue:reordered',
-            { branchId }
+            {
+                branchId,
+                updates: queueItems.map((q) => ({ id: q.id, queue_position: q.queue_position, priority: q.priority }))
+            }
         );
     }
 }

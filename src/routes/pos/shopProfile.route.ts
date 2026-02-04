@@ -3,10 +3,12 @@ import { getShopProfile, updateShopProfile } from "../../controllers/pos/shopPro
 import { authenticateToken, authorizeRole } from "../../middleware/auth.middleware";
 import { validate } from "../../middleware/validate.middleware";
 import { updateShopProfileSchema } from "../../utils/schemas/posMaster.schema";
+import { requireBranch } from "../../middleware/branch.middleware";
 
 const router = express.Router();
 
 router.use(authenticateToken);
+router.use(requireBranch);
 
 router.get("/", authorizeRole(["Admin", "Manager", "Employee"]), getShopProfile);
 router.put("/", authorizeRole(["Admin", "Manager"]), validate(updateShopProfileSchema), updateShopProfile);
