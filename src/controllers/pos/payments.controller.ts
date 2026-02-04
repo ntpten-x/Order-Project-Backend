@@ -6,18 +6,19 @@ import { AppError } from "../../utils/AppError";
 import { auditLogger, AuditActionType } from "../../utils/auditLogger";
 import { getClientIp } from "../../utils/securityLogger";
 import { ApiResponses } from "../../utils/ApiResponse";
+import { getBranchId } from "../../middleware/branch.middleware";
 
 export class PaymentsController {
     constructor(private paymentsService: PaymentsService) { }
 
     findAll = catchAsync(async (req: Request, res: Response) => {
-        const branchId = (req as any).user?.branch_id;
+        const branchId = getBranchId(req as any);
         const payments = await this.paymentsService.findAll(branchId);
         return ApiResponses.ok(res, payments);
     })
 
     findOne = catchAsync(async (req: Request, res: Response) => {
-        const branchId = (req as any).user?.branch_id;
+        const branchId = getBranchId(req as any);
         const payment = await this.paymentsService.findOne(req.params.id, branchId)
         if (!payment) throw new AppError("ไม่พบข้อมูลการชำระเงิน", 404);
         return ApiResponses.ok(res, payment);
@@ -30,7 +31,7 @@ export class PaymentsController {
             throw new AppError("Authentication required (User ID missing)", 401);
         }
 
-        const branchId = user.branch_id;
+        const branchId = getBranchId(req as any);
         if (branchId) {
             // Always enforce branch isolation server-side
             req.body.branch_id = branchId;
@@ -47,7 +48,7 @@ export class PaymentsController {
             user_agent: req.headers['user-agent'],
             entity_type: 'Payments',
             entity_id: payment.id,
-            branch_id: user.branch_id,
+            branch_id: branchId,
             new_values: { 
                 order_id: payment.order_id, 
                 amount: payment.amount, 
@@ -64,7 +65,7 @@ export class PaymentsController {
 
     update = catchAsync(async (req: Request, res: Response) => {
         const user = (req as any).user;
-        const branchId = user?.branch_id;
+        const branchId = getBranchId(req as any);
         if (branchId) {
             // Prevent branch_id tampering
             req.body.branch_id = branchId;
@@ -94,7 +95,7 @@ export class PaymentsController {
 
     delete = catchAsync(async (req: Request, res: Response) => {
         const user = (req as any).user;
-        const branchId = user?.branch_id;
+        const branchId = getBranchId(req as any);
         const oldPayment = await this.paymentsService.findOne(req.params.id, branchId);
 
         await this.paymentsService.delete(req.params.id, branchId)

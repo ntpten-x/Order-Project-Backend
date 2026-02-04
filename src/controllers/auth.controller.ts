@@ -187,6 +187,13 @@ export class AuthController {
             sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
             path: "/"
         });
+        // Clear any selected admin branch context on logout to avoid stale branch selection across sessions.
+        res.clearCookie("active_branch_id", {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+            path: "/"
+        });
         return ApiResponses.ok(res, { message: "ออกจากระบบสำเร็จ" });
     }
 
@@ -214,5 +221,44 @@ export class AuthController {
                 is_active: user.branch.is_active
             } : undefined
         });
+    }
+
+    /**
+     * Admin-only: Switch the active branch context for RLS (stored in a cookie).
+     * - branch_id = uuid: select branch context (admin sees only that branch)
+     * - branch_id = null/undefined: clear selection (admin sees all branches)
+     */
+    static async switchBranch(req: AuthRequest, res: Response) {
+        if (!req.user) {
+            return ApiResponses.unauthorized(res, "Authentication required");
+        }
+
+        const role = req.user.roles?.roles_name;
+        if (role !== "Admin") {
+            return ApiResponses.forbidden(res, "Access denied: Admin only");
+        }
+
+        const branchId = (req.body?.branch_id ?? null) as string | null;
+
+        const cookieOptions = {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: (process.env.NODE_ENV === "production" ? "none" : "lax") as "none" | "lax",
+            path: "/",
+            maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+        };
+
+        if (!branchId) {
+            res.clearCookie("active_branch_id", cookieOptions);
+            return ApiResponses.ok(res, { active_branch_id: null });
+        }
+
+        const branch = await getRepository(Branch).findOneBy({ id: branchId });
+        if (!branch) {
+            return ApiResponses.notFound(res, "Branch");
+        }
+
+        res.cookie("active_branch_id", branchId, cookieOptions);
+        return ApiResponses.ok(res, { active_branch_id: branchId });
     }
 }

@@ -105,6 +105,46 @@ export const connectDatabase = async () => {
         await AppDataSource.initialize()
         console.log("Database connected successfully")
 
+        // Operational safety checks for multi-tenant RLS deployments
+        const isProdEnv = process.env.NODE_ENV === "production"
+
+        // 1) Prevent silent RLS bypass at the DB role level
+        try {
+            const bypassRows = await AppDataSource.query(
+                `SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user`
+            )
+            const bypass = Boolean(bypassRows?.[0]?.rolbypassrls)
+            if (bypass && process.env.ALLOW_BYPASSRLS !== "1") {
+                const msg =
+                    "[DB] Current DB role has BYPASSRLS enabled. This can disable branch isolation. Remove BYPASSRLS or set ALLOW_BYPASSRLS=1 to override."
+                if (isProdEnv) {
+                    throw new Error(msg)
+                } else {
+                    console.warn(msg)
+                }
+            }
+        } catch (error) {
+            console.warn("[DB] Failed to check BYPASSRLS:", error)
+        }
+
+        // 2) Ensure migrations are applied (optional auto-run)
+        const runOnStart = process.env.RUN_MIGRATIONS_ON_START === "true"
+        const requireNoPending = process.env.REQUIRE_NO_PENDING_MIGRATIONS
+            ? process.env.REQUIRE_NO_PENDING_MIGRATIONS === "true"
+            : isProdEnv
+
+        if (runOnStart) {
+            const ran = await AppDataSource.runMigrations()
+            console.log(`[DB] Migrations applied on start: ${ran.length}`)
+        } else if (requireNoPending) {
+            const hasPending = await AppDataSource.showMigrations()
+            if (hasPending) {
+                throw new Error(
+                    "[DB] Pending migrations detected. Run `npm run migration:run` (or set RUN_MIGRATIONS_ON_START=true)."
+                )
+            }
+        }
+
     } catch (error) {
         console.error("Error connecting to database:", error)
         process.exit(1)

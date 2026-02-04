@@ -11,6 +11,7 @@ export const createUserSchema = z.object({
         firstName: z.string().optional(),
         lastName: z.string().optional(),
         roles_id: z.string().uuid("รูปแบบรหัสบทบาทไม่ถูกต้อง"),
+        branch_id: z.string().uuid(),
         is_active: z.boolean().optional(),
         is_use: z.boolean().optional()
     })
@@ -26,6 +27,7 @@ export const updateUserSchema = z.object({
         firstName: z.string().optional(),
         lastName: z.string().optional(),
         roles_id: z.string().uuid().optional(),
+        branch_id: z.string().uuid().optional(),
         is_use: z.boolean().optional(),
         is_active: z.boolean().optional()
     })

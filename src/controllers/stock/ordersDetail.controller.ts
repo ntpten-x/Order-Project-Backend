@@ -6,6 +6,7 @@ import { AppError } from "../../utils/AppError";
 import { ApiResponses } from "../../utils/ApiResponse";
 import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../../utils/auditLogger";
 import { getClientIp } from "../../utils/securityLogger";
+import { getBranchId } from "../../middleware/branch.middleware";
 
 /**
  * Orders Detail Controller
@@ -19,7 +20,7 @@ export class OrdersDetailController {
 
     updatePurchase = catchAsync(async (req: Request, res: Response) => {
         const { orders_item_id, actual_quantity, purchased_by_id, is_purchased } = req.body;
-        const branch_id = (req as any).user?.branch_id;
+        const branch_id = getBranchId(req as any);
 
         if (!orders_item_id || !purchased_by_id) {
             throw AppError.badRequest("ไม่พบข้อมูลสินค้าหรือผู้สั่งซื้อ");

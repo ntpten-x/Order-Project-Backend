@@ -5,6 +5,7 @@ import { AppError } from "../../utils/AppError";
 import { ApiResponses } from "../../utils/ApiResponse";
 import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../../utils/auditLogger";
 import { getClientIp } from "../../utils/securityLogger";
+import { getBranchId } from "../../middleware/branch.middleware";
 
 /**
  * Tables Controller
@@ -21,7 +22,7 @@ export class TablesController {
         const rawLimit = parseInt(req.query.limit as string);
         const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
         const q = (req.query.q as string | undefined) || undefined;
-        const branchId = (req as any).user?.branch_id;
+        const branchId = getBranchId(req as any);
 
         const result = await this.tablesService.findAll(page, limit, q, branchId);
         
@@ -38,7 +39,7 @@ export class TablesController {
     });
 
     findOne = catchAsync(async (req: Request, res: Response) => {
-        const branchId = (req as any).user?.branch_id;
+        const branchId = getBranchId(req as any);
         const table = await this.tablesService.findOne(req.params.id, branchId);
         if (!table) {
             throw AppError.notFound("โต๊ะ");
@@ -47,7 +48,8 @@ export class TablesController {
     });
 
     findByName = catchAsync(async (req: Request, res: Response) => {
-        const table = await this.tablesService.findOneByName(req.params.name);
+        const branchId = getBranchId(req as any);
+        const table = await this.tablesService.findOneByName(req.params.name, branchId);
         if (!table) {
             throw AppError.notFound("โต๊ะ");
         }
@@ -55,7 +57,7 @@ export class TablesController {
     });
 
     create = catchAsync(async (req: Request, res: Response) => {
-        const branchId = (req as any).user?.branch_id;
+        const branchId = getBranchId(req as any);
         if (branchId) {
             req.body.branch_id = branchId;
         }
@@ -80,7 +82,7 @@ export class TablesController {
     });
 
     update = catchAsync(async (req: Request, res: Response) => {
-        const branchId = (req as any).user?.branch_id;
+        const branchId = getBranchId(req as any);
         if (branchId) {
             req.body.branch_id = branchId;
         }
@@ -112,7 +114,7 @@ export class TablesController {
     });
 
     delete = catchAsync(async (req: Request, res: Response) => {
-        const branchId = (req as any).user?.branch_id;
+        const branchId = getBranchId(req as any);
         const oldTable = await this.tablesService.findOne(req.params.id, branchId);
         await this.tablesService.delete(req.params.id, branchId);
 

@@ -114,9 +114,11 @@ export { AuditActionType };
  */
 export function getUserInfoFromRequest(req: any): { user_id?: string; username?: string; branch_id?: string } {
     const user = req.user || (req as any).user;
+    const ctx = getDbContext();
     return {
         user_id: user?.id,
         username: user?.username,
-        branch_id: user?.branch_id,
+        // Prefer DB context branch (supports admin branch switching)
+        branch_id: ctx?.branchId || user?.branch_id,
     };
 }

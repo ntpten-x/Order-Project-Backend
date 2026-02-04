@@ -6,6 +6,7 @@ import { AppError } from "../../utils/AppError";
 import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../../utils/auditLogger";
 import { ApiResponses } from "../../utils/ApiResponse";
 import { getClientIp } from "../../utils/securityLogger";
+import { getBranchId } from "../../middleware/branch.middleware";
 
 export class ShiftsController {
     constructor(private shiftsService: ShiftsService) { }
@@ -13,7 +14,7 @@ export class ShiftsController {
     openShift = catchAsync(async (req: Request, res: Response) => {
         // Get user_id from authenticated user
         const user_id = (req as any).user?.id;
-        const branch_id = (req as any).user?.branch_id;
+        const branch_id = getBranchId(req as any);
         const { start_amount } = req.body;
 
         if (!user_id) {
@@ -66,7 +67,7 @@ export class ShiftsController {
             user_agent: req.get('User-Agent'),
             entity_type: 'Shifts',
             entity_id: shift.id,
-            branch_id: (req as any).user?.branch_id,
+            branch_id: getBranchId(req as any),
             new_values: { end_amount: Number(end_amount) },
             path: req.originalUrl,
             method: req.method,
@@ -89,7 +90,7 @@ export class ShiftsController {
 
     getSummary = catchAsync(async (req: Request, res: Response) => {
         const { id } = req.params;
-        const branchId = (req as any).user?.branch_id;
+        const branchId = getBranchId(req as any);
         const summary = await this.shiftsService.getShiftSummary(id, branchId);
         return ApiResponses.ok(res, summary);
     });
@@ -101,7 +102,7 @@ export class ShiftsController {
         const currentShift = await this.shiftsService.getCurrentShift(userId);
         if (!currentShift) throw new AppError("No active shift found", 404);
 
-        const branchId = (req as any).user?.branch_id;
+        const branchId = getBranchId(req as any);
         const summary = await this.shiftsService.getShiftSummary(currentShift.id, branchId);
         return ApiResponses.ok(res, summary);
     });

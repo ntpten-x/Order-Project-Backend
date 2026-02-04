@@ -7,6 +7,7 @@ import { ApiResponses } from "../../utils/ApiResponse";
 import { AuthRequest } from "../../middleware/auth.middleware";
 import { auditLogger, AuditActionType } from "../../utils/auditLogger";
 import { getClientIp } from "../../utils/securityLogger";
+import { getBranchId } from "../../middleware/branch.middleware";
 
 export class OrderQueueController {
     private queueService = new OrderQueueService();
@@ -16,7 +17,7 @@ export class OrderQueueController {
      */
     addToQueue = catchAsync(async (req: AuthRequest, res: Response) => {
         const { orderId, priority } = req.body;
-        const branchId = req.user?.branch_id;
+        const branchId = getBranchId(req as any);
 
         if (!orderId) {
             throw AppError.badRequest("Order ID is required");
@@ -48,7 +49,7 @@ export class OrderQueueController {
      * Get queue list
      */
     getQueue = catchAsync(async (req: AuthRequest, res: Response) => {
-        const branchId = req.user?.branch_id;
+        const branchId = getBranchId(req as any);
         const status = req.query.status as QueueStatus | undefined;
 
         const queue = await this.queueService.getQueue(branchId, status);
@@ -62,7 +63,7 @@ export class OrderQueueController {
     updateStatus = catchAsync(async (req: AuthRequest, res: Response) => {
         const { id } = req.params;
         const { status } = req.body;
-        const branchId = req.user?.branch_id;
+        const branchId = getBranchId(req as any);
 
         if (!status || !Object.values(QueueStatus).includes(status)) {
             throw AppError.badRequest("Invalid status");
@@ -96,7 +97,7 @@ export class OrderQueueController {
      */
     removeFromQueue = catchAsync(async (req: AuthRequest, res: Response) => {
         const { id } = req.params;
-        const branchId = req.user?.branch_id;
+        const branchId = getBranchId(req as any);
 
         const oldQueueItem = await this.queueService.getQueueItem(id, branchId);
         await this.queueService.removeFromQueue(id, branchId);
@@ -124,7 +125,7 @@ export class OrderQueueController {
      * Reorder queue
      */
     reorderQueue = catchAsync(async (req: AuthRequest, res: Response) => {
-        const branchId = req.user?.branch_id;
+        const branchId = getBranchId(req as any);
 
         await this.queueService.reorderQueue(branchId);
 

@@ -14,6 +14,7 @@ export interface AuthRequest extends Request {
 
 // Session timeout in milliseconds (default: 8 hours)
 const SESSION_TIMEOUT = Number(process.env.SESSION_TIMEOUT_MS) || 8 * 60 * 60 * 1000;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export const authenticateToken = async (req: AuthRequest, res: Response, next: NextFunction) => {
     // 1. Get token from cookies
@@ -103,10 +104,19 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
         const role = user.roles?.roles_name;
         const isAdmin = role === "Admin";
 
+        // Admin branch switching:
+        // - Non-admins are always scoped to their own branch_id.
+        // - Admins can optionally set a selected branch via the "active_branch_id" cookie.
+        //   If not set, admin operates with no branch context (RLS allows full access).
+        const cookieBranchIdRaw = typeof req.cookies?.active_branch_id === "string" ? req.cookies.active_branch_id : "";
+        const cookieBranchId = cookieBranchIdRaw.trim();
+        const effectiveBranchId =
+            isAdmin ? (cookieBranchId && UUID_RE.test(cookieBranchId) ? cookieBranchId : undefined) : user.branch_id;
+
         // Run the rest of the request inside a DB context so Postgres RLS (if enabled)
         // can enforce branch isolation even if a future query forgets branch_id filters.
         return runWithDbContext(
-            { branchId: user.branch_id, userId: user.id, role, isAdmin },
+            { branchId: effectiveBranchId, userId: user.id, role, isAdmin },
             async () => {
                 if (user.branch_id) {
                     const branch = await getRepository(Branch).findOneBy({ id: user.branch_id });

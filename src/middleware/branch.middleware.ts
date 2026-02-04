@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { AuthRequest } from "./auth.middleware";
 import { ApiResponses } from "../utils/ApiResponse";
+import { getDbContext } from "../database/dbContext";
 
 /**
  * Branch Context Interface
@@ -16,9 +17,8 @@ export interface BranchRequest extends AuthRequest {
  * This middleware should be used after authenticateToken middleware
  */
 export const extractBranch = (req: BranchRequest, res: Response, next: NextFunction) => {
-    if (req.user?.branch_id) {
-        req.branchId = req.user.branch_id;
-    }
+    const ctx = getDbContext();
+    req.branchId = ctx?.branchId || req.user?.branch_id;
     next();
 };
 
@@ -28,10 +28,18 @@ export const extractBranch = (req: BranchRequest, res: Response, next: NextFunct
  * Use this for endpoints that strictly require branch context
  */
 export const requireBranch = (req: BranchRequest, res: Response, next: NextFunction) => {
-    if (!req.user?.branch_id) {
-        return ApiResponses.forbidden(res, "Access denied: No branch assigned to user");
+    const ctx = getDbContext();
+    const effectiveBranchId = ctx?.branchId || req.user?.branch_id;
+
+    // Allow admin to read across branches without selecting one (GET only).
+    if (!effectiveBranchId) {
+        if (ctx?.isAdmin && req.method === "GET") {
+            return next();
+        }
+        return ApiResponses.forbidden(res, "Access denied: No branch assigned/selected");
     }
-    req.branchId = req.user.branch_id;
+
+    req.branchId = effectiveBranchId;
     next();
 };
 
@@ -40,7 +48,8 @@ export const requireBranch = (req: BranchRequest, res: Response, next: NextFunct
  * Used in controllers to safely extract branch_id
  */
 export const getBranchId = (req: BranchRequest): string | undefined => {
-    return req.branchId || req.user?.branch_id;
+    const ctx = getDbContext();
+    return ctx?.branchId || req.branchId || req.user?.branch_id;
 };
 
 /**

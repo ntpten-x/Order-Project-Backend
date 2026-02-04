@@ -7,6 +7,7 @@ import { AppError } from "../../utils/AppError";
 import { ApiResponses } from "../../utils/ApiResponse";
 import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../../utils/auditLogger";
 import { getClientIp } from "../../utils/securityLogger";
+import { getBranchId } from "../../middleware/branch.middleware";
 
 /**
  * Stock Orders Controller
@@ -21,7 +22,7 @@ export class OrdersController {
 
     createOrder = catchAsync(async (req: Request, res: Response) => {
         const { ordered_by_id, items, remark } = req.body;
-        const branch_id = (req as any).user?.branch_id;
+        const branch_id = getBranchId(req as any);
         
         // Validate input
         if (!ordered_by_id || !items || !Array.isArray(items) || items.length === 0) {
@@ -65,7 +66,7 @@ export class OrdersController {
             statusFilter = validStatuses.length > 1 ? validStatuses : validStatuses[0];
         }
 
-        const branch_id = (req as any).user?.branch_id;
+        const branch_id = getBranchId(req as any);
         const result = await this.ordersService.getAllOrders(
             statusFilter ? { status: statusFilter } : undefined, 
             page, 
@@ -82,7 +83,7 @@ export class OrdersController {
 
     getOrderById = catchAsync(async (req: Request, res: Response) => {
         const { id } = req.params;
-        const branch_id = (req as any).user?.branch_id;
+        const branch_id = getBranchId(req as any);
         const order = await this.ordersService.getOrderById(id, branch_id);
         if (!order) {
             throw AppError.notFound("การสั่งซื้อ");
@@ -98,7 +99,7 @@ export class OrdersController {
             throw AppError.badRequest("ไม่พบข้อมูลสินค้า");
         }
 
-        const branch_id = (req as any).user?.branch_id;
+        const branch_id = getBranchId(req as any);
         const oldOrder = await this.ordersService.getOrderById(id, branch_id);
         const updatedOrder = await this.ordersService.updateOrder(id, items, branch_id);
 
@@ -128,7 +129,7 @@ export class OrdersController {
             throw AppError.badRequest("สถานะไม่ถูกต้อง");
         }
 
-        const branch_id = (req as any).user?.branch_id;
+        const branch_id = getBranchId(req as any);
         const oldOrder = await this.ordersService.getOrderById(id, branch_id);
         const updatedOrder = await this.ordersService.updateStatus(id, status, branch_id);
 
@@ -152,7 +153,7 @@ export class OrdersController {
 
     deleteOrder = catchAsync(async (req: Request, res: Response) => {
         const { id } = req.params;
-        const branch_id = (req as any).user?.branch_id;
+        const branch_id = getBranchId(req as any);
         const oldOrder = await this.ordersService.getOrderById(id, branch_id);
         const result = await this.ordersService.deleteOrder(id, branch_id);
 
@@ -191,7 +192,7 @@ export class OrdersController {
             throw AppError.badRequest("ไม่พบข้อมูลผู้สั่งซื้อ");
         }
 
-        const branch_id = (req as any).user?.branch_id;
+        const branch_id = getBranchId(req as any);
         const oldOrder = await this.ordersService.getOrderById(id, branch_id);
         const updatedOrder = await this.ordersService.confirmPurchase(id, items, purchased_by_id, branch_id);
 

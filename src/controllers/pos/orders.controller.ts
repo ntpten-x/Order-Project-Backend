@@ -5,6 +5,7 @@ import { AppError } from "../../utils/AppError";
 import { auditLogger, AuditActionType } from "../../utils/auditLogger";
 import { getClientIp } from "../../utils/securityLogger";
 import { ApiResponses } from "../../utils/ApiResponse";
+import { getBranchId } from "../../middleware/branch.middleware";
 
 export class OrdersController {
     constructor(private ordersService: OrdersService) { }
@@ -16,7 +17,7 @@ export class OrdersController {
         const statuses = req.query.status ? (req.query.status as string).split(',') : undefined;
         const type = req.query.type as string;
         const query = req.query.q as string | undefined;
-        const branchId = (req as any).user?.branch_id;
+        const branchId = getBranchId(req as any);
 
         const result = await this.ordersService.findAll(page, limit, statuses, type, query, branchId);
         return ApiResponses.paginated(res, result.data, {
@@ -33,7 +34,7 @@ export class OrdersController {
         const statuses = req.query.status ? (req.query.status as string).split(',') : undefined;
         const type = req.query.type as string;
         const query = req.query.q as string | undefined;
-        const branchId = (req as any).user?.branch_id;
+        const branchId = getBranchId(req as any);
 
         const result = await this.ordersService.findAllSummary(page, limit, statuses, type, query, branchId);
         return ApiResponses.paginated(res, result.data, {
@@ -44,7 +45,7 @@ export class OrdersController {
     })
 
     getStats = catchAsync(async (req: Request, res: Response) => {
-        const branchId = (req as any).user?.branch_id;
+        const branchId = getBranchId(req as any);
         const stats = await this.ordersService.getStats(branchId);
         return ApiResponses.ok(res, stats);
     })
@@ -54,7 +55,7 @@ export class OrdersController {
         const page = Math.max(parseInt(req.query.page as string) || 1, 1);
         const limitRaw = parseInt(req.query.limit as string) || 100;
         const limit = Math.min(Math.max(limitRaw, 1), 200); // cap to prevent huge payloads
-        const branchId = (req as any).user?.branch_id;
+        const branchId = getBranchId(req as any);
 
         const result = await this.ordersService.findAllItems(status, page, limit, branchId);
         return ApiResponses.paginated(res, result.data, {
@@ -65,7 +66,7 @@ export class OrdersController {
     })
 
     findOne = catchAsync(async (req: Request, res: Response) => {
-        const branchId = (req as any).user?.branch_id;
+        const branchId = getBranchId(req as any);
         const order = await this.ordersService.findOne(req.params.id, branchId)
         if (!order) {
             throw new AppError("ไม่พบข้อมูลออเดอร์", 404);
@@ -75,7 +76,7 @@ export class OrdersController {
 
     create = catchAsync(async (req: Request, res: Response) => {
         const user = (req as any).user;
-        const branchId = user?.branch_id;
+        const branchId = getBranchId(req as any);
         if (user?.id) {
             req.body.created_by_id = user.id;
         }
@@ -100,7 +101,7 @@ export class OrdersController {
             user_agent: req.headers['user-agent'],
             entity_type: 'SalesOrder',
             entity_id: order.id,
-            branch_id: user?.branch_id,
+            branch_id: branchId,
             new_values: { order_no: order.order_no, status: order.status, order_type: order.order_type },
             description: `Created order ${order.order_no}`,
             path: req.path,
@@ -162,7 +163,7 @@ export class OrdersController {
 
     delete = catchAsync(async (req: Request, res: Response) => {
         const user = (req as any).user;
-        const branchId = user?.branch_id;
+        const branchId = getBranchId(req as any);
         const oldOrder = await this.ordersService.findOne(req.params.id, branchId);
 
         await this.ordersService.delete(req.params.id, branchId)
@@ -186,7 +187,7 @@ export class OrdersController {
     })
 
     updateItemStatus = catchAsync(async (req: Request, res: Response) => {
-        const branchId = (req as any).user?.branch_id;
+        const branchId = getBranchId(req as any);
         const { status } = req.body
         if (!status) {
             throw new AppError("กรุณาระบุสถานะ", 400);
@@ -197,7 +198,7 @@ export class OrdersController {
 
     addItem = catchAsync(async (req: Request, res: Response) => {
         const user = (req as any).user;
-        const branchId = user?.branch_id;
+        const branchId = getBranchId(req as any);
         const order = await this.ordersService.addItem(req.params.id, req.body, branchId);
         
         // Audit log
@@ -209,7 +210,7 @@ export class OrdersController {
             user_agent: req.headers['user-agent'],
             entity_type: 'SalesOrder',
             entity_id: order.id,
-            branch_id: user?.branch_id,
+            branch_id: branchId,
             new_values: { product_id: req.body.product_id, quantity: req.body.quantity },
             description: `Added item to order ${order.order_no}`,
             path: req.path,
@@ -221,7 +222,7 @@ export class OrdersController {
 
     updateItem = catchAsync(async (req: Request, res: Response) => {
         const user = (req as any).user;
-        const branchId = user?.branch_id;
+        const branchId = getBranchId(req as any);
         const order = await this.ordersService.updateItemDetails(req.params.itemId, req.body, branchId);
 
         // Audit log - item modifications affect bill/operations
@@ -244,7 +245,7 @@ export class OrdersController {
 
     deleteItem = catchAsync(async (req: Request, res: Response) => {
         const user = (req as any).user;
-        const branchId = user?.branch_id;
+        const branchId = getBranchId(req as any);
         const order = await this.ordersService.deleteItem(req.params.itemId, branchId);
 
         // Audit log - important destructive action

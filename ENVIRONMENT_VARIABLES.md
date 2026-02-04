@@ -34,6 +34,13 @@
 ### TypeORM
 - `TYPEORM_SYNC` - Auto-sync database schema (false in production, true in development)
 
+### RLS / Migrations Safety
+- `RUN_MIGRATIONS_ON_START` - Auto-run TypeORM migrations on startup (true/false)
+- `REQUIRE_NO_PENDING_MIGRATIONS` - Fail startup if there are pending migrations (true/false). Defaults to `true` in production.
+- `ALLOW_BYPASSRLS` - Allow database roles with `BYPASSRLS` (set to `1` to override startup safety check)
+- `BRANCH_BACKFILL_ID` - UUID branch id used by migrations to backfill legacy rows with `branch_id IS NULL` (recommended if you have >1 branch)
+- `DEFAULT_BRANCH_ID` - Fallback UUID branch id for backfills (used if `BRANCH_BACKFILL_ID` is not set)
+
 ### Performance
 - `REQUEST_BODY_LIMIT_MB` - Request body size limit in MB (default: 5)
 - `ENABLE_PERF_LOG` - Enable performance logging (default: false)
