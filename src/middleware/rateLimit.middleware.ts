@@ -35,6 +35,9 @@ const createRedisStore = (redisClient: any, prefix: string) => {
     let windowMs = 60 * 1000;
     const safePrefix = prefix.endsWith(":") ? prefix : `${prefix}:`;
     const withPrefix = (key: string) => `${safePrefix}${key}`;
+    const logStoreError = (err: unknown) => {
+        console.error("[RateLimit] Redis store error:", err);
+    };
 
     return {
         localKeys: false,
@@ -45,39 +48,55 @@ const createRedisStore = (redisClient: any, prefix: string) => {
             }
         },
         get: async (key: string) => {
-            const redisKey = withPrefix(key);
-            const results = await redisClient.multi().get(redisKey).pttl(redisKey).exec();
-            const rawHits = results?.[0];
-            if (rawHits === null || rawHits === undefined) {
+            try {
+                const redisKey = withPrefix(key);
+                const rawHits = await redisClient.get(redisKey);
+                if (rawHits === null || rawHits === undefined) {
+                    return undefined;
+                }
+                const totalHits = Number(rawHits);
+                const ttlMs = Number(await redisClient.pTTL(redisKey));
+                const resetTime = Number.isFinite(ttlMs) && ttlMs > 0 ? new Date(Date.now() + ttlMs) : undefined;
+                return { totalHits, resetTime };
+            } catch (err) {
+                logStoreError(err);
                 return undefined;
             }
-            const totalHits = Number(rawHits);
-            const ttlMs = Number(results?.[1] ?? -1);
-            const resetTime = Number.isFinite(ttlMs) && ttlMs > 0 ? new Date(Date.now() + ttlMs) : undefined;
-            return { totalHits, resetTime };
         },
         increment: async (key: string) => {
-            const redisKey = withPrefix(key);
-            const now = Date.now();
-            const results = await redisClient.multi().incr(redisKey).pttl(redisKey).exec();
-            const totalHits = Number(results?.[0] ?? 0);
-            let ttlMs = Number(results?.[1] ?? -1);
-            if (!Number.isFinite(ttlMs) || ttlMs < 0) {
-                await redisClient.pexpire(redisKey, windowMs);
-                ttlMs = windowMs;
+            try {
+                const redisKey = withPrefix(key);
+                const now = Date.now();
+                const totalHits = Number(await redisClient.incr(redisKey));
+                let ttlMs = Number(await redisClient.pTTL(redisKey));
+                if (!Number.isFinite(ttlMs) || ttlMs < 0) {
+                    await redisClient.pExpire(redisKey, windowMs);
+                    ttlMs = windowMs;
+                }
+                const resetTime = Number.isFinite(ttlMs) && ttlMs > 0 ? new Date(now + ttlMs) : undefined;
+                return { totalHits, resetTime };
+            } catch (err) {
+                logStoreError(err);
+                return { totalHits: 1, resetTime: new Date(Date.now() + windowMs) };
             }
-            const resetTime = Number.isFinite(ttlMs) && ttlMs > 0 ? new Date(now + ttlMs) : undefined;
-            return { totalHits, resetTime };
         },
         decrement: async (key: string) => {
-            const redisKey = withPrefix(key);
-            const remaining = Number(await redisClient.decr(redisKey));
-            if (!Number.isFinite(remaining) || remaining <= 0) {
-                await redisClient.del(redisKey);
+            try {
+                const redisKey = withPrefix(key);
+                const remaining = Number(await redisClient.decr(redisKey));
+                if (!Number.isFinite(remaining) || remaining <= 0) {
+                    await redisClient.del(redisKey);
+                }
+            } catch (err) {
+                logStoreError(err);
             }
         },
         resetKey: async (key: string) => {
-            await redisClient.del(withPrefix(key));
+            try {
+                await redisClient.del(withPrefix(key));
+            } catch (err) {
+                logStoreError(err);
+            }
         },
         shutdown: async () => {
             try {
@@ -149,6 +168,8 @@ const orderStore = getStore("rl:order");
 const paymentStore = getStore("rl:payment");
 const passwordStore = getStore("rl:password");
 
+const apiSkipPaths = new Set(["/health", "/csrf-token", "/metrics"]);
+
 // General API rate limiter
 export const apiLimiter = rateLimit({
     windowMs: apiWindowMs,
@@ -156,6 +177,7 @@ export const apiLimiter = rateLimit({
     standardHeaders: true,
     legacyHeaders: false,
     message: "Too many requests from this IP, please try again after 15 minutes",
+    skip: (req) => apiSkipPaths.has(req.path),
     ...(apiStore ? { store: apiStore } : {}),
     handler: (req: Request, res: Response) => {
         res.status(429).json({

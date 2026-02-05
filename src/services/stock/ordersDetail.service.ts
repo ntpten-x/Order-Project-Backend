@@ -23,6 +23,10 @@ export class OrdersDetailService {
                         orderId: orderItem.orders.id,
                         detail: savedDetail
                     });
+                    this.socketService.emitToBranch(emitBranchId, RealtimeEvents.stock.update, {
+                        source: "stock-orders-detail",
+                        orderId: orderItem.orders.id,
+                    });
                     this.socketService.emitToBranch(emitBranchId, LegacyRealtimeEvents.stockOrdersUpdated, {
                         action: "update_item_detail",
                         orderId: orderItem.orders.id,

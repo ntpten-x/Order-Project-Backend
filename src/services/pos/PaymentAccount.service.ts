@@ -4,6 +4,7 @@ import { PaymentAccountModel } from "../../models/pos/PaymentAccount.model"
 import { ShopPaymentAccount } from "../../entity/pos/ShopPaymentAccount"
 import { SocketService } from "../socket.service"
 import { getRepository } from "../../database/dbContext"
+import { RealtimeEvents } from "../../utils/realtimeEvents"
 
 
 export class PaymentAccountService {
@@ -66,7 +67,7 @@ export class PaymentAccountService {
             await this.syncToShopProfile(shopId, account);
         }
 
-        this.socketService.emitToBranch(branchId, "payment-accounts:create", account);
+        this.socketService.emitToBranch(branchId, RealtimeEvents.paymentAccounts.create, account);
         return account;
     }
 
@@ -102,7 +103,7 @@ export class PaymentAccountService {
             await this.syncToShopProfile(shopId, savedAccount);
         }
 
-        this.socketService.emitToBranch(branchId, "payment-accounts:update", savedAccount);
+        this.socketService.emitToBranch(branchId, RealtimeEvents.paymentAccounts.update, savedAccount);
         return savedAccount;
     }
 
@@ -121,7 +122,7 @@ export class PaymentAccountService {
         // Sync with ShopProfile
         await this.syncToShopProfile(shopId, savedAccount);
 
-        this.socketService.emitToBranch(branchId, "payment-accounts:update", savedAccount);
+        this.socketService.emitToBranch(branchId, RealtimeEvents.paymentAccounts.update, savedAccount);
         return savedAccount;
     }
 
@@ -135,7 +136,7 @@ export class PaymentAccountService {
         }
 
         const result = await this.model.delete(account);
-        this.socketService.emitToBranch(branchId, "payment-accounts:delete", { id: accountId });
+        this.socketService.emitToBranch(branchId, RealtimeEvents.paymentAccounts.delete, { id: accountId });
         return result;
     }
 

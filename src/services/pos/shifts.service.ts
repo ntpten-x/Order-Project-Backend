@@ -7,6 +7,7 @@ import { OrderStatus } from "../../entity/pos/OrderEnums";
 import { AppError } from "../../utils/AppError";
 import { SocketService } from "../socket.service";
 import { getRepository } from "../../database/dbContext";
+import { RealtimeEvents } from "../../utils/realtimeEvents";
 
 export class ShiftsService {
     private get shiftsRepo() {
@@ -45,7 +46,7 @@ export class ShiftsService {
 
         const savedShift = await this.shiftsRepo.save(newShift);
         if (branchId) {
-            this.socketService.emitToBranch(branchId, 'shifts:update', savedShift);
+            this.socketService.emitToBranch(branchId, RealtimeEvents.shifts.update, savedShift);
         }
         return savedShift;
     }
@@ -100,7 +101,7 @@ export class ShiftsService {
         const savedShift = await this.shiftsRepo.save(activeShift);
         const branchId = activeShift.branch_id;
         if (branchId) {
-            this.socketService.emitToBranch(branchId, 'shifts:update', savedShift);
+            this.socketService.emitToBranch(branchId, RealtimeEvents.shifts.update, savedShift);
         }
         return savedShift;
     }

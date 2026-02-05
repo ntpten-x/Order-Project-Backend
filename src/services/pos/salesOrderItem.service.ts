@@ -3,6 +3,7 @@ import { SocketService } from "../socket.service";
 import { SalesOrderItem } from "../../entity/pos/SalesOrderItem";
 import { SalesOrder } from "../../entity/pos/SalesOrder";
 import { getRepository } from "../../database/dbContext";
+import { RealtimeEvents } from "../../utils/realtimeEvents";
 
 export class SalesOrderItemService {
     private socketService = SocketService.getInstance();
@@ -47,7 +48,7 @@ export class SalesOrderItemService {
             const completeItem = await this.salesOrderItemModel.findOne(createdItem.id, branchId)
             if (completeItem) {
                 if (branchId) {
-                    this.socketService.emitToBranch(branchId, 'salesOrderItem:create', completeItem)
+                    this.socketService.emitToBranch(branchId, RealtimeEvents.salesOrderItem.create, completeItem)
                 }
                 return completeItem
             }
@@ -66,7 +67,7 @@ export class SalesOrderItemService {
 
             const updatedItem = await this.salesOrderItemModel.update(id, salesOrderItem, branchId)
             if (branchId) {
-                this.socketService.emitToBranch(branchId, 'salesOrderItem:update', updatedItem)
+                this.socketService.emitToBranch(branchId, RealtimeEvents.salesOrderItem.update, updatedItem)
             }
             return updatedItem
         } catch (error) {
@@ -78,7 +79,7 @@ export class SalesOrderItemService {
         try {
             await this.salesOrderItemModel.delete(id, branchId)
             if (branchId) {
-                this.socketService.emitToBranch(branchId, 'salesOrderItem:delete', { id })
+                this.socketService.emitToBranch(branchId, RealtimeEvents.salesOrderItem.delete, { id })
             }
         } catch (error) {
             throw error

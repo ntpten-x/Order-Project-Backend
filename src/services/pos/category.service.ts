@@ -1,6 +1,7 @@
 import { CategoryModels } from "../../models/pos/category.model";
 import { SocketService } from "../socket.service";
 import { Category } from "../../entity/pos/Category";
+import { RealtimeEvents } from "../../utils/realtimeEvents";
 
 export class CategoryService {
     private socketService = SocketService.getInstance();
@@ -43,7 +44,7 @@ export class CategoryService {
             const createdCategory = await this.categoryModel.findOne(savedCategory.id, category.branch_id)
             if (createdCategory) {
                 if (createdCategory.branch_id) {
-                    this.socketService.emitToBranch(createdCategory.branch_id, 'category:create', createdCategory)
+                    this.socketService.emitToBranch(createdCategory.branch_id, RealtimeEvents.categories.create, createdCategory)
                 }
                 return createdCategory
             }
@@ -60,7 +61,7 @@ export class CategoryService {
             if (updatedCategory) {
                 const effectiveBranchId = updatedCategory.branch_id || branchId || category.branch_id;
             if (effectiveBranchId) {
-                this.socketService.emitToBranch(effectiveBranchId, 'category:update', updatedCategory)
+                this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.categories.update, updatedCategory)
             }
             return updatedCategory
             }
@@ -79,7 +80,7 @@ export class CategoryService {
             await this.categoryModel.delete(id, branchId)
             const effectiveBranchId = existing.branch_id || branchId;
             if (effectiveBranchId) {
-                this.socketService.emitToBranch(effectiveBranchId, 'category:delete', { id })
+                this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.categories.delete, { id })
             }
         } catch (error) {
             throw error

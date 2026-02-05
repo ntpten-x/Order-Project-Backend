@@ -1,6 +1,7 @@
 import { DiscountsModels } from "../../models/pos/discounts.model";
 import { SocketService } from "../socket.service";
 import { Discounts } from "../../entity/pos/Discounts";
+import { RealtimeEvents } from "../../utils/realtimeEvents";
 
 export class DiscountsService {
     private socketService = SocketService.getInstance();
@@ -49,7 +50,7 @@ export class DiscountsService {
 
             const createdDiscount = await this.discountsModel.create(discounts)
             if (effectiveBranchId) {
-                this.socketService.emitToBranch(effectiveBranchId, 'discounts:create', createdDiscount)
+                this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.discounts.create, createdDiscount)
             }
             return createdDiscount
         } catch (error) {
@@ -82,7 +83,7 @@ export class DiscountsService {
 
             const updatedDiscount = await this.discountsModel.update(id, discounts, effectiveBranchId)
             if (effectiveBranchId) {
-                this.socketService.emitToBranch(effectiveBranchId, 'discounts:update', updatedDiscount)
+                this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.discounts.update, updatedDiscount)
             }
             return updatedDiscount
         } catch (error) {
@@ -98,7 +99,7 @@ export class DiscountsService {
             const effectiveBranchId = branchId || existing.branch_id;
             await this.discountsModel.delete(id, effectiveBranchId)
             if (effectiveBranchId) {
-                this.socketService.emitToBranch(effectiveBranchId, 'discounts:delete', { id })
+                this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.discounts.delete, { id })
             }
         } catch (error) {
             throw error

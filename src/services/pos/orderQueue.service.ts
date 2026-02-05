@@ -4,6 +4,7 @@ import { SocketService } from "../socket.service";
 import { AppError } from "../../utils/AppError";
 import { withCache, cacheKey, invalidateCache, queryCache } from "../../utils/cache";
 import { getDbContext, getRepository, runInTransaction } from "../../database/dbContext";
+import { RealtimeEvents } from "../../utils/realtimeEvents";
 
 export class OrderQueueService {
     private socketService = SocketService.getInstance();
@@ -65,7 +66,7 @@ export class OrderQueueService {
         // Emit socket event
         this.socketService.emitToBranch(
             effectiveBranchId || "",
-            'order-queue:added',
+            RealtimeEvents.orderQueue.added,
             saved
         );
 
@@ -153,7 +154,7 @@ export class OrderQueueService {
         // Emit socket event
         this.socketService.emitToBranch(
             saved.branch_id || '',
-            'order-queue:updated',
+            RealtimeEvents.orderQueue.updated,
             saved
         );
 
@@ -175,7 +176,7 @@ export class OrderQueueService {
         // Emit socket event
         this.socketService.emitToBranch(
             queueItem.branch_id || '',
-            'order-queue:removed',
+            RealtimeEvents.orderQueue.removed,
             { id: queueId }
         );
     }
@@ -216,7 +217,7 @@ export class OrderQueueService {
         // Emit socket event with minimal payload so clients can patch cache without full refetch
         this.socketService.emitToBranch(
             branchId || '',
-            'order-queue:reordered',
+            RealtimeEvents.orderQueue.reordered,
             {
                 branchId,
                 updates: queueItems.map((q) => ({ id: q.id, queue_position: q.queue_position, priority: q.priority }))

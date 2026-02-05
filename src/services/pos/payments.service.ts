@@ -9,6 +9,7 @@ import { Tables, TableStatus } from "../../entity/pos/Tables";
 import { EntityManager } from "typeorm";
 import { PaymentMethod } from "../../entity/pos/PaymentMethod";
 import { getDbManager, runInTransaction } from "../../database/dbContext";
+import { RealtimeEvents } from "../../utils/realtimeEvents";
 
 export class PaymentsService {
     private socketService = SocketService.getInstance();
@@ -70,7 +71,7 @@ export class PaymentsService {
             // We can do a bulk update.
             const effectiveBranchId = order.branch_id || branchId;
             if (effectiveBranchId) {
-                this.socketService.emitToBranch(effectiveBranchId, 'orders:update', { ...order, status: nextStatus } as SalesOrder);
+                this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.update, { ...order, status: nextStatus } as SalesOrder);
             }
 
             // Update all items to Paid
@@ -88,7 +89,7 @@ export class PaymentsService {
             if (t) {
                 const effectiveBranchId = order.branch_id || branchId;
                 if (effectiveBranchId) {
-                    this.socketService.emitToBranch(effectiveBranchId, "tables:update", t);
+                    this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.tables.update, t);
                 }
             }
         }
@@ -97,7 +98,7 @@ export class PaymentsService {
         if (refreshedOrder) {
             const effectiveBranchId = refreshedOrder.branch_id || branchId;
             if (effectiveBranchId) {
-                this.socketService.emitToBranch(effectiveBranchId, "orders:update", refreshedOrder);
+                this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.update, refreshedOrder);
             }
         }
     }
@@ -167,7 +168,7 @@ export class PaymentsService {
             if (completePayment) {
                 const effectiveBranchId = completePayment.branch_id || branchId;
                 if (effectiveBranchId) {
-                    this.socketService.emitToBranch(effectiveBranchId, 'payments:create', completePayment);
+                    this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.payments.create, completePayment);
                 }
                 return completePayment
             }
@@ -235,7 +236,7 @@ export class PaymentsService {
             if (updatedPayment) {
                 const effectiveBranchId = updatedPayment.branch_id || branchId;
                 if (effectiveBranchId) {
-                    this.socketService.emitToBranch(effectiveBranchId, 'payments:update', updatedPayment);
+                    this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.payments.update, updatedPayment);
                 }
                 return updatedPayment
             }
@@ -262,7 +263,7 @@ export class PaymentsService {
             }
         }).then(() => {
             if (branchId) {
-                this.socketService.emitToBranch(branchId, 'payments:delete', { id })
+                this.socketService.emitToBranch(branchId, RealtimeEvents.payments.delete, { id })
             }
         })
     }

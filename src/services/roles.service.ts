@@ -2,6 +2,7 @@ import { Roles } from "../entity/Roles"
 import { RolesModels } from "../models/roles.model"
 
 import { SocketService } from "./socket.service"
+import { RealtimeEvents } from "../utils/realtimeEvents"
 
 export class RolesService {
     private socketService = SocketService.getInstance();
@@ -30,7 +31,7 @@ export class RolesService {
             const savedRole = await this.rolesModels.create(data)
             const createdRole = await this.rolesModels.findOne(savedRole.id)
             if (createdRole) {
-                this.socketService.emitToRole('Admin', 'roles:create', createdRole)
+                this.socketService.emitToRole('Admin', RealtimeEvents.roles.create, createdRole)
                 return createdRole
             }
             return savedRole
@@ -44,7 +45,7 @@ export class RolesService {
             await this.rolesModels.update(id, data)
             const updatedRole = await this.rolesModels.findOne(id)
             if (updatedRole) {
-                this.socketService.emitToRole('Admin', 'roles:update', updatedRole)
+                this.socketService.emitToRole('Admin', RealtimeEvents.roles.update, updatedRole)
                 return updatedRole
             }
             throw new Error("ไม่พบข้อมูลบทบาท")
@@ -56,7 +57,7 @@ export class RolesService {
     async delete(id: string): Promise<void> {
         try {
             await this.rolesModels.delete(id)
-            this.socketService.emitToRole('Admin', 'roles:delete', { id })
+            this.socketService.emitToRole('Admin', RealtimeEvents.roles.delete, { id })
         } catch (error) {
             throw error
         }

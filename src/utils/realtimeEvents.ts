@@ -77,6 +77,9 @@ export const RealtimeEvents = {
         update: "paymentMethod:update",
         delete: "paymentMethod:delete",
     },
+    shopProfile: {
+        update: "shopProfile:update",
+    },
     salesOrderItem: {
         create: "salesOrderItem:create",
         update: "salesOrderItem:update",

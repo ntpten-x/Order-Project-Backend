@@ -160,6 +160,10 @@ export class OrdersService {
         legacyPayload?: unknown
     ): void {
         this.socketService.emitToBranch(branchId, event, payload);
+        this.socketService.emitToBranch(branchId, RealtimeEvents.stock.update, {
+            source: "stock-orders",
+            event,
+        });
         if (legacyPayload) {
             this.socketService.emitToBranch(branchId, LegacyRealtimeEvents.stockOrdersUpdated, legacyPayload);
         }

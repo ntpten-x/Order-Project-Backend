@@ -2,6 +2,7 @@ import { Users } from "../entity/Users";
 import { UsersModels } from "../models/users.model";
 import * as bcrypt from 'bcrypt'
 import { SocketService } from "./socket.service";
+import { RealtimeEvents } from "../utils/realtimeEvents";
 
 export class UsersService {
     private socketService = SocketService.getInstance();
@@ -33,7 +34,7 @@ export class UsersService {
             users.password = await bcrypt.hash(users.password, 10)
             await this.usersModel.create(users)
             const createdUser = await this.usersModel.findOneByUsername(users.username)
-            this.socketService.emitToRole('Admin', 'users:create', createdUser)
+            this.socketService.emitToRole('Admin', RealtimeEvents.users.create, createdUser)
             return createdUser!
         } catch (error) {
             throw error
@@ -57,7 +58,7 @@ export class UsersService {
             }
             await this.usersModel.update(id, users)
             const updatedUser = await this.usersModel.findOne(id)
-            this.socketService.emitToRole('Admin', 'users:update', updatedUser)
+            this.socketService.emitToRole('Admin', RealtimeEvents.users.update, updatedUser)
             return updatedUser!
         } catch (error) {
             throw error
@@ -67,7 +68,7 @@ export class UsersService {
     async delete(id: string): Promise<void> {
         try {
             await this.usersModel.delete(id)
-            this.socketService.emitToRole('Admin', 'users:delete', { id })
+            this.socketService.emitToRole('Admin', RealtimeEvents.users.delete, { id })
         } catch (error) {
             throw error
         }

@@ -1,6 +1,7 @@
 import { DeliveryModels } from "../../models/pos/delivery.model";
 import { SocketService } from "../socket.service";
 import { Delivery } from "../../entity/pos/Delivery";
+import { RealtimeEvents } from "../../utils/realtimeEvents";
 
 export class DeliveryService {
     private socketService = SocketService.getInstance();
@@ -44,7 +45,7 @@ export class DeliveryService {
 
             const createdDelivery = await this.deliveryModel.create(delivery)
             if (createdDelivery.branch_id) {
-                this.socketService.emitToBranch(createdDelivery.branch_id, 'delivery:create', createdDelivery)
+                this.socketService.emitToBranch(createdDelivery.branch_id, RealtimeEvents.delivery.create, createdDelivery)
             }
             return createdDelivery
         } catch (error) {
@@ -69,7 +70,7 @@ export class DeliveryService {
             const effectiveBranchId = deliveryToUpdate.branch_id || branchId || delivery.branch_id;
             const updatedDelivery = await this.deliveryModel.update(id, delivery, effectiveBranchId)
             if (effectiveBranchId) {
-                this.socketService.emitToBranch(effectiveBranchId, 'delivery:update', updatedDelivery)
+                this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.delivery.update, updatedDelivery)
             }
             return updatedDelivery
         } catch (error) {
@@ -84,7 +85,7 @@ export class DeliveryService {
             await this.deliveryModel.delete(id, branchId)
             const effectiveBranchId = existing.branch_id || branchId;
             if (effectiveBranchId) {
-                this.socketService.emitToBranch(effectiveBranchId, 'delivery:delete', { id })
+                this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.delivery.delete, { id })
             }
         } catch (error) {
             throw error

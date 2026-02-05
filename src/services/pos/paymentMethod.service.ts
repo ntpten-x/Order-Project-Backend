@@ -1,6 +1,7 @@
 import { PaymentMethodModels } from "../../models/pos/paymentMethod.model";
 import { SocketService } from "../socket.service";
 import { PaymentMethod } from "../../entity/pos/PaymentMethod";
+import { RealtimeEvents } from "../../utils/realtimeEvents";
 
 export class PaymentMethodService {
     private socketService = SocketService.getInstance();
@@ -49,7 +50,7 @@ export class PaymentMethodService {
 
             const createdPaymentMethod = await this.paymentMethodModel.create(paymentMethod)
             if (effectiveBranchId) {
-                this.socketService.emitToBranch(effectiveBranchId, 'paymentMethod:create', createdPaymentMethod)
+                this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.paymentMethods.create, createdPaymentMethod)
             }
             return createdPaymentMethod
         } catch (error) {
@@ -82,7 +83,7 @@ export class PaymentMethodService {
 
             const updatedPaymentMethod = await this.paymentMethodModel.update(id, paymentMethod, effectiveBranchId)
             if (effectiveBranchId) {
-                this.socketService.emitToBranch(effectiveBranchId, 'paymentMethod:update', updatedPaymentMethod)
+                this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.paymentMethods.update, updatedPaymentMethod)
             }
             return updatedPaymentMethod
         } catch (error) {
@@ -98,7 +99,7 @@ export class PaymentMethodService {
             const effectiveBranchId = branchId || existing.branch_id;
             await this.paymentMethodModel.delete(id, effectiveBranchId)
             if (effectiveBranchId) {
-                this.socketService.emitToBranch(effectiveBranchId, 'paymentMethod:delete', { id })
+                this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.paymentMethods.delete, { id })
             }
         } catch (error) {
             throw error

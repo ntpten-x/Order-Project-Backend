@@ -1,6 +1,7 @@
 import { Branch } from "../entity/Branch";
 import { AppError } from "../utils/AppError";
 import { SocketService } from "./socket.service";
+import { RealtimeEvents } from "../utils/realtimeEvents";
 import { getRepository } from "../database/dbContext";
 
 export class BranchService {
@@ -23,7 +24,7 @@ export class BranchService {
     async create(data: Partial<Branch>): Promise<Branch> {
         const branch = this.branchRepo.create(data);
         const created = await this.branchRepo.save(branch);
-        this.socketService.emitToRole("Admin", "branches:create", created);
+        this.socketService.emitToRole("Admin", RealtimeEvents.branches.create, created);
         return created;
     }
 
@@ -34,7 +35,7 @@ export class BranchService {
         }
         this.branchRepo.merge(branch, data);
         const updated = await this.branchRepo.save(branch);
-        this.socketService.emitToRole("Admin", "branches:update", updated);
+        this.socketService.emitToRole("Admin", RealtimeEvents.branches.update, updated);
         return updated;
     }
 
@@ -46,6 +47,6 @@ export class BranchService {
         // Soft delete
         branch.is_active = false;
         await this.branchRepo.save(branch);
-        this.socketService.emitToRole("Admin", "branches:delete", { id });
+        this.socketService.emitToRole("Admin", RealtimeEvents.branches.delete, { id });
     }
 }

@@ -1,6 +1,7 @@
 import { ProductsUnitModels } from "../../models/pos/productsUnit.model";
 import { SocketService } from "../socket.service";
 import { ProductsUnit } from "../../entity/pos/ProductsUnit";
+import { RealtimeEvents } from "../../utils/realtimeEvents";
 
 export class ProductsUnitService {
     private socketService = SocketService.getInstance();
@@ -47,7 +48,7 @@ export class ProductsUnitService {
             const createdProductsUnit = await this.productsUnitModel.findOne(savedProductsUnit.id, effectiveBranchId)
             if (createdProductsUnit) {
                 if (effectiveBranchId) {
-                    this.socketService.emitToBranch(effectiveBranchId, 'productsUnit:create', createdProductsUnit)
+                    this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.productsUnit.create, createdProductsUnit)
                 }
                 return createdProductsUnit
             }
@@ -76,7 +77,7 @@ export class ProductsUnitService {
             const updatedProductsUnit = await this.productsUnitModel.update(id, productsUnit, effectiveBranchId)
             if (updatedProductsUnit) {
                 if (effectiveBranchId) {
-                    this.socketService.emitToBranch(effectiveBranchId, 'productsUnit:update', updatedProductsUnit)
+                    this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.productsUnit.update, updatedProductsUnit)
                 }
                 return updatedProductsUnit
             }
@@ -94,7 +95,7 @@ export class ProductsUnitService {
             const effectiveBranchId = branchId || existing.branch_id;
             await this.productsUnitModel.delete(id, effectiveBranchId)
             if (effectiveBranchId) {
-                this.socketService.emitToBranch(effectiveBranchId, 'productsUnit:delete', { id })
+                this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.productsUnit.delete, { id })
             }
         } catch (error) {
             throw error

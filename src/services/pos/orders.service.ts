@@ -18,6 +18,7 @@ import { QueuePriority, QueueStatus, OrderQueue } from "../../entity/pos/OrderQu
 import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../../utils/auditLogger";
 import { getClientIp } from "../../utils/securityLogger";
 import { getDbContext, getRepository, runInTransaction } from "../../database/dbContext";
+import { RealtimeEvents } from "../../utils/realtimeEvents";
 
 export class OrdersService {
     private socketService = SocketService.getInstance();
@@ -267,14 +268,14 @@ export class OrdersService {
             // Post-transaction Side Effects
             const effectiveBranchId = createdOrder.branch_id || branchId;
             if (effectiveBranchId) {
-                this.socketService.emitToBranch(effectiveBranchId, 'orders:create', createdOrder);
+                this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.create, createdOrder);
             }
             if (createdOrder.table_id) {
                 const tablesRepo = getRepository(Tables)
                 tablesRepo.findOneBy({ id: createdOrder.table_id }).then(t => {
                     if (!t) return;
                     if (effectiveBranchId) {
-                        this.socketService.emitToBranch(effectiveBranchId, 'tables:update', t);
+                        this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.tables.update, t);
                     }
                 })
             }
@@ -373,14 +374,14 @@ export class OrdersService {
             if (fullOrder) {
                 const effectiveBranchId = fullOrder.branch_id || branchId;
                 if (effectiveBranchId) {
-                    this.socketService.emitToBranch(effectiveBranchId, 'orders:create', fullOrder);
+                    this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.create, fullOrder);
                 }
                 if (fullOrder.table_id) {
                     const tablesRepo = getRepository(Tables)
                     const t = await tablesRepo.findOneBy({ id: fullOrder.table_id })
                     if (t) {
                         if (effectiveBranchId) {
-                            this.socketService.emitToBranch(effectiveBranchId, 'tables:update', t);
+                            this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.tables.update, t);
                         }
                     }
                 }
@@ -466,7 +467,7 @@ export class OrdersService {
                 if (t) {
                     const effectiveBranchId = result.branch_id || branchId;
                     if (effectiveBranchId) {
-                        this.socketService.emitToBranch(effectiveBranchId, 'tables:update', t);
+                        this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.tables.update, t);
                     }
                 }
             }
@@ -492,7 +493,7 @@ export class OrdersService {
 
             const emitBranchId = result.branch_id || branchId;
             if (emitBranchId) {
-                this.socketService.emitToBranch(emitBranchId, 'orders:update', result);
+                this.socketService.emitToBranch(emitBranchId, RealtimeEvents.orders.update, result);
             }
             return result
         } catch (error) {
@@ -513,14 +514,14 @@ export class OrdersService {
                 if (t) {
                     const effectiveBranchId = order.branch_id || branchId;
                     if (effectiveBranchId) {
-                        this.socketService.emitToBranch(effectiveBranchId, 'tables:update', t);
+                        this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.tables.update, t);
                     }
                 }
             }
             await this.ordersModel.delete(id, undefined, branchId)
             const effectiveBranchId = order?.branch_id || branchId;
             if (effectiveBranchId) {
-                this.socketService.emitToBranch(effectiveBranchId, 'orders:delete', { id });
+                this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.delete, { id });
             }
         } catch (error) {
             throw error
@@ -541,7 +542,7 @@ export class OrdersService {
 
             const effectiveBranchId = updatedOrder.branch_id || branchId;
             if (effectiveBranchId) {
-                this.socketService.emitToBranch(effectiveBranchId, 'orders:update', updatedOrder);
+                this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.update, updatedOrder);
             }
         } catch (error) {
             throw error
@@ -580,7 +581,7 @@ export class OrdersService {
             if (updatedOrder) {
                 const effectiveBranchId = updatedOrder.branch_id || branchId;
                 if (effectiveBranchId) {
-                    this.socketService.emitToBranch(effectiveBranchId, 'orders:update', updatedOrder);
+                    this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.update, updatedOrder);
                 }
             }
             return updatedOrder!;
@@ -648,7 +649,7 @@ export class OrdersService {
             if (updatedOrder) {
                 const effectiveBranchId = updatedOrder.branch_id || branchId;
                 if (effectiveBranchId) {
-                    this.socketService.emitToBranch(effectiveBranchId, 'orders:update', updatedOrder);
+                    this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.update, updatedOrder);
                 }
             }
             return updatedOrder!;
@@ -675,7 +676,7 @@ export class OrdersService {
             if (updatedOrder) {
                 const effectiveBranchId = updatedOrder.branch_id || branchId;
                 if (effectiveBranchId) {
-                    this.socketService.emitToBranch(effectiveBranchId, 'orders:update', updatedOrder);
+                    this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.update, updatedOrder);
                 }
             }
             return updatedOrder!;

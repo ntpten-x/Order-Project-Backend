@@ -3,6 +3,7 @@ import { IngredientsModel } from "../../models/stock/ingredients.model";
 import { SocketService } from "../socket.service";
 import { withCache, cacheKey, invalidateCache, metadataCache } from "../../utils/cache";
 import { getDbContext } from "../../database/dbContext";
+import { RealtimeEvents } from "../../utils/realtimeEvents";
 
 /**
  * Ingredients Service with Caching
@@ -76,7 +77,7 @@ export class IngredientsService {
             // Invalidate cache
             this.invalidateCache(createdIngredients.branch_id);
             if (createdIngredients.branch_id) {
-                this.socketService.emitToBranch(createdIngredients.branch_id, 'ingredients:create', createdIngredients);
+                this.socketService.emitToBranch(createdIngredients.branch_id, RealtimeEvents.ingredients.create, createdIngredients);
             }
             return createdIngredients;
         }
@@ -100,7 +101,7 @@ export class IngredientsService {
             // Invalidate cache
             this.invalidateCache(effectiveBranchId, id);
             if (effectiveBranchId) {
-                this.socketService.emitToBranch(effectiveBranchId, 'ingredients:update', updatedIngredients);
+                this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.ingredients.update, updatedIngredients);
             }
             return updatedIngredients;
         }
@@ -117,7 +118,7 @@ export class IngredientsService {
         // Invalidate cache
         this.invalidateCache(effectiveBranchId, id);
         if (effectiveBranchId) {
-            this.socketService.emitToBranch(effectiveBranchId, 'ingredients:delete', { id });
+            this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.ingredients.delete, { id });
         }
     }
 

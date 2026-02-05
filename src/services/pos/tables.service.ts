@@ -1,6 +1,7 @@
 import { TablesModels } from "../../models/pos/tables.model";
 import { SocketService } from "../socket.service";
 import { Tables } from "../../entity/pos/Tables";
+import { RealtimeEvents } from "../../utils/realtimeEvents";
 
 export class TablesService {
     private socketService = SocketService.getInstance();
@@ -44,7 +45,7 @@ export class TablesService {
 
             const createdTable = await this.tablesModel.create(tables)
             if (createdTable.branch_id) {
-                this.socketService.emitToBranch(createdTable.branch_id, 'tables:create', createdTable)
+                this.socketService.emitToBranch(createdTable.branch_id, RealtimeEvents.tables.create, createdTable)
             }
             return createdTable
         } catch (error) {
@@ -69,7 +70,7 @@ export class TablesService {
             const effectiveBranchId = tableToUpdate.branch_id || branchId || tables.branch_id;
             const updatedTable = await this.tablesModel.update(id, tables, effectiveBranchId)
             if (effectiveBranchId) {
-                this.socketService.emitToBranch(effectiveBranchId, 'tables:update', updatedTable)
+                this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.tables.update, updatedTable)
             }
             return updatedTable
         } catch (error) {
@@ -84,7 +85,7 @@ export class TablesService {
             await this.tablesModel.delete(id, branchId)
             const effectiveBranchId = existing.branch_id || branchId;
             if (effectiveBranchId) {
-                this.socketService.emitToBranch(effectiveBranchId, 'tables:delete', { id })
+                this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.tables.delete, { id })
             }
         } catch (error) {
             throw error

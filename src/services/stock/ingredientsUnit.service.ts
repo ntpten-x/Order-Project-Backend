@@ -1,6 +1,7 @@
 import { IngredientsUnit } from "../../entity/stock/IngredientsUnit";
 import { IngredientsUnitModel } from "../../models/stock/ingredientsUnit.model";
 import { SocketService } from "../socket.service";
+import { RealtimeEvents } from "../../utils/realtimeEvents";
 
 export class IngredientsUnitService {
     private socketService = SocketService.getInstance();
@@ -51,7 +52,7 @@ export class IngredientsUnitService {
             const createdIngredientsUnit = await this.ingredientsUnitModel.findOne(savedIngredientsUnit.id, effectiveBranchId)
             if (createdIngredientsUnit) {
                 if (effectiveBranchId) {
-                    this.socketService.emitToBranch(effectiveBranchId, 'ingredientsUnit:create', createdIngredientsUnit)
+                    this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.ingredientsUnit.create, createdIngredientsUnit)
                 }
                 return createdIngredientsUnit
             }
@@ -75,7 +76,7 @@ export class IngredientsUnitService {
             const updatedIngredientsUnit = await this.ingredientsUnitModel.findOne(id, effectiveBranchId)
             if (updatedIngredientsUnit) {
                 if (effectiveBranchId) {
-                    this.socketService.emitToBranch(effectiveBranchId, 'ingredientsUnit:update', updatedIngredientsUnit)
+                    this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.ingredientsUnit.update, updatedIngredientsUnit)
                 }
                 return updatedIngredientsUnit
             }
@@ -93,7 +94,7 @@ export class IngredientsUnitService {
             const effectiveBranchId = branchId || existing.branch_id;
             await this.ingredientsUnitModel.delete(id, effectiveBranchId)
             if (effectiveBranchId) {
-                this.socketService.emitToBranch(effectiveBranchId, 'ingredientsUnit:delete', { id })
+                this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.ingredientsUnit.delete, { id })
             }
         } catch (error) {
             throw error

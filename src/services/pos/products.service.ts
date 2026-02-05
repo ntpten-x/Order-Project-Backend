@@ -3,6 +3,7 @@ import { SocketService } from "../socket.service";
 import { Products } from "../../entity/pos/Products";
 import { invalidateCache } from "../../utils/cache";
 import { AppError } from "../../utils/AppError";
+import { RealtimeEvents } from "../../utils/realtimeEvents";
 
 /**
  * Products Service
@@ -45,7 +46,7 @@ export class ProductsService {
         if (createdProducts) {
             // Cache invalidation is handled in ProductsModel
             if (createdProducts.branch_id) {
-                this.socketService.emitToBranch(createdProducts.branch_id, 'products:create', createdProducts);
+                this.socketService.emitToBranch(createdProducts.branch_id, RealtimeEvents.products.create, createdProducts);
             }
             return createdProducts;
         }
@@ -62,7 +63,7 @@ export class ProductsService {
             // Cache invalidation is handled in ProductsModel
             const emitBranchId = updatedProducts.branch_id || effectiveBranchId;
             if (emitBranchId) {
-                this.socketService.emitToBranch(emitBranchId, 'products:update', updatedProducts);
+                this.socketService.emitToBranch(emitBranchId, RealtimeEvents.products.update, updatedProducts);
             }
             return updatedProducts;
         }
@@ -80,7 +81,7 @@ export class ProductsService {
         // Cache invalidation is handled in ProductsModel
         const effectiveBranchId = existing.branch_id || branchId;
         if (effectiveBranchId) {
-            this.socketService.emitToBranch(effectiveBranchId, 'products:delete', { id });
+            this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.products.delete, { id });
         }
     }
 }
