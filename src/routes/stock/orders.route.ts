@@ -17,7 +17,7 @@ const ordersController = new OrdersController();
 
 // Protect all routes
 router.use(authenticateToken)
-router.use(authorizeRole(["Admin", "Manager", "Employee"]))
+router.use(authorizeRole(["Admin", "Manager"]))
 router.use(requireBranch)
 
 router.post("/", validate(createStockOrderSchema), ordersController.createOrder);

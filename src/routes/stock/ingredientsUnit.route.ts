@@ -20,7 +20,7 @@ const ingredientsUnitController = new IngredientsUnitController(ingredientsUnitS
 
 // Protect all routes
 router.use(authenticateToken)
-router.use(authorizeRole(["Admin"]))
+router.use(authorizeRole(["Admin", "Manager"]))
 router.use(requireBranch)
 
 router.get("/", ingredientsUnitController.findAll)

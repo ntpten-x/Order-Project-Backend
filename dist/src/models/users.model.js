@@ -12,6 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.UsersModels = void 0;
 const Users_1 = require("../entity/Users");
 const dbContext_1 = require("../database/dbContext");
+const typeorm_1 = require("typeorm");
 class UsersModels {
     findAll(filters) {
         return __awaiter(this, void 0, void 0, function* () {
@@ -30,6 +31,15 @@ class UsersModels {
                 if (ctx === null || ctx === void 0 ? void 0 : ctx.branchId) {
                     query.andWhere("users.branch_id = :branchId", { branchId: ctx.branchId });
                 }
+                // Managers can only view/manage Employee users in their own branch, plus themselves.
+                if ((ctx === null || ctx === void 0 ? void 0 : ctx.role) === "Manager" && !(ctx === null || ctx === void 0 ? void 0 : ctx.isAdmin)) {
+                    query.andWhere(new typeorm_1.Brackets((qb) => {
+                        qb.where("roles.roles_name = :employeeRole", { employeeRole: "Employee" });
+                        if (ctx.userId) {
+                            qb.orWhere("users.id = :selfId", { selfId: ctx.userId });
+                        }
+                    }));
+                }
                 return yield query.getMany();
             }
             catch (error) {
@@ -47,6 +57,14 @@ class UsersModels {
                     .where("users.id = :id", { id });
                 if (ctx === null || ctx === void 0 ? void 0 : ctx.branchId) {
                     query.andWhere("users.branch_id = :branchId", { branchId: ctx.branchId });
+                }
+                if ((ctx === null || ctx === void 0 ? void 0 : ctx.role) === "Manager" && !(ctx === null || ctx === void 0 ? void 0 : ctx.isAdmin)) {
+                    query.andWhere(new typeorm_1.Brackets((qb) => {
+                        qb.where("roles.roles_name = :employeeRole", { employeeRole: "Employee" });
+                        if (ctx.userId) {
+                            qb.orWhere("users.id = :selfId", { selfId: ctx.userId });
+                        }
+                    }));
                 }
                 return yield query.getOne();
             }

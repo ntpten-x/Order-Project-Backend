@@ -9,7 +9,7 @@ const router = Router()
 const controller = new PaymentAccountController()
 
 router.use(authenticateToken)
-router.use(authorizeRole(["Admin"]))
+router.use(authorizeRole(["Admin", "Manager"]))
 router.use(requireBranch)
 
 router.get("/accounts", controller.getAccounts)

@@ -9,7 +9,7 @@ const branch_middleware_1 = require("../../middleware/branch.middleware");
 const router = (0, express_1.Router)();
 const controller = new PaymentAccount_controller_1.PaymentAccountController();
 router.use(auth_middleware_1.authenticateToken);
-router.use((0, auth_middleware_1.authorizeRole)(["Admin"]));
+router.use((0, auth_middleware_1.authorizeRole)(["Admin", "Manager"]));
 router.use(branch_middleware_1.requireBranch);
 router.get("/accounts", controller.getAccounts);
 router.post("/accounts", (0, validate_middleware_1.validate)(posMaster_schema_1.createPaymentAccountSchema), controller.createAccount);

@@ -14,7 +14,7 @@ const ingredientsUnitService = new ingredientsUnit_service_1.IngredientsUnitServ
 const ingredientsUnitController = new ingredientsUnit_controller_1.IngredientsUnitController(ingredientsUnitService);
 // Protect all routes
 router.use(auth_middleware_1.authenticateToken);
-router.use((0, auth_middleware_1.authorizeRole)(["Admin"]));
+router.use((0, auth_middleware_1.authorizeRole)(["Admin", "Manager"]));
 router.use(branch_middleware_1.requireBranch);
 router.get("/", ingredientsUnitController.findAll);
 router.get("/:id", (0, validate_middleware_1.validate)(stock_schema_1.ingredientUnitIdParamSchema), ingredientsUnitController.findOne);

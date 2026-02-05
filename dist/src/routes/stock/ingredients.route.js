@@ -14,14 +14,14 @@ const ingredientsService = new ingredients_service_1.IngredientsService(ingredie
 const ingredientsController = new ingredients_controller_1.IngredientsController(ingredientsService);
 // Protect all routes
 router.use(auth_middleware_1.authenticateToken);
-router.use((0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]));
+router.use((0, auth_middleware_1.authorizeRole)(["Admin", "Manager"]));
 router.use(branch_middleware_1.requireBranch);
 // Public-ish routes (All authenticated roles)
 router.get("/", ingredientsController.findAll);
 router.get("/:id", (0, validate_middleware_1.validate)(stock_schema_1.ingredientIdParamSchema), ingredientsController.findOne);
 router.get("/name/:ingredient_name", (0, validate_middleware_1.validate)(stock_schema_1.ingredientNameParamSchema), ingredientsController.findOneByName);
-// Admin only routes for management
-router.post("/", (0, auth_middleware_1.authorizeRole)(["Admin"]), (0, validate_middleware_1.validate)(stock_schema_1.createIngredientSchema), ingredientsController.create);
-router.put("/:id", (0, auth_middleware_1.authorizeRole)(["Admin"]), (0, validate_middleware_1.validate)(stock_schema_1.updateIngredientSchema), ingredientsController.update);
-router.delete("/:id", (0, auth_middleware_1.authorizeRole)(["Admin"]), (0, validate_middleware_1.validate)(stock_schema_1.ingredientIdParamSchema), ingredientsController.delete);
+// Admin/Manager routes for management
+router.post("/", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager"]), (0, validate_middleware_1.validate)(stock_schema_1.createIngredientSchema), ingredientsController.create);
+router.put("/:id", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager"]), (0, validate_middleware_1.validate)(stock_schema_1.updateIngredientSchema), ingredientsController.update);
+router.delete("/:id", (0, auth_middleware_1.authorizeRole)(["Admin", "Manager"]), (0, validate_middleware_1.validate)(stock_schema_1.ingredientIdParamSchema), ingredientsController.delete);
 exports.default = router;

@@ -1,5 +1,6 @@
 import { Users } from "../entity/Users";
 import { getDbContext, getRepository } from "../database/dbContext";
+import { Brackets } from "typeorm";
 
 export class UsersModels {
     async findAll(filters?: { role?: string }): Promise<Users[]> {
@@ -21,6 +22,18 @@ export class UsersModels {
                 query.andWhere("users.branch_id = :branchId", { branchId: ctx.branchId });
             }
 
+            // Managers can only view/manage Employee users in their own branch, plus themselves.
+            if (ctx?.role === "Manager" && !ctx?.isAdmin) {
+                query.andWhere(
+                    new Brackets((qb) => {
+                        qb.where("roles.roles_name = :employeeRole", { employeeRole: "Employee" });
+                        if (ctx.userId) {
+                            qb.orWhere("users.id = :selfId", { selfId: ctx.userId });
+                        }
+                    })
+                );
+            }
+
             return await query.getMany();
         } catch (error) {
             throw error
@@ -37,6 +50,17 @@ export class UsersModels {
 
             if (ctx?.branchId) {
                 query.andWhere("users.branch_id = :branchId", { branchId: ctx.branchId });
+            }
+
+            if (ctx?.role === "Manager" && !ctx?.isAdmin) {
+                query.andWhere(
+                    new Brackets((qb) => {
+                        qb.where("roles.roles_name = :employeeRole", { employeeRole: "Employee" });
+                        if (ctx.userId) {
+                            qb.orWhere("users.id = :selfId", { selfId: ctx.userId });
+                        }
+                    })
+                );
             }
 
             return await query.getOne();

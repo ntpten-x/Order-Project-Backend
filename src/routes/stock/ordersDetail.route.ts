@@ -10,7 +10,7 @@ const ordersDetailController = new OrdersDetailController();
 
 // Protect all routes
 router.use(authenticateToken)
-router.use(authorizeRole(["Admin", "Manager", "Employee"]))
+router.use(authorizeRole(["Admin", "Manager"]))
 router.use(requireBranch)
 
 router.post("/update", validate(updateOrdersDetailPurchaseSchema), ordersDetailController.updatePurchase);

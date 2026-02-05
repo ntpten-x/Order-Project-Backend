@@ -90,6 +90,7 @@ function getRedisClient() {
                 });
                 try {
                     yield instance.connect();
+                    console.info("[Redis] Connected successfully");
                     client = instance;
                     return instance;
                 }
@@ -110,6 +111,7 @@ function getRedisClient() {
                         const retryClient = (0, redis_1.createClient)(buildRedisConfig(retryUrl, retryTls, rejectUnauthorized));
                         retryClient.on("error", (e) => console.error("[Redis] Client error:", e));
                         yield retryClient.connect();
+                        console.info("[Redis] Connected successfully (TLS disabled fallback)");
                         client = retryClient;
                         return retryClient;
                     }

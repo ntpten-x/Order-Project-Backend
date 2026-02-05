@@ -20,7 +20,7 @@ const ingredientsController = new IngredientsController(ingredientsService)
 
 // Protect all routes
 router.use(authenticateToken)
-router.use(authorizeRole(["Admin", "Manager", "Employee"]))
+router.use(authorizeRole(["Admin", "Manager"]))
 router.use(requireBranch)
 
 // Public-ish routes (All authenticated roles)
@@ -28,9 +28,9 @@ router.get("/", ingredientsController.findAll)
 router.get("/:id", validate(ingredientIdParamSchema), ingredientsController.findOne)
 router.get("/name/:ingredient_name", validate(ingredientNameParamSchema), ingredientsController.findOneByName)
 
-// Admin only routes for management
-router.post("/", authorizeRole(["Admin"]), validate(createIngredientSchema), ingredientsController.create)
-router.put("/:id", authorizeRole(["Admin"]), validate(updateIngredientSchema), ingredientsController.update)
-router.delete("/:id", authorizeRole(["Admin"]), validate(ingredientIdParamSchema), ingredientsController.delete)
+// Admin/Manager routes for management
+router.post("/", authorizeRole(["Admin", "Manager"]), validate(createIngredientSchema), ingredientsController.create)
+router.put("/:id", authorizeRole(["Admin", "Manager"]), validate(updateIngredientSchema), ingredientsController.update)
+router.delete("/:id", authorizeRole(["Admin", "Manager"]), validate(ingredientIdParamSchema), ingredientsController.delete)
 
 export default router

@@ -10,7 +10,7 @@ const router = (0, express_1.Router)();
 const ordersDetailController = new ordersDetail_controller_1.OrdersDetailController();
 // Protect all routes
 router.use(auth_middleware_1.authenticateToken);
-router.use((0, auth_middleware_1.authorizeRole)(["Admin", "Manager", "Employee"]));
+router.use((0, auth_middleware_1.authorizeRole)(["Admin", "Manager"]));
 router.use(branch_middleware_1.requireBranch);
 router.post("/update", (0, validate_middleware_1.validate)(stock_schema_1.updateOrdersDetailPurchaseSchema), ordersDetailController.updatePurchase);
 exports.default = router;

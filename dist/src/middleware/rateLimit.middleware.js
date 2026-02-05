@@ -234,6 +234,7 @@ if (redisUrl) {
                     console.error("[RateLimit] Redis error:", err);
                 });
                 yield activeRedisClient.connect();
+                console.info("[RateLimit] Redis connected successfully");
             }
             catch (err) {
                 if (autoTlsFallback &&
@@ -264,6 +265,7 @@ if (redisUrl) {
                     const retryClient = deps.createClient({ url: retryUrl, socket: retrySocket });
                     retryClient.on("error", (e) => console.error("[RateLimit] Redis error:", e));
                     yield retryClient.connect();
+                    console.info("[RateLimit] Redis connected successfully (TLS disabled fallback)");
                     activeRedisClient = retryClient;
                     return;
                 }

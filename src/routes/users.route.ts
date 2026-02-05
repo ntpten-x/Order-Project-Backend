@@ -3,6 +3,7 @@ import { UsersController } from "../controllers/users.controller";
 import { UsersService } from "../services/users.service";
 import { UsersModels } from "../models/users.model";
 import { authenticateToken, authorizeRole } from "../middleware/auth.middleware";
+import { enforceUserManagementPolicy } from "../middleware/userManagement.middleware";
 import { validate } from "../middleware/validate.middleware";
 import { createUserSchema, updateUserSchema } from "../utils/schemas/users.schema";
 
@@ -14,7 +15,8 @@ const usersController = new UsersController(usersService)
 
 // Protect all routes
 router.use(authenticateToken)
-router.use(authorizeRole(["Admin"]))
+router.use(authorizeRole(["Admin", "Manager"]))
+router.use(enforceUserManagementPolicy)
 
 router.get("/", usersController.findAll)
 router.get("/:id", usersController.findOne)
