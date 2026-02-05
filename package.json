@@ -9,6 +9,8 @@
     "validate": "npm run build",
     "lint": "tsc --noEmit",
     "test": "vitest run --coverage=false",
+    "maintenance:cleanup-orders": "node dist/scripts/cleanup-old-orders.js",
+    "maintenance:cleanup-orders:dev": "ts-node scripts/cleanup-old-orders.ts",
     "ci:migrate": "node scripts/ci-migrate.js",
     "env:check": "node scripts/check-env.js",
     "ci": "npm run lint && npm run test && npm run ci:migrate",

@@ -45,6 +45,14 @@
 - `REQUEST_BODY_LIMIT_MB` - Request body size limit in MB (default: 5)
 - `ENABLE_PERF_LOG` - Enable performance logging (default: false)
 
+### Data Retention (Orders)
+- `ORDER_RETENTION_ENABLED` - Must be `true` to allow deletes (otherwise the job runs in dry-run mode)
+- `ORDER_RETENTION_DAYS` - Delete closed orders older than N days when running the retention job (default: 30)
+- `ORDER_RETENTION_STATUSES` - Comma-separated `sales_orders.status` values eligible for deletion (default: `Paid,Completed,Cancelled,completed,cancelled`)
+- `ORDER_RETENTION_BATCH_SIZE` - Max orders deleted per batch (default: 500)
+- `ORDER_RETENTION_MAX_BATCHES` - Max batches per run (default: 50)
+- `ORDER_RETENTION_DRY_RUN` - If `true`, only counts eligible orders and does not delete (default: false)
+
 ## Monitoring Services (Optional)
 
 ### Sentry (Error Tracking)

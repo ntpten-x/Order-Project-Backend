@@ -109,7 +109,7 @@ const authenticateToken = (req, res, next) => __awaiter(void 0, void 0, void 0, 
         //   If not set, admin operates with no branch context (RLS allows full access).
         const cookieBranchIdRaw = typeof ((_c = req.cookies) === null || _c === void 0 ? void 0 : _c.active_branch_id) === "string" ? req.cookies.active_branch_id : "";
         const cookieBranchId = cookieBranchIdRaw.trim();
-        const effectiveBranchId = isAdmin ? (cookieBranchId && UUID_RE.test(cookieBranchId) ? cookieBranchId : undefined) : user.branch_id;
+        const effectiveBranchId = isAdmin ? (cookieBranchId && UUID_RE.test(cookieBranchId) ? cookieBranchId : user.branch_id) : user.branch_id;
         // Run the rest of the request inside a DB context so Postgres RLS (if enabled)
         // can enforce branch isolation even if a future query forgets branch_id filters.
         return (0, dbContext_1.runWithDbContext)({ branchId: effectiveBranchId, userId: user.id, role, isAdmin }, () => __awaiter(void 0, void 0, void 0, function* () {

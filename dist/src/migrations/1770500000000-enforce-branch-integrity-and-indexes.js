@@ -27,13 +27,18 @@ class EnforceBranchIntegrityAndIndexes1770500000000 {
             let backfillBranchId = envBackfillBranchId || "";
             if (!backfillBranchId) {
                 if (branchCount === 0) {
-                    throw new Error('Migration requires at least one row in "branches". Create a branch first, then rerun migrations.');
+                    // Auto-create a default branch if none exists
+                    const result = yield queryRunner.query(`INSERT INTO "branches" ("branch_name", "branch_code", "is_active") VALUES ('Main Branch', 'MAIN', true) RETURNING "id"`);
+                    backfillBranchId = result[0].id;
+                    console.log(`[Migration] Created default branch with ID: ${backfillBranchId}`);
                 }
-                if (branchCount > 1) {
+                else if (branchCount > 1) {
                     throw new Error('Multiple branches exist; set env BRANCH_BACKFILL_ID (uuid) to backfill NULL branch_id rows safely.');
                 }
-                const idRows = yield queryRunner.query(`SELECT id FROM "branches" LIMIT 1`);
-                backfillBranchId = String((_d = (_c = idRows === null || idRows === void 0 ? void 0 : idRows[0]) === null || _c === void 0 ? void 0 : _c.id) !== null && _d !== void 0 ? _d : "").trim();
+                else {
+                    const idRows = yield queryRunner.query(`SELECT id FROM "branches" LIMIT 1`);
+                    backfillBranchId = String((_d = (_c = idRows === null || idRows === void 0 ? void 0 : idRows[0]) === null || _c === void 0 ? void 0 : _c.id) !== null && _d !== void 0 ? _d : "").trim();
+                }
             }
             if (!backfillBranchId) {
                 throw new Error("Failed to resolve a backfill branch id (BRANCH_BACKFILL_ID/DEFAULT_BRANCH_ID).");
