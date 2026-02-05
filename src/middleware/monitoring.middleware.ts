@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { monitoringService } from '../utils/monitoring';
 import { AuthRequest } from './auth.middleware';
+import { metrics } from '../utils/metrics';
 
 /**
  * Performance monitoring middleware
@@ -16,6 +17,14 @@ export const performanceMonitoring = (req: Request, res: Response, next: NextFun
             method: req.method,
             path: req.path,
             statusCode: res.statusCode,
+        });
+
+        const routePath = req.route?.path ? `${req.baseUrl}${req.route.path}` : req.path;
+        metrics.observeRequest({
+            method: req.method,
+            path: routePath,
+            status: res.statusCode,
+            durationMs: duration,
         });
     });
 
@@ -39,6 +48,8 @@ export const errorTracking = (
         query: req.query,
         body: req.body,
     }, userId);
+
+    metrics.countError(err.name || 'Unknown');
 
     next(err);
 };

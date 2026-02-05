@@ -41,6 +41,7 @@ import orderQueueRouter from "./src/routes/pos/orderQueue.route";
 import { globalErrorHandler } from "./src/middleware/error.middleware";
 import { AppError } from "./src/utils/AppError";
 import { performanceMonitoring, errorTracking } from "./src/middleware/monitoring.middleware";
+import { metrics } from "./src/utils/metrics";
 
 const app = express();
 const httpServer = createServer(app); // Wrap express with HTTP server
@@ -180,7 +181,8 @@ const csrfExcludedPaths = new Set([
     "/auth/login",
     "/auth/logout",
     "/health",
-    "/csrf-token"
+    "/csrf-token",
+    "/metrics"
 ]);
 
 // CSRF token endpoint - must be defined before CSRF middleware
@@ -314,6 +316,20 @@ app.use((req, res, next) => {
 
 app.get('/health', (req, res) => {
     res.status(200).json({ status: 'ok', uptime: process.uptime() });
+});
+
+app.get('/metrics', async (req, res) => {
+    if (!metrics.enabled) {
+        return res.status(404).json({ message: "Metrics disabled" });
+    }
+
+    const apiKey = process.env.METRICS_API_KEY;
+    if (apiKey && req.header("x-metrics-key") !== apiKey) {
+        return res.status(403).json({ message: "Forbidden" });
+    }
+
+    res.setHeader("Content-Type", metrics.contentType);
+    res.send(await metrics.getMetrics());
 });
 
 app.use("/auth", authRouter);

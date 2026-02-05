@@ -1,5 +1,6 @@
 import { StockOrdersDetailModel } from "../../models/stock/ordersDetail.model";
 import { SocketService } from "../socket.service";
+import { LegacyRealtimeEvents, RealtimeEvents } from "../../utils/realtimeEvents";
 
 export class OrdersDetailService {
     private socketService = SocketService.getInstance();
@@ -18,7 +19,11 @@ export class OrdersDetailService {
             if (orderItem) {
                 const emitBranchId = branchId || (orderItem.orders as any)?.branch_id;
                 if (emitBranchId) {
-                    this.socketService.emitToBranch(emitBranchId, "orders_updated", {
+                    this.socketService.emitToBranch(emitBranchId, RealtimeEvents.stockOrders.detailUpdate, {
+                        orderId: orderItem.orders.id,
+                        detail: savedDetail
+                    });
+                    this.socketService.emitToBranch(emitBranchId, LegacyRealtimeEvents.stockOrdersUpdated, {
                         action: "update_item_detail",
                         orderId: orderItem.orders.id,
                         data: savedDetail

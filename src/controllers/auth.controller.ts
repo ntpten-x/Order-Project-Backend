@@ -8,6 +8,7 @@ import { AuthRequest } from "../middleware/auth.middleware";
 import { securityLogger, getClientIp } from "../utils/securityLogger";
 import { ApiResponses } from "../utils/ApiResponse";
 import { getRepository, runWithDbContext } from "../database/dbContext";
+import { RealtimeEvents } from "../utils/realtimeEvents";
 
 export class AuthController {
 
@@ -120,7 +121,7 @@ export class AuthController {
 
             // Notify via Socket
             const { SocketService } = require("../services/socket.service");
-            SocketService.getInstance().emit('users:update-status', { id: user.id, is_active: true });
+            SocketService.getInstance().emit(RealtimeEvents.users.status, { id: user.id, is_active: true });
 
             return ApiResponses.ok(res, {
                 token,
@@ -175,7 +176,7 @@ export class AuthController {
 
                 // Emit socket event
                 const { SocketService } = require("../services/socket.service");
-                SocketService.getInstance().emit('users:update-status', { id: userId, is_active: false });
+                SocketService.getInstance().emit(RealtimeEvents.users.status, { id: userId, is_active: false });
             } catch (err) {
                 console.error("Error updating logout status for user " + userId, err);
             }

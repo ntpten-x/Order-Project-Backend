@@ -3,6 +3,7 @@ import { StockOrdersModel } from "../../models/stock/orders.model";
 import { SocketService } from "../socket.service";
 import { withCache, cacheKey, invalidateCache, queryCache } from "../../utils/cache";
 import { getDbContext } from "../../database/dbContext";
+import { LegacyRealtimeEvents, RealtimeEvents } from "../../utils/realtimeEvents";
 
 /**
  * Orders Service with Caching
@@ -29,7 +30,12 @@ export class OrdersService {
         // Invalidate list cache
         this.invalidateCache(emitBranchId);
         if (emitBranchId) {
-            this.socketService.emitToBranch(emitBranchId, "orders_updated", { action: "create", data: completeOrder });
+            this.emitStockOrders(
+                emitBranchId,
+                RealtimeEvents.stockOrders.create,
+                completeOrder,
+                { action: "create", data: completeOrder }
+            );
         }
         return completeOrder;
     }
@@ -71,7 +77,12 @@ export class OrdersService {
         const effectiveBranchId = branchId || (updatedOrder as any)?.branch_id;
         this.invalidateCache(effectiveBranchId, id);
         if (effectiveBranchId) {
-            this.socketService.emitToBranch(effectiveBranchId, "orders_updated", { action: "update_order", data: updatedOrder });
+            this.emitStockOrders(
+                effectiveBranchId,
+                RealtimeEvents.stockOrders.update,
+                updatedOrder,
+                { action: "update_order", data: updatedOrder }
+            );
         }
         return updatedOrder;
     }
@@ -83,7 +94,12 @@ export class OrdersService {
         const effectiveBranchId = branchId || (updatedOrder as any)?.branch_id;
         this.invalidateCache(effectiveBranchId, id);
         if (effectiveBranchId) {
-            this.socketService.emitToBranch(effectiveBranchId, "orders_updated", { action: "update_status", data: updatedOrder });
+            this.emitStockOrders(
+                effectiveBranchId,
+                RealtimeEvents.stockOrders.status,
+                updatedOrder,
+                { action: "update_status", data: updatedOrder }
+            );
         }
         return updatedOrder;
     }
@@ -93,7 +109,12 @@ export class OrdersService {
         if (deleted) {
             this.invalidateCache(branchId, id);
             if (branchId) {
-                this.socketService.emitToBranch(branchId, "orders_updated", { action: "delete", id });
+                this.emitStockOrders(
+                    branchId,
+                    RealtimeEvents.stockOrders.delete,
+                    { id },
+                    { action: "delete", id }
+                );
             }
         }
         return { affected: deleted ? 1 : 0 };
@@ -104,7 +125,12 @@ export class OrdersService {
         const effectiveBranchId = branchId || (updatedOrder as any)?.branch_id;
         this.invalidateCache(effectiveBranchId, id);
         if (effectiveBranchId) {
-            this.socketService.emitToBranch(effectiveBranchId, "orders_updated", { action: "update_status", data: updatedOrder });
+            this.emitStockOrders(
+                effectiveBranchId,
+                RealtimeEvents.stockOrders.status,
+                updatedOrder,
+                { action: "update_status", data: updatedOrder }
+            );
         }
         return updatedOrder;
     }
@@ -125,5 +151,17 @@ export class OrdersService {
             patterns.push(cacheKey(this.CACHE_PREFIX, "branch", effectiveBranchId, "single", id));
         }
         invalidateCache(patterns);
+    }
+
+    private emitStockOrders(
+        branchId: string,
+        event: string,
+        payload: unknown,
+        legacyPayload?: unknown
+    ): void {
+        this.socketService.emitToBranch(branchId, event, payload);
+        if (legacyPayload) {
+            this.socketService.emitToBranch(branchId, LegacyRealtimeEvents.stockOrdersUpdated, legacyPayload);
+        }
     }
 }

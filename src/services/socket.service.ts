@@ -3,6 +3,7 @@ import { Server, Socket } from "socket.io";
 import jwt from "jsonwebtoken";
 import { AppDataSource } from "../database/database";
 import { Users } from "../entity/Users";
+import { RealtimeEvents } from "../utils/realtimeEvents";
 const parseCookies = (cookieHeader: string | undefined): { [key: string]: string } => {
     const list: { [key: string]: string } = {};
     if (!cookieHeader) return list;
@@ -26,7 +27,7 @@ export class SocketService {
     // - "global" events are rare (system announcements only)
     // - admin events should be emitted to role room: role:Admin
     // - branch events should be emitted to branch room: branch:<branchId>
-    private static readonly GLOBAL_EVENTS = new Set<string>(['system:announcement']);
+    private static readonly GLOBAL_EVENTS = new Set<string>([RealtimeEvents.system.announcement]);
     private static readonly ADMIN_EVENT_PREFIXES = ['users:', 'roles:', 'branches:'];
 
 
@@ -106,7 +107,7 @@ export class SocketService {
             // If this is the only connection (count is 1 because we just joined), set online
             if (count === 1) {
                 await this.updateUserStatus(userId, true);
-                this.emit('users:update-status', { id: userId, is_active: true });
+                this.emit(RealtimeEvents.users.status, { id: userId, is_active: true });
             }
 
             // Handle reconnection
@@ -131,7 +132,7 @@ export class SocketService {
 
                 if (count === 0) {
                     await this.updateUserStatus(userId, false);
-                    this.emit('users:update-status', { id: userId, is_active: false });
+                    this.emit(RealtimeEvents.users.status, { id: userId, is_active: false });
                 }
             });
         });

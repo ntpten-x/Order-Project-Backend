@@ -45,6 +45,26 @@
 - `REQUEST_BODY_LIMIT_MB` - Request body size limit in MB (default: 5)
 - `ENABLE_PERF_LOG` - Enable performance logging (default: false)
 
+### Rate Limiting (Redis)
+- `RATE_LIMIT_REDIS_URL` - Redis connection string for distributed rate limiting (recommended in production)
+- `REDIS_URL` - Fallback Redis connection string if `RATE_LIMIT_REDIS_URL` is not set
+- `RATE_LIMIT_REDIS_TLS` - Optional override for Redis TLS (`true`/`false`). Defaults based on URL scheme (`rediss://` enables TLS)
+- `RATE_LIMIT_REDIS_TLS_REJECT_UNAUTHORIZED` - Optional override to reject unauthorized TLS certs (`true`/`false`)
+- `RATE_LIMIT_WINDOW_MS` - API rate limit window in ms (default: 900000)
+- `RATE_LIMIT_MAX` - API max requests per window (default: 1000)
+- `RATE_LIMIT_AUTH_WINDOW_MS` - Auth rate limit window in ms (default: 900000)
+- `RATE_LIMIT_AUTH_MAX` - Auth max requests per window (default: 20)
+- `RATE_LIMIT_ORDER_WINDOW_MS` - Order creation window in ms (default: 60000)
+- `RATE_LIMIT_ORDER_MAX` - Order creation max per window (default: 30)
+- `RATE_LIMIT_PAYMENT_WINDOW_MS` - Payment window in ms (default: 300000)
+- `RATE_LIMIT_PAYMENT_MAX` - Payment max per window (default: 50)
+- `RATE_LIMIT_PASSWORD_RESET_WINDOW_MS` - Password reset window in ms (default: 3600000)
+- `RATE_LIMIT_PASSWORD_RESET_MAX` - Password reset max per window (default: 5)
+
+### Metrics (Prometheus)
+- `METRICS_ENABLED` - Set to `true` to expose `/metrics`
+- `METRICS_API_KEY` - Optional. If set, requests to `/metrics` must include header `x-metrics-key`
+
 ### Data Retention (Orders)
 - `ORDER_RETENTION_ENABLED` - Must be `true` to allow deletes (otherwise the job runs in dry-run mode)
 - `ORDER_RETENTION_DAYS` - Delete closed orders older than N days when running the retention job (default: 30)
