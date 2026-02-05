@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import { AppDataSource } from "../database/database";
 import { Users } from "../entity/Users";
 import { RealtimeEvents } from "../utils/realtimeEvents";
+import { getRedisClient, getSessionKey } from "../lib/redisClient";
 const parseCookies = (cookieHeader: string | undefined): { [key: string]: string } => {
     const list: { [key: string]: string } = {};
     if (!cookieHeader) return list;
@@ -58,6 +59,19 @@ export class SocketService {
                     return next(new Error("Server misconfiguration: JWT_SECRET missing"));
                 }
                 const decoded: any = jwt.verify(token, secret);
+                const jti = decoded.jti;
+
+                const redis = await getRedisClient();
+                if (redis && jti) {
+                    const sessionKey = getSessionKey(jti);
+                    const session = await redis.get(sessionKey);
+                    if (!session) {
+                        return next(new Error("Authentication error: Session expired"));
+                    }
+                    await redis.pExpire(sessionKey, Number(process.env.SESSION_TIMEOUT_MS) || 8 * 60 * 60 * 1000);
+                } else if (process.env.REDIS_URL) {
+                    return next(new Error("Authentication error: Session store unavailable"));
+                }
 
                 // Fetch user to check is_use
                 const userRepository = AppDataSource.getRepository(Users);

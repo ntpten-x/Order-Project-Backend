@@ -1,8 +1,11 @@
 import { AppDataSource, connectDatabase } from "../src/database/database";
 import {
     cleanupClosedOrdersOlderThan,
+    cleanupOrderQueueOlderThan,
     DEFAULT_CLOSED_ORDER_STATUSES,
+    DEFAULT_ORDER_QUEUE_RETENTION_DAYS,
     DEFAULT_ORDER_RETENTION_DAYS,
+    DEFAULT_QUEUE_CLOSED_STATUSES,
 } from "../src/services/maintenance/orderRetention.service";
 
 function parseBoolean(value: string | undefined, fallback: boolean): boolean {
@@ -37,6 +40,11 @@ async function main(): Promise<void> {
     const enabled = parseBoolean(process.env.ORDER_RETENTION_ENABLED, false);
     const dryRun = !enabled ? true : parseBoolean(process.env.ORDER_RETENTION_DRY_RUN, false);
 
+    const queueEnabled = parseBoolean(process.env.ORDER_QUEUE_RETENTION_ENABLED, false);
+    const queueDryRun = !queueEnabled ? true : parseBoolean(process.env.ORDER_QUEUE_RETENTION_DRY_RUN, false);
+    const queueDays = parseIntOrUndefined(process.env.ORDER_QUEUE_RETENTION_DAYS) ?? DEFAULT_ORDER_QUEUE_RETENTION_DAYS;
+    const queueStatuses = parseCsv(process.env.ORDER_QUEUE_RETENTION_STATUSES) ?? DEFAULT_QUEUE_CLOSED_STATUSES;
+
     console.log("[Retention] Cleanup closed orders started");
     console.log("[Retention] Config:", {
         retentionDays,
@@ -49,6 +57,9 @@ async function main(): Promise<void> {
     });
     if (!enabled) {
         console.log("[Retention] ORDER_RETENTION_ENABLED is not true; running in dry-run mode (no deletes).");
+    }
+    if (!queueEnabled) {
+        console.log("[Retention] ORDER_QUEUE_RETENTION_ENABLED is not true; queue cleanup will run in dry-run mode.");
     }
 
     await connectDatabase();
@@ -63,6 +74,13 @@ async function main(): Promise<void> {
         });
 
         console.log("[Retention] Result:", result);
+
+        const queueResult = await cleanupOrderQueueOlderThan({
+            retentionDays: queueDays,
+            statuses: queueStatuses,
+            dryRun: queueDryRun,
+        });
+        console.log("[Retention] Queue Result:", queueResult);
     } finally {
         if (AppDataSource.isInitialized) {
             await AppDataSource.destroy();

@@ -9,6 +9,8 @@ import { securityLogger, getClientIp } from "../utils/securityLogger";
 import { ApiResponses } from "../utils/ApiResponse";
 import { getRepository, runWithDbContext } from "../database/dbContext";
 import { RealtimeEvents } from "../utils/realtimeEvents";
+import { v4 as uuidv4 } from "uuid";
+import { getRedisClient, getSessionKey } from "../lib/redisClient";
 
 export class AuthController {
 
@@ -85,6 +87,7 @@ export class AuthController {
 
             const role = user.roles.roles_name;
             const isAdmin = role === "Admin";
+            const jti = uuidv4();
 
             // branches table is RLS-protected; load branch under branch context
             let branch: Branch | null | undefined;
@@ -101,10 +104,22 @@ export class AuthController {
                 return ApiResponses.internalError(res, "Server misconfiguration: JWT_SECRET missing");
             }
             const token = jwt.sign(
-                { id: user.id, username: user.username, role },
+                { id: user.id, username: user.username, role, jti },
                 secret,
                 { expiresIn: "10h" } // Token valid for 10 hours
             );
+
+            // Persist session in Redis with sliding TTL
+            const redis = await getRedisClient();
+            if (redis) {
+                const sessionKey = getSessionKey(jti);
+                const ttl = Number(process.env.SESSION_TIMEOUT_MS) || 8 * 60 * 60 * 1000;
+                await redis.set(sessionKey, JSON.stringify({ userId: user.id, role, branchId: user.branch_id, createdAt: Date.now() }), {
+                    PX: ttl,
+                });
+            } else if (process.env.REDIS_URL) {
+                return ApiResponses.internalError(res, "Session store unavailable");
+            }
 
             // Set Cookie
             res.cookie("token", token, {
@@ -151,6 +166,7 @@ export class AuthController {
 
     static async logout(req: Request, res: Response) {
         let userId: string | undefined;
+        let jti: string | undefined;
 
         // 1. Try to get from authenticated request
         if ((req as AuthRequest).user) {
@@ -162,6 +178,7 @@ export class AuthController {
                 const decoded: any = jwt.decode(req.cookies.token);
                 if (decoded && typeof decoded === 'object' && decoded.id) {
                     userId = decoded.id;
+                    jti = decoded.jti;
                 }
             } catch (ignore) {
                 // Ignore decoding errors during logout
@@ -179,6 +196,14 @@ export class AuthController {
                 SocketService.getInstance().emit(RealtimeEvents.users.status, { id: userId, is_active: false });
             } catch (err) {
                 console.error("Error updating logout status for user " + userId, err);
+            }
+        }
+
+        // Revoke session in Redis
+        if (jti) {
+            const redis = await getRedisClient();
+            if (redis) {
+                await redis.del(getSessionKey(jti));
             }
         }
 

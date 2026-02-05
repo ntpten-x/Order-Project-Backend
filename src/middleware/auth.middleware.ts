@@ -6,6 +6,7 @@ import { Branch } from "../entity/Branch";
 import { securityLogger, getClientIp } from "../utils/securityLogger";
 import { getRepository, runWithDbContext } from "../database/dbContext";
 import { ApiResponses } from "../utils/ApiResponse";
+import { getRedisClient, getSessionKey } from "../lib/redisClient";
 
 export interface AuthRequest extends Request {
     user?: Users;
@@ -47,6 +48,32 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
             return ApiResponses.internalError(res, "Server misconfiguration: JWT_SECRET missing");
         }
         const decoded: any = jwt.verify(token, secret);
+        const jti = decoded.jti;
+        if (!jti) {
+            return ApiResponses.unauthorized(res, "Session invalid");
+        }
+
+        const redis = await getRedisClient();
+        if (redis) {
+            const sessionKey = getSessionKey(jti);
+            const sessionJson = await redis.get(sessionKey);
+            if (!sessionJson) {
+                return ApiResponses.unauthorized(res, "Session expired or revoked");
+            }
+            try {
+                const session = JSON.parse(sessionJson) as { userId?: string };
+                if (session.userId && session.userId !== decoded.id) {
+                    return ApiResponses.unauthorized(res, "Session mismatch");
+                }
+            } catch {
+                return ApiResponses.unauthorized(res, "Session invalid");
+            }
+            // Sliding expiration: refresh TTL to session timeout
+            await redis.pExpire(sessionKey, SESSION_TIMEOUT);
+        } else if (process.env.REDIS_URL) {
+            // If Redis URL is configured but client unavailable, fail closed
+            return ApiResponses.internalError(res, "Session store unavailable");
+        }
 
         // Check token expiry (session timeout)
         const now = Date.now();

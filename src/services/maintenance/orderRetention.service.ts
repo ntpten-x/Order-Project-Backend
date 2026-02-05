@@ -11,6 +11,8 @@ export const DEFAULT_CLOSED_ORDER_STATUSES = [
     "completed",
     "cancelled",
 ];
+export const DEFAULT_ORDER_QUEUE_RETENTION_DAYS = 7;
+export const DEFAULT_QUEUE_CLOSED_STATUSES = ["Completed", "Cancelled", "completed", "cancelled"];
 
 export type OrderRetentionCleanupOptions = {
     retentionDays?: number;
@@ -32,6 +34,13 @@ export type OrderRetentionCleanupResult = {
         items: number;
         details: number;
     };
+};
+
+export type QueueCleanupResult = {
+    cutoffDate: Date;
+    dryRun: boolean;
+    deleted: number;
+    candidateCount: number;
 };
 
 function toInt(value: unknown): number | undefined {
@@ -227,3 +236,31 @@ export async function cleanupClosedOrdersOlderThan(
     });
 }
 
+export async function cleanupOrderQueueOlderThan(options: {
+    retentionDays?: number;
+    statuses?: string[];
+    dryRun?: boolean;
+} = {}): Promise<QueueCleanupResult> {
+    const retentionDays = clampInt(options.retentionDays, DEFAULT_ORDER_QUEUE_RETENTION_DAYS, 1, 3650);
+    const statuses = normalizeStatuses(options.statuses ?? DEFAULT_QUEUE_CLOSED_STATUSES);
+    const cutoffDate = new Date(Date.now() - retentionDays * MS_PER_DAY);
+    const dryRun = Boolean(options.dryRun);
+
+    const db = getDbManager();
+    const candidateRows = await db.query(
+        `SELECT id FROM order_queue WHERE status::text = ANY($1::text[]) AND created_at < $2`,
+        [statuses, cutoffDate]
+    );
+    const candidateIds: string[] = (candidateRows ?? []).map((r: any) => String(r.id));
+
+    if (dryRun || candidateIds.length === 0) {
+        return { cutoffDate, dryRun, deleted: 0, candidateCount: candidateIds.length };
+    }
+
+    const result = await db.query(
+        `DELETE FROM order_queue WHERE id = ANY($1::uuid[]) RETURNING 1`,
+        [candidateIds]
+    );
+    const deleted = Number(result?.length ?? 0);
+    return { cutoffDate, dryRun: false, deleted, candidateCount: candidateIds.length };
+}
