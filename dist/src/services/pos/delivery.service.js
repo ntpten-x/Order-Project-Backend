@@ -11,6 +11,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DeliveryService = void 0;
 const socket_service_1 = require("../socket.service");
+const realtimeEvents_1 = require("../../utils/realtimeEvents");
 class DeliveryService {
     constructor(deliveryModel) {
         this.deliveryModel = deliveryModel;
@@ -58,7 +59,7 @@ class DeliveryService {
                 }
                 const createdDelivery = yield this.deliveryModel.create(delivery);
                 if (createdDelivery.branch_id) {
-                    this.socketService.emitToBranch(createdDelivery.branch_id, 'delivery:create', createdDelivery);
+                    this.socketService.emitToBranch(createdDelivery.branch_id, realtimeEvents_1.RealtimeEvents.delivery.create, createdDelivery);
                 }
                 return createdDelivery;
             }
@@ -83,7 +84,7 @@ class DeliveryService {
                 const effectiveBranchId = deliveryToUpdate.branch_id || branchId || delivery.branch_id;
                 const updatedDelivery = yield this.deliveryModel.update(id, delivery, effectiveBranchId);
                 if (effectiveBranchId) {
-                    this.socketService.emitToBranch(effectiveBranchId, 'delivery:update', updatedDelivery);
+                    this.socketService.emitToBranch(effectiveBranchId, realtimeEvents_1.RealtimeEvents.delivery.update, updatedDelivery);
                 }
                 return updatedDelivery;
             }
@@ -101,7 +102,7 @@ class DeliveryService {
                 yield this.deliveryModel.delete(id, branchId);
                 const effectiveBranchId = existing.branch_id || branchId;
                 if (effectiveBranchId) {
-                    this.socketService.emitToBranch(effectiveBranchId, 'delivery:delete', { id });
+                    this.socketService.emitToBranch(effectiveBranchId, realtimeEvents_1.RealtimeEvents.delivery.delete, { id });
                 }
             }
             catch (error) {

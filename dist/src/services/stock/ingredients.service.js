@@ -13,6 +13,7 @@ exports.IngredientsService = void 0;
 const socket_service_1 = require("../socket.service");
 const cache_1 = require("../../utils/cache");
 const dbContext_1 = require("../../database/dbContext");
+const realtimeEvents_1 = require("../../utils/realtimeEvents");
 /**
  * Ingredients Service with Caching
  * Following supabase-postgres-best-practices: server-cache-lru
@@ -70,7 +71,7 @@ class IngredientsService {
                 // Invalidate cache
                 this.invalidateCache(createdIngredients.branch_id);
                 if (createdIngredients.branch_id) {
-                    this.socketService.emitToBranch(createdIngredients.branch_id, 'ingredients:create', createdIngredients);
+                    this.socketService.emitToBranch(createdIngredients.branch_id, realtimeEvents_1.RealtimeEvents.ingredients.create, createdIngredients);
                 }
                 return createdIngredients;
             }
@@ -92,7 +93,7 @@ class IngredientsService {
                 // Invalidate cache
                 this.invalidateCache(effectiveBranchId, id);
                 if (effectiveBranchId) {
-                    this.socketService.emitToBranch(effectiveBranchId, 'ingredients:update', updatedIngredients);
+                    this.socketService.emitToBranch(effectiveBranchId, realtimeEvents_1.RealtimeEvents.ingredients.update, updatedIngredients);
                 }
                 return updatedIngredients;
             }
@@ -109,7 +110,7 @@ class IngredientsService {
             // Invalidate cache
             this.invalidateCache(effectiveBranchId, id);
             if (effectiveBranchId) {
-                this.socketService.emitToBranch(effectiveBranchId, 'ingredients:delete', { id });
+                this.socketService.emitToBranch(effectiveBranchId, realtimeEvents_1.RealtimeEvents.ingredients.delete, { id });
             }
         });
     }

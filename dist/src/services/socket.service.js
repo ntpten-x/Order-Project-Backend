@@ -16,6 +16,8 @@ exports.SocketService = void 0;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const database_1 = require("../database/database");
 const Users_1 = require("../entity/Users");
+const realtimeEvents_1 = require("../utils/realtimeEvents");
+const redisClient_1 = require("../lib/redisClient");
 const parseCookies = (cookieHeader) => {
     const list = {};
     if (!cookieHeader)
@@ -57,6 +59,19 @@ class SocketService {
                     return next(new Error("Server misconfiguration: JWT_SECRET missing"));
                 }
                 const decoded = jsonwebtoken_1.default.verify(token, secret);
+                const jti = decoded.jti;
+                const redis = yield (0, redisClient_1.getRedisClient)();
+                if (redis && jti) {
+                    const sessionKey = (0, redisClient_1.getSessionKey)(jti);
+                    const session = yield redis.get(sessionKey);
+                    if (!session) {
+                        return next(new Error("Authentication error: Session expired"));
+                    }
+                    yield redis.pExpire(sessionKey, Number(process.env.SESSION_TIMEOUT_MS) || 8 * 60 * 60 * 1000);
+                }
+                else if (process.env.REDIS_URL) {
+                    return next(new Error("Authentication error: Session store unavailable"));
+                }
                 // Fetch user to check is_use
                 const userRepository = database_1.AppDataSource.getRepository(Users_1.Users);
                 const user = yield userRepository.findOne({
@@ -99,7 +114,7 @@ class SocketService {
             // If this is the only connection (count is 1 because we just joined), set online
             if (count === 1) {
                 yield this.updateUserStatus(userId, true);
-                this.emit('users:update-status', { id: userId, is_active: true });
+                this.emit(realtimeEvents_1.RealtimeEvents.users.status, { id: userId, is_active: true });
             }
             // Handle reconnection
             socket.on('reconnect', (attemptNumber) => __awaiter(this, void 0, void 0, function* () {
@@ -121,7 +136,7 @@ class SocketService {
                 console.log(`User disconnected: ${user.username} (${userId}). Reason: ${reason}. Remaining connections: ${count}`);
                 if (count === 0) {
                     yield this.updateUserStatus(userId, false);
-                    this.emit('users:update-status', { id: userId, is_active: false });
+                    this.emit(realtimeEvents_1.RealtimeEvents.users.status, { id: userId, is_active: false });
                 }
             }));
         }));
@@ -213,5 +228,5 @@ exports.SocketService = SocketService;
 // - "global" events are rare (system announcements only)
 // - admin events should be emitted to role room: role:Admin
 // - branch events should be emitted to branch room: branch:<branchId>
-SocketService.GLOBAL_EVENTS = new Set(['system:announcement']);
+SocketService.GLOBAL_EVENTS = new Set([realtimeEvents_1.RealtimeEvents.system.announcement]);
 SocketService.ADMIN_EVENT_PREFIXES = ['users:', 'roles:', 'branches:'];

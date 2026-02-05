@@ -21,6 +21,9 @@ const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const securityLogger_1 = require("../utils/securityLogger");
 const ApiResponse_1 = require("../utils/ApiResponse");
 const dbContext_1 = require("../database/dbContext");
+const realtimeEvents_1 = require("../utils/realtimeEvents");
+const uuid_1 = require("uuid");
+const redisClient_1 = require("../lib/redisClient");
 class AuthController {
     static login(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
@@ -88,6 +91,7 @@ class AuthController {
                 });
                 const role = user.roles.roles_name;
                 const isAdmin = role === "Admin";
+                const jti = (0, uuid_1.v4)();
                 // branches table is RLS-protected; load branch under branch context
                 let branch;
                 if (user.branch_id) {
@@ -98,8 +102,20 @@ class AuthController {
                 if (!secret) {
                     return ApiResponse_1.ApiResponses.internalError(res, "Server misconfiguration: JWT_SECRET missing");
                 }
-                const token = jsonwebtoken_1.default.sign({ id: user.id, username: user.username, role }, secret, { expiresIn: "10h" } // Token valid for 10 hours
+                const token = jsonwebtoken_1.default.sign({ id: user.id, username: user.username, role, jti }, secret, { expiresIn: "10h" } // Token valid for 10 hours
                 );
+                // Persist session in Redis with sliding TTL
+                const redis = yield (0, redisClient_1.getRedisClient)();
+                if (redis) {
+                    const sessionKey = (0, redisClient_1.getSessionKey)(jti);
+                    const ttl = Number(process.env.SESSION_TIMEOUT_MS) || 8 * 60 * 60 * 1000;
+                    yield redis.set(sessionKey, JSON.stringify({ userId: user.id, role, branchId: user.branch_id, createdAt: Date.now() }), {
+                        PX: ttl,
+                    });
+                }
+                else if (process.env.REDIS_URL) {
+                    return ApiResponse_1.ApiResponses.internalError(res, "Session store unavailable");
+                }
                 // Set Cookie
                 res.cookie("token", token, {
                     httpOnly: true,
@@ -113,7 +129,7 @@ class AuthController {
                 yield userRepository.save(user);
                 // Notify via Socket
                 const { SocketService } = require("../services/socket.service");
-                SocketService.getInstance().emit('users:update-status', { id: user.id, is_active: true });
+                SocketService.getInstance().emit(realtimeEvents_1.RealtimeEvents.users.status, { id: user.id, is_active: true });
                 return ApiResponse_1.ApiResponses.ok(res, {
                     token,
                     user: {
@@ -144,6 +160,7 @@ class AuthController {
         return __awaiter(this, void 0, void 0, function* () {
             var _a;
             let userId;
+            let jti;
             // 1. Try to get from authenticated request
             if (req.user) {
                 userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
@@ -154,6 +171,7 @@ class AuthController {
                     const decoded = jsonwebtoken_1.default.decode(req.cookies.token);
                     if (decoded && typeof decoded === 'object' && decoded.id) {
                         userId = decoded.id;
+                        jti = decoded.jti;
                     }
                 }
                 catch (ignore) {
@@ -167,10 +185,17 @@ class AuthController {
                     yield userRepository.update(userId, { is_active: false });
                     // Emit socket event
                     const { SocketService } = require("../services/socket.service");
-                    SocketService.getInstance().emit('users:update-status', { id: userId, is_active: false });
+                    SocketService.getInstance().emit(realtimeEvents_1.RealtimeEvents.users.status, { id: userId, is_active: false });
                 }
                 catch (err) {
                     console.error("Error updating logout status for user " + userId, err);
+                }
+            }
+            // Revoke session in Redis
+            if (jti) {
+                const redis = yield (0, redisClient_1.getRedisClient)();
+                if (redis) {
+                    yield redis.del((0, redisClient_1.getSessionKey)(jti));
                 }
             }
             res.clearCookie("token", {

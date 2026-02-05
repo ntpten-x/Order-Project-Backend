@@ -11,6 +11,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CategoryService = void 0;
 const socket_service_1 = require("../socket.service");
+const realtimeEvents_1 = require("../../utils/realtimeEvents");
 class CategoryService {
     constructor(categoryModel) {
         this.categoryModel = categoryModel;
@@ -60,7 +61,7 @@ class CategoryService {
                 const createdCategory = yield this.categoryModel.findOne(savedCategory.id, category.branch_id);
                 if (createdCategory) {
                     if (createdCategory.branch_id) {
-                        this.socketService.emitToBranch(createdCategory.branch_id, 'category:create', createdCategory);
+                        this.socketService.emitToBranch(createdCategory.branch_id, realtimeEvents_1.RealtimeEvents.categories.create, createdCategory);
                     }
                     return createdCategory;
                 }
@@ -79,7 +80,7 @@ class CategoryService {
                 if (updatedCategory) {
                     const effectiveBranchId = updatedCategory.branch_id || branchId || category.branch_id;
                     if (effectiveBranchId) {
-                        this.socketService.emitToBranch(effectiveBranchId, 'category:update', updatedCategory);
+                        this.socketService.emitToBranch(effectiveBranchId, realtimeEvents_1.RealtimeEvents.categories.update, updatedCategory);
                     }
                     return updatedCategory;
                 }
@@ -100,7 +101,7 @@ class CategoryService {
                 yield this.categoryModel.delete(id, branchId);
                 const effectiveBranchId = existing.branch_id || branchId;
                 if (effectiveBranchId) {
-                    this.socketService.emitToBranch(effectiveBranchId, 'category:delete', { id });
+                    this.socketService.emitToBranch(effectiveBranchId, realtimeEvents_1.RealtimeEvents.categories.delete, { id });
                 }
             }
             catch (error) {

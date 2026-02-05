@@ -11,6 +11,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PaymentMethodService = void 0;
 const socket_service_1 = require("../socket.service");
+const realtimeEvents_1 = require("../../utils/realtimeEvents");
 class PaymentMethodService {
     constructor(paymentMethodModel) {
         this.paymentMethodModel = paymentMethodModel;
@@ -62,7 +63,7 @@ class PaymentMethodService {
                 }
                 const createdPaymentMethod = yield this.paymentMethodModel.create(paymentMethod);
                 if (effectiveBranchId) {
-                    this.socketService.emitToBranch(effectiveBranchId, 'paymentMethod:create', createdPaymentMethod);
+                    this.socketService.emitToBranch(effectiveBranchId, realtimeEvents_1.RealtimeEvents.paymentMethods.create, createdPaymentMethod);
                 }
                 return createdPaymentMethod;
             }
@@ -94,7 +95,7 @@ class PaymentMethodService {
                 }
                 const updatedPaymentMethod = yield this.paymentMethodModel.update(id, paymentMethod, effectiveBranchId);
                 if (effectiveBranchId) {
-                    this.socketService.emitToBranch(effectiveBranchId, 'paymentMethod:update', updatedPaymentMethod);
+                    this.socketService.emitToBranch(effectiveBranchId, realtimeEvents_1.RealtimeEvents.paymentMethods.update, updatedPaymentMethod);
                 }
                 return updatedPaymentMethod;
             }
@@ -112,7 +113,7 @@ class PaymentMethodService {
                 const effectiveBranchId = branchId || existing.branch_id;
                 yield this.paymentMethodModel.delete(id, effectiveBranchId);
                 if (effectiveBranchId) {
-                    this.socketService.emitToBranch(effectiveBranchId, 'paymentMethod:delete', { id });
+                    this.socketService.emitToBranch(effectiveBranchId, realtimeEvents_1.RealtimeEvents.paymentMethods.delete, { id });
                 }
             }
             catch (error) {

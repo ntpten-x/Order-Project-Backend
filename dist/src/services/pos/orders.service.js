@@ -38,6 +38,7 @@ const shifts_service_1 = require("./shifts.service");
 const orderQueue_service_1 = require("./orderQueue.service");
 const OrderQueue_1 = require("../../entity/pos/OrderQueue");
 const dbContext_1 = require("../../database/dbContext");
+const realtimeEvents_1 = require("../../utils/realtimeEvents");
 class OrdersService {
     constructor(ordersModel) {
         this.ordersModel = ordersModel;
@@ -257,7 +258,7 @@ class OrdersService {
                 // Post-transaction Side Effects
                 const effectiveBranchId = createdOrder.branch_id || branchId;
                 if (effectiveBranchId) {
-                    this.socketService.emitToBranch(effectiveBranchId, 'orders:create', createdOrder);
+                    this.socketService.emitToBranch(effectiveBranchId, realtimeEvents_1.RealtimeEvents.orders.create, createdOrder);
                 }
                 if (createdOrder.table_id) {
                     const tablesRepo = (0, dbContext_1.getRepository)(Tables_1.Tables);
@@ -265,7 +266,7 @@ class OrdersService {
                         if (!t)
                             return;
                         if (effectiveBranchId) {
-                            this.socketService.emitToBranch(effectiveBranchId, 'tables:update', t);
+                            this.socketService.emitToBranch(effectiveBranchId, realtimeEvents_1.RealtimeEvents.tables.update, t);
                         }
                     });
                 }
@@ -350,14 +351,14 @@ class OrdersService {
                 if (fullOrder) {
                     const effectiveBranchId = fullOrder.branch_id || branchId;
                     if (effectiveBranchId) {
-                        this.socketService.emitToBranch(effectiveBranchId, 'orders:create', fullOrder);
+                        this.socketService.emitToBranch(effectiveBranchId, realtimeEvents_1.RealtimeEvents.orders.create, fullOrder);
                     }
                     if (fullOrder.table_id) {
                         const tablesRepo = (0, dbContext_1.getRepository)(Tables_1.Tables);
                         const t = yield tablesRepo.findOneBy({ id: fullOrder.table_id });
                         if (t) {
                             if (effectiveBranchId) {
-                                this.socketService.emitToBranch(effectiveBranchId, 'tables:update', t);
+                                this.socketService.emitToBranch(effectiveBranchId, realtimeEvents_1.RealtimeEvents.tables.update, t);
                             }
                         }
                     }
@@ -432,7 +433,7 @@ class OrdersService {
                     if (t) {
                         const effectiveBranchId = result.branch_id || branchId;
                         if (effectiveBranchId) {
-                            this.socketService.emitToBranch(effectiveBranchId, 'tables:update', t);
+                            this.socketService.emitToBranch(effectiveBranchId, realtimeEvents_1.RealtimeEvents.tables.update, t);
                         }
                     }
                 }
@@ -457,7 +458,7 @@ class OrdersService {
                 }
                 const emitBranchId = result.branch_id || branchId;
                 if (emitBranchId) {
-                    this.socketService.emitToBranch(emitBranchId, 'orders:update', result);
+                    this.socketService.emitToBranch(emitBranchId, realtimeEvents_1.RealtimeEvents.orders.update, result);
                 }
                 return result;
             }
@@ -480,14 +481,14 @@ class OrdersService {
                     if (t) {
                         const effectiveBranchId = order.branch_id || branchId;
                         if (effectiveBranchId) {
-                            this.socketService.emitToBranch(effectiveBranchId, 'tables:update', t);
+                            this.socketService.emitToBranch(effectiveBranchId, realtimeEvents_1.RealtimeEvents.tables.update, t);
                         }
                     }
                 }
                 yield this.ordersModel.delete(id, undefined, branchId);
                 const effectiveBranchId = (order === null || order === void 0 ? void 0 : order.branch_id) || branchId;
                 if (effectiveBranchId) {
-                    this.socketService.emitToBranch(effectiveBranchId, 'orders:delete', { id });
+                    this.socketService.emitToBranch(effectiveBranchId, realtimeEvents_1.RealtimeEvents.orders.delete, { id });
                 }
             }
             catch (error) {
@@ -509,7 +510,7 @@ class OrdersService {
                     return;
                 const effectiveBranchId = updatedOrder.branch_id || branchId;
                 if (effectiveBranchId) {
-                    this.socketService.emitToBranch(effectiveBranchId, 'orders:update', updatedOrder);
+                    this.socketService.emitToBranch(effectiveBranchId, realtimeEvents_1.RealtimeEvents.orders.update, updatedOrder);
                 }
             }
             catch (error) {
@@ -547,7 +548,7 @@ class OrdersService {
                 if (updatedOrder) {
                     const effectiveBranchId = updatedOrder.branch_id || branchId;
                     if (effectiveBranchId) {
-                        this.socketService.emitToBranch(effectiveBranchId, 'orders:update', updatedOrder);
+                        this.socketService.emitToBranch(effectiveBranchId, realtimeEvents_1.RealtimeEvents.orders.update, updatedOrder);
                     }
                 }
                 return updatedOrder;
@@ -610,7 +611,7 @@ class OrdersService {
                 if (updatedOrder) {
                     const effectiveBranchId = updatedOrder.branch_id || branchId;
                     if (effectiveBranchId) {
-                        this.socketService.emitToBranch(effectiveBranchId, 'orders:update', updatedOrder);
+                        this.socketService.emitToBranch(effectiveBranchId, realtimeEvents_1.RealtimeEvents.orders.update, updatedOrder);
                     }
                 }
                 return updatedOrder;
@@ -637,7 +638,7 @@ class OrdersService {
                 if (updatedOrder) {
                     const effectiveBranchId = updatedOrder.branch_id || branchId;
                     if (effectiveBranchId) {
-                        this.socketService.emitToBranch(effectiveBranchId, 'orders:update', updatedOrder);
+                        this.socketService.emitToBranch(effectiveBranchId, realtimeEvents_1.RealtimeEvents.orders.update, updatedOrder);
                     }
                 }
                 return updatedOrder;

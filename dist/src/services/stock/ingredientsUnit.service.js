@@ -11,6 +11,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.IngredientsUnitService = void 0;
 const socket_service_1 = require("../socket.service");
+const realtimeEvents_1 = require("../../utils/realtimeEvents");
 class IngredientsUnitService {
     constructor(ingredientsUnitModel) {
         this.ingredientsUnitModel = ingredientsUnitModel;
@@ -65,7 +66,7 @@ class IngredientsUnitService {
                 const createdIngredientsUnit = yield this.ingredientsUnitModel.findOne(savedIngredientsUnit.id, effectiveBranchId);
                 if (createdIngredientsUnit) {
                     if (effectiveBranchId) {
-                        this.socketService.emitToBranch(effectiveBranchId, 'ingredientsUnit:create', createdIngredientsUnit);
+                        this.socketService.emitToBranch(effectiveBranchId, realtimeEvents_1.RealtimeEvents.ingredientsUnit.create, createdIngredientsUnit);
                     }
                     return createdIngredientsUnit;
                 }
@@ -90,7 +91,7 @@ class IngredientsUnitService {
                 const updatedIngredientsUnit = yield this.ingredientsUnitModel.findOne(id, effectiveBranchId);
                 if (updatedIngredientsUnit) {
                     if (effectiveBranchId) {
-                        this.socketService.emitToBranch(effectiveBranchId, 'ingredientsUnit:update', updatedIngredientsUnit);
+                        this.socketService.emitToBranch(effectiveBranchId, realtimeEvents_1.RealtimeEvents.ingredientsUnit.update, updatedIngredientsUnit);
                     }
                     return updatedIngredientsUnit;
                 }
@@ -110,7 +111,7 @@ class IngredientsUnitService {
                 const effectiveBranchId = branchId || existing.branch_id;
                 yield this.ingredientsUnitModel.delete(id, effectiveBranchId);
                 if (effectiveBranchId) {
-                    this.socketService.emitToBranch(effectiveBranchId, 'ingredientsUnit:delete', { id });
+                    this.socketService.emitToBranch(effectiveBranchId, realtimeEvents_1.RealtimeEvents.ingredientsUnit.delete, { id });
                 }
             }
             catch (error) {

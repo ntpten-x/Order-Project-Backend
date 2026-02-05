@@ -27,6 +27,7 @@ import deliveryPosRouter from "./src/routes/pos/delivery.route";
 import discountsPosRouter from "./src/routes/pos/discounts.route";
 import paymentMethodPosRouter from "./src/routes/pos/paymentMethod.route";
 import paymentsPosRouter from "./src/routes/pos/payments.route";
+import auditRouter from "./src/routes/audit.route";
 
 import ordersPosRouter from "./src/routes/pos/orders.route";
 import salesOrderItemPosRouter from "./src/routes/pos/salesOrderItem.route";
@@ -347,6 +348,7 @@ app.use("/pos/delivery", deliveryPosRouter);
 app.use("/pos/discounts", discountsPosRouter);
 app.use("/pos/paymentMethod", paymentMethodPosRouter);
 app.use("/pos/payments", paymentsPosRouter);
+app.use("/audit", auditRouter);
 
 app.use("/pos/orders", ordersPosRouter);
 app.use("/pos/salesOrderItem", salesOrderItemPosRouter);

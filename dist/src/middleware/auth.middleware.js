@@ -20,6 +20,7 @@ const Branch_1 = require("../entity/Branch");
 const securityLogger_1 = require("../utils/securityLogger");
 const dbContext_1 = require("../database/dbContext");
 const ApiResponse_1 = require("../utils/ApiResponse");
+const redisClient_1 = require("../lib/redisClient");
 // Session timeout in milliseconds (default: 8 hours)
 const SESSION_TIMEOUT = Number(process.env.SESSION_TIMEOUT_MS) || 8 * 60 * 60 * 1000;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -52,6 +53,33 @@ const authenticateToken = (req, res, next) => __awaiter(void 0, void 0, void 0, 
             return ApiResponse_1.ApiResponses.internalError(res, "Server misconfiguration: JWT_SECRET missing");
         }
         const decoded = jsonwebtoken_1.default.verify(token, secret);
+        const jti = decoded.jti;
+        if (!jti) {
+            return ApiResponse_1.ApiResponses.unauthorized(res, "Session invalid");
+        }
+        const redis = yield (0, redisClient_1.getRedisClient)();
+        if (redis) {
+            const sessionKey = (0, redisClient_1.getSessionKey)(jti);
+            const sessionJson = yield redis.get(sessionKey);
+            if (!sessionJson) {
+                return ApiResponse_1.ApiResponses.unauthorized(res, "Session expired or revoked");
+            }
+            try {
+                const session = JSON.parse(sessionJson);
+                if (session.userId && session.userId !== decoded.id) {
+                    return ApiResponse_1.ApiResponses.unauthorized(res, "Session mismatch");
+                }
+            }
+            catch (_d) {
+                return ApiResponse_1.ApiResponses.unauthorized(res, "Session invalid");
+            }
+            // Sliding expiration: refresh TTL to session timeout
+            yield redis.pExpire(sessionKey, SESSION_TIMEOUT);
+        }
+        else if (process.env.REDIS_URL) {
+            // If Redis URL is configured but client unavailable, fail closed
+            return ApiResponse_1.ApiResponses.internalError(res, "Session store unavailable");
+        }
         // Check token expiry (session timeout)
         const now = Date.now();
         const tokenIssuedAt = decoded.iat ? decoded.iat * 1000 : now;

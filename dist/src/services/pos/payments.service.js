@@ -19,6 +19,7 @@ const OrderEnums_1 = require("../../entity/pos/OrderEnums");
 const Tables_1 = require("../../entity/pos/Tables");
 const PaymentMethod_1 = require("../../entity/pos/PaymentMethod");
 const dbContext_1 = require("../../database/dbContext");
+const realtimeEvents_1 = require("../../utils/realtimeEvents");
 class PaymentsService {
     constructor(paymentsModel) {
         this.paymentsModel = paymentsModel;
@@ -77,7 +78,7 @@ class PaymentsService {
                 // We can do a bulk update.
                 const effectiveBranchId = order.branch_id || branchId;
                 if (effectiveBranchId) {
-                    this.socketService.emitToBranch(effectiveBranchId, 'orders:update', Object.assign(Object.assign({}, order), { status: nextStatus }));
+                    this.socketService.emitToBranch(effectiveBranchId, realtimeEvents_1.RealtimeEvents.orders.update, Object.assign(Object.assign({}, order), { status: nextStatus }));
                 }
                 // Update all items to Paid
                 //  const itemsRepo = manager.getRepository(SalesOrderItem); // Need to import or use QueryBuilder
@@ -92,7 +93,7 @@ class PaymentsService {
                 if (t) {
                     const effectiveBranchId = order.branch_id || branchId;
                     if (effectiveBranchId) {
-                        this.socketService.emitToBranch(effectiveBranchId, "tables:update", t);
+                        this.socketService.emitToBranch(effectiveBranchId, realtimeEvents_1.RealtimeEvents.tables.update, t);
                     }
                 }
             }
@@ -100,7 +101,7 @@ class PaymentsService {
             if (refreshedOrder) {
                 const effectiveBranchId = refreshedOrder.branch_id || branchId;
                 if (effectiveBranchId) {
-                    this.socketService.emitToBranch(effectiveBranchId, "orders:update", refreshedOrder);
+                    this.socketService.emitToBranch(effectiveBranchId, realtimeEvents_1.RealtimeEvents.orders.update, refreshedOrder);
                 }
             }
         });
@@ -163,7 +164,7 @@ class PaymentsService {
                 if (completePayment) {
                     const effectiveBranchId = completePayment.branch_id || branchId;
                     if (effectiveBranchId) {
-                        this.socketService.emitToBranch(effectiveBranchId, 'payments:create', completePayment);
+                        this.socketService.emitToBranch(effectiveBranchId, realtimeEvents_1.RealtimeEvents.payments.create, completePayment);
                     }
                     return completePayment;
                 }
@@ -226,7 +227,7 @@ class PaymentsService {
                 if (updatedPayment) {
                     const effectiveBranchId = updatedPayment.branch_id || branchId;
                     if (effectiveBranchId) {
-                        this.socketService.emitToBranch(effectiveBranchId, 'payments:update', updatedPayment);
+                        this.socketService.emitToBranch(effectiveBranchId, realtimeEvents_1.RealtimeEvents.payments.update, updatedPayment);
                     }
                     return updatedPayment;
                 }
@@ -253,7 +254,7 @@ class PaymentsService {
                 }
             })).then(() => {
                 if (branchId) {
-                    this.socketService.emitToBranch(branchId, 'payments:delete', { id });
+                    this.socketService.emitToBranch(branchId, realtimeEvents_1.RealtimeEvents.payments.delete, { id });
                 }
             });
         });

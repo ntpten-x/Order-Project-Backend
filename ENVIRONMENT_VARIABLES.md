@@ -45,11 +45,20 @@
 - `REQUEST_BODY_LIMIT_MB` - Request body size limit in MB (default: 5)
 - `ENABLE_PERF_LOG` - Enable performance logging (default: false)
 
+### Redis
+- `REDIS_URL` - Redis connection string (used for sessions/auth and as fallback for rate limiting)
+- `REDIS_PREFIX` - Key prefix namespace (default: `order-app`)
+- `REDIS_TLS` - Optional override for Redis TLS (`true`/`false`). Defaults based on URL scheme (`rediss://` enables TLS)
+- `REDIS_TLS_REJECT_UNAUTHORIZED` - Optional override to reject unauthorized TLS certs (`true`/`false`)
+- `REDIS_TLS_AUTO_FALLBACK` - If `true`, retries with TLS disabled on `ERR_SSL_WRONG_VERSION_NUMBER` (defaults to `true` in non-production)
+- `REDIS_CONNECT_TIMEOUT_MS` - Optional Redis connect timeout in ms (default: 5000)
+
 ### Rate Limiting (Redis)
 - `RATE_LIMIT_REDIS_URL` - Redis connection string for distributed rate limiting (recommended in production)
-- `REDIS_URL` - Fallback Redis connection string if `RATE_LIMIT_REDIS_URL` is not set
 - `RATE_LIMIT_REDIS_TLS` - Optional override for Redis TLS (`true`/`false`). Defaults based on URL scheme (`rediss://` enables TLS)
 - `RATE_LIMIT_REDIS_TLS_REJECT_UNAUTHORIZED` - Optional override to reject unauthorized TLS certs (`true`/`false`)
+- `RATE_LIMIT_REDIS_TLS_AUTO_FALLBACK` - If `true`, retries with TLS disabled on `ERR_SSL_WRONG_VERSION_NUMBER` (defaults to `true` in non-production)
+- `RATE_LIMIT_REDIS_CONNECT_TIMEOUT_MS` - Optional Redis connect timeout in ms (default: 5000)
 - `RATE_LIMIT_WINDOW_MS` - API rate limit window in ms (default: 900000)
 - `RATE_LIMIT_MAX` - API max requests per window (default: 1000)
 - `RATE_LIMIT_AUTH_WINDOW_MS` - Auth rate limit window in ms (default: 900000)

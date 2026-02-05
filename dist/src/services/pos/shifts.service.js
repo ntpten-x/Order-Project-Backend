@@ -19,6 +19,7 @@ const OrderEnums_1 = require("../../entity/pos/OrderEnums");
 const AppError_1 = require("../../utils/AppError");
 const socket_service_1 = require("../socket.service");
 const dbContext_1 = require("../../database/dbContext");
+const realtimeEvents_1 = require("../../utils/realtimeEvents");
 class ShiftsService {
     constructor() {
         this.socketService = socket_service_1.SocketService.getInstance();
@@ -56,7 +57,7 @@ class ShiftsService {
             newShift.open_time = new Date();
             const savedShift = yield this.shiftsRepo.save(newShift);
             if (branchId) {
-                this.socketService.emitToBranch(branchId, 'shifts:update', savedShift);
+                this.socketService.emitToBranch(branchId, realtimeEvents_1.RealtimeEvents.shifts.update, savedShift);
             }
             return savedShift;
         });
@@ -107,7 +108,7 @@ class ShiftsService {
             const savedShift = yield this.shiftsRepo.save(activeShift);
             const branchId = activeShift.branch_id;
             if (branchId) {
-                this.socketService.emitToBranch(branchId, 'shifts:update', savedShift);
+                this.socketService.emitToBranch(branchId, realtimeEvents_1.RealtimeEvents.shifts.update, savedShift);
             }
             return savedShift;
         });

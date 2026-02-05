@@ -10,9 +10,12 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ShopProfileService = void 0;
+const socket_service_1 = require("../socket.service");
+const realtimeEvents_1 = require("../../utils/realtimeEvents");
 class ShopProfileService {
     constructor(model) {
         this.model = model;
+        this.socketService = socket_service_1.SocketService.getInstance();
     }
     getProfile(branchId) {
         return __awaiter(this, void 0, void 0, function* () {
@@ -28,7 +31,11 @@ class ShopProfileService {
     }
     updateProfile(branchId, data) {
         return __awaiter(this, void 0, void 0, function* () {
-            return this.model.createOrUpdate(branchId, data);
+            const updated = yield this.model.createOrUpdate(branchId, data);
+            if (branchId) {
+                this.socketService.emitToBranch(branchId, realtimeEvents_1.RealtimeEvents.shopProfile.update, updated);
+            }
+            return updated;
         });
     }
 }

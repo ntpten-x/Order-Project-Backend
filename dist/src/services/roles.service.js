@@ -11,6 +11,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RolesService = void 0;
 const socket_service_1 = require("./socket.service");
+const realtimeEvents_1 = require("../utils/realtimeEvents");
 class RolesService {
     constructor(rolesModels) {
         this.rolesModels = rolesModels;
@@ -43,7 +44,7 @@ class RolesService {
                 const savedRole = yield this.rolesModels.create(data);
                 const createdRole = yield this.rolesModels.findOne(savedRole.id);
                 if (createdRole) {
-                    this.socketService.emitToRole('Admin', 'roles:create', createdRole);
+                    this.socketService.emitToRole('Admin', realtimeEvents_1.RealtimeEvents.roles.create, createdRole);
                     return createdRole;
                 }
                 return savedRole;
@@ -59,7 +60,7 @@ class RolesService {
                 yield this.rolesModels.update(id, data);
                 const updatedRole = yield this.rolesModels.findOne(id);
                 if (updatedRole) {
-                    this.socketService.emitToRole('Admin', 'roles:update', updatedRole);
+                    this.socketService.emitToRole('Admin', realtimeEvents_1.RealtimeEvents.roles.update, updatedRole);
                     return updatedRole;
                 }
                 throw new Error("ไม่พบข้อมูลบทบาท");
@@ -73,7 +74,7 @@ class RolesService {
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 yield this.rolesModels.delete(id);
-                this.socketService.emitToRole('Admin', 'roles:delete', { id });
+                this.socketService.emitToRole('Admin', realtimeEvents_1.RealtimeEvents.roles.delete, { id });
             }
             catch (error) {
                 throw error;

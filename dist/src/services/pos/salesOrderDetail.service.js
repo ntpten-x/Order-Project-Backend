@@ -14,6 +14,7 @@ const socket_service_1 = require("../socket.service");
 const SalesOrderItem_1 = require("../../entity/pos/SalesOrderItem");
 const orderTotals_service_1 = require("./orderTotals.service");
 const dbContext_1 = require("../../database/dbContext");
+const realtimeEvents_1 = require("../../utils/realtimeEvents");
 class SalesOrderDetailService {
     constructor(salesOrderDetailModel) {
         this.salesOrderDetailModel = salesOrderDetailModel;
@@ -73,7 +74,7 @@ class SalesOrderDetailService {
                 const completeDetail = yield this.salesOrderDetailModel.findOne(createdDetail.id, branchId);
                 if (completeDetail) {
                     if (branchId) {
-                        this.socketService.emitToBranch(branchId, 'salesOrderDetail:create', completeDetail);
+                        this.socketService.emitToBranch(branchId, realtimeEvents_1.RealtimeEvents.salesOrderDetail.create, completeDetail);
                     }
                     return completeDetail;
                 }
@@ -94,7 +95,7 @@ class SalesOrderDetailService {
                 const updatedDetail = yield this.salesOrderDetailModel.update(id, salesOrderDetail, branchId);
                 yield this.recalcByItemId(detailToUpdate.orders_item_id);
                 if (branchId) {
-                    this.socketService.emitToBranch(branchId, 'salesOrderDetail:update', updatedDetail);
+                    this.socketService.emitToBranch(branchId, realtimeEvents_1.RealtimeEvents.salesOrderDetail.update, updatedDetail);
                 }
                 return updatedDetail;
             }
@@ -110,7 +111,7 @@ class SalesOrderDetailService {
                 yield this.salesOrderDetailModel.delete(id, branchId);
                 yield this.recalcByItemId(detailToDelete === null || detailToDelete === void 0 ? void 0 : detailToDelete.orders_item_id);
                 if (branchId) {
-                    this.socketService.emitToBranch(branchId, 'salesOrderDetail:delete', { id });
+                    this.socketService.emitToBranch(branchId, realtimeEvents_1.RealtimeEvents.salesOrderDetail.delete, { id });
                 }
             }
             catch (error) {

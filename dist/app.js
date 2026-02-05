@@ -1,4 +1,13 @@
 "use strict";
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -31,6 +40,7 @@ const delivery_route_1 = __importDefault(require("./src/routes/pos/delivery.rout
 const discounts_route_1 = __importDefault(require("./src/routes/pos/discounts.route"));
 const paymentMethod_route_1 = __importDefault(require("./src/routes/pos/paymentMethod.route"));
 const payments_route_1 = __importDefault(require("./src/routes/pos/payments.route"));
+const audit_route_1 = __importDefault(require("./src/routes/audit.route"));
 const orders_route_2 = __importDefault(require("./src/routes/pos/orders.route"));
 const salesOrderItem_route_1 = __importDefault(require("./src/routes/pos/salesOrderItem.route"));
 const salesOrderDetail_route_1 = __importDefault(require("./src/routes/pos/salesOrderDetail.route"));
@@ -43,6 +53,7 @@ const orderQueue_route_1 = __importDefault(require("./src/routes/pos/orderQueue.
 const error_middleware_1 = require("./src/middleware/error.middleware");
 const AppError_1 = require("./src/utils/AppError");
 const monitoring_middleware_1 = require("./src/middleware/monitoring.middleware");
+const metrics_1 = require("./src/utils/metrics");
 const app = (0, express_1.default)();
 const httpServer = (0, http_1.createServer)(app); // Wrap express with HTTP server
 const port = process.env.PORT || 3000;
@@ -166,7 +177,8 @@ const csrfExcludedPaths = new Set([
     "/auth/login",
     "/auth/logout",
     "/health",
-    "/csrf-token"
+    "/csrf-token",
+    "/metrics"
 ]);
 // CSRF token endpoint - must be defined before CSRF middleware
 // This endpoint needs to initialize CSRF token generation
@@ -294,6 +306,17 @@ app.use((req, res, next) => {
 app.get('/health', (req, res) => {
     res.status(200).json({ status: 'ok', uptime: process.uptime() });
 });
+app.get('/metrics', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    if (!metrics_1.metrics.enabled) {
+        return res.status(404).json({ message: "Metrics disabled" });
+    }
+    const apiKey = process.env.METRICS_API_KEY;
+    if (apiKey && req.header("x-metrics-key") !== apiKey) {
+        return res.status(403).json({ message: "Forbidden" });
+    }
+    res.setHeader("Content-Type", metrics_1.metrics.contentType);
+    res.send(yield metrics_1.metrics.getMetrics());
+}));
 app.use("/auth", auth_route_1.default);
 app.use("/users", users_route_1.default);
 app.use("/roles", roles_route_1.default);
@@ -309,6 +332,7 @@ app.use("/pos/delivery", delivery_route_1.default);
 app.use("/pos/discounts", discounts_route_1.default);
 app.use("/pos/paymentMethod", paymentMethod_route_1.default);
 app.use("/pos/payments", payments_route_1.default);
+app.use("/audit", audit_route_1.default);
 app.use("/pos/orders", orders_route_2.default);
 app.use("/pos/salesOrderItem", salesOrderItem_route_1.default);
 app.use("/pos/salesOrderDetail", salesOrderDetail_route_1.default);

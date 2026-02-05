@@ -16,6 +16,7 @@ const socket_service_1 = require("../socket.service");
 const AppError_1 = require("../../utils/AppError");
 const cache_1 = require("../../utils/cache");
 const dbContext_1 = require("../../database/dbContext");
+const realtimeEvents_1 = require("../../utils/realtimeEvents");
 class OrderQueueService {
     constructor() {
         this.socketService = socket_service_1.SocketService.getInstance();
@@ -70,7 +71,7 @@ class OrderQueueService {
             const saved = yield queueRepository.save(queueItem);
             this.invalidateQueueCache(effectiveBranchId);
             // Emit socket event
-            this.socketService.emitToBranch(effectiveBranchId || "", 'order-queue:added', saved);
+            this.socketService.emitToBranch(effectiveBranchId || "", realtimeEvents_1.RealtimeEvents.orderQueue.added, saved);
             return saved;
         });
     }
@@ -143,7 +144,7 @@ class OrderQueueService {
             const saved = yield (0, dbContext_1.getRepository)(OrderQueue_1.OrderQueue).save(queueItem);
             this.invalidateQueueCache(saved.branch_id || branchId);
             // Emit socket event
-            this.socketService.emitToBranch(saved.branch_id || '', 'order-queue:updated', saved);
+            this.socketService.emitToBranch(saved.branch_id || '', realtimeEvents_1.RealtimeEvents.orderQueue.updated, saved);
             return saved;
         });
     }
@@ -159,7 +160,7 @@ class OrderQueueService {
             yield (0, dbContext_1.getRepository)(OrderQueue_1.OrderQueue).remove(queueItem);
             this.invalidateQueueCache(queueItem.branch_id || branchId);
             // Emit socket event
-            this.socketService.emitToBranch(queueItem.branch_id || '', 'order-queue:removed', { id: queueId });
+            this.socketService.emitToBranch(queueItem.branch_id || '', realtimeEvents_1.RealtimeEvents.orderQueue.removed, { id: queueId });
         });
     }
     /**
@@ -194,7 +195,7 @@ class OrderQueueService {
             }));
             this.invalidateQueueCache(branchId);
             // Emit socket event with minimal payload so clients can patch cache without full refetch
-            this.socketService.emitToBranch(branchId || '', 'order-queue:reordered', {
+            this.socketService.emitToBranch(branchId || '', realtimeEvents_1.RealtimeEvents.orderQueue.reordered, {
                 branchId,
                 updates: queueItems.map((q) => ({ id: q.id, queue_position: q.queue_position, priority: q.priority }))
             });

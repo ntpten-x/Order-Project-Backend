@@ -13,6 +13,7 @@ exports.BranchService = void 0;
 const Branch_1 = require("../entity/Branch");
 const AppError_1 = require("../utils/AppError");
 const socket_service_1 = require("./socket.service");
+const realtimeEvents_1 = require("../utils/realtimeEvents");
 const dbContext_1 = require("../database/dbContext");
 class BranchService {
     constructor() {
@@ -38,7 +39,7 @@ class BranchService {
         return __awaiter(this, void 0, void 0, function* () {
             const branch = this.branchRepo.create(data);
             const created = yield this.branchRepo.save(branch);
-            this.socketService.emitToRole("Admin", "branches:create", created);
+            this.socketService.emitToRole("Admin", realtimeEvents_1.RealtimeEvents.branches.create, created);
             return created;
         });
     }
@@ -50,7 +51,7 @@ class BranchService {
             }
             this.branchRepo.merge(branch, data);
             const updated = yield this.branchRepo.save(branch);
-            this.socketService.emitToRole("Admin", "branches:update", updated);
+            this.socketService.emitToRole("Admin", realtimeEvents_1.RealtimeEvents.branches.update, updated);
             return updated;
         });
     }
@@ -63,7 +64,7 @@ class BranchService {
             // Soft delete
             branch.is_active = false;
             yield this.branchRepo.save(branch);
-            this.socketService.emitToRole("Admin", "branches:delete", { id });
+            this.socketService.emitToRole("Admin", realtimeEvents_1.RealtimeEvents.branches.delete, { id });
         });
     }
 }

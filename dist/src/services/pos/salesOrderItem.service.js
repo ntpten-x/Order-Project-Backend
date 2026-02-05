@@ -13,6 +13,7 @@ exports.SalesOrderItemService = void 0;
 const socket_service_1 = require("../socket.service");
 const SalesOrder_1 = require("../../entity/pos/SalesOrder");
 const dbContext_1 = require("../../database/dbContext");
+const realtimeEvents_1 = require("../../utils/realtimeEvents");
 class SalesOrderItemService {
     constructor(salesOrderItemModel) {
         this.salesOrderItemModel = salesOrderItemModel;
@@ -58,7 +59,7 @@ class SalesOrderItemService {
                 const completeItem = yield this.salesOrderItemModel.findOne(createdItem.id, branchId);
                 if (completeItem) {
                     if (branchId) {
-                        this.socketService.emitToBranch(branchId, 'salesOrderItem:create', completeItem);
+                        this.socketService.emitToBranch(branchId, realtimeEvents_1.RealtimeEvents.salesOrderItem.create, completeItem);
                     }
                     return completeItem;
                 }
@@ -78,7 +79,7 @@ class SalesOrderItemService {
                 }
                 const updatedItem = yield this.salesOrderItemModel.update(id, salesOrderItem, branchId);
                 if (branchId) {
-                    this.socketService.emitToBranch(branchId, 'salesOrderItem:update', updatedItem);
+                    this.socketService.emitToBranch(branchId, realtimeEvents_1.RealtimeEvents.salesOrderItem.update, updatedItem);
                 }
                 return updatedItem;
             }
@@ -92,7 +93,7 @@ class SalesOrderItemService {
             try {
                 yield this.salesOrderItemModel.delete(id, branchId);
                 if (branchId) {
-                    this.socketService.emitToBranch(branchId, 'salesOrderItem:delete', { id });
+                    this.socketService.emitToBranch(branchId, realtimeEvents_1.RealtimeEvents.salesOrderItem.delete, { id });
                 }
             }
             catch (error) {

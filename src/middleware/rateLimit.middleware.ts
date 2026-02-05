@@ -31,12 +31,56 @@ const parseBoolean = (value: string | undefined) => {
     return undefined;
 };
 
-const createRedisStore = (redisClient: any, prefix: string) => {
+const isSslWrongVersionError = (err: unknown): boolean => {
+    if (!err || typeof err !== "object") return false;
+    const anyErr = err as { code?: unknown; message?: unknown };
+    if (anyErr.code === "ERR_SSL_WRONG_VERSION_NUMBER") return true;
+    const msg = typeof anyErr.message === "string" ? anyErr.message : "";
+    return msg.toLowerCase().includes("wrong version number");
+};
+
+const normalizeRedisScheme = (url: string, tlsEnabled: boolean) => {
+    if (tlsEnabled) return url.replace(/^redis:/, "rediss:");
+    return url.replace(/^rediss:/, "redis:");
+};
+
+const createRedisStore = (getRedisClient: () => any | null, prefix: string) => {
     let windowMs = 60 * 1000;
     const safePrefix = prefix.endsWith(":") ? prefix : `${prefix}:`;
     const withPrefix = (key: string) => `${safePrefix}${key}`;
     const logStoreError = (err: unknown) => {
         console.error("[RateLimit] Redis store error:", err);
+    };
+
+    // Fallback local store so rate limiting still works when Redis is misconfigured/unavailable.
+    // This is process-local (not distributed) and behaves similarly to express-rate-limit's MemoryStore.
+    const localHits = new Map<string, { totalHits: number; resetAt: number }>();
+    const localGet = (key: string) => {
+        const now = Date.now();
+        const record = localHits.get(key);
+        if (!record) return undefined;
+        if (record.resetAt <= now) {
+            localHits.delete(key);
+            return undefined;
+        }
+        return { totalHits: record.totalHits, resetTime: new Date(record.resetAt) };
+    };
+    const localIncrement = (key: string) => {
+        const now = Date.now();
+        const record = localHits.get(key);
+        if (!record || record.resetAt <= now) {
+            const resetAt = now + windowMs;
+            localHits.set(key, { totalHits: 1, resetAt });
+            return { totalHits: 1, resetTime: new Date(resetAt) };
+        }
+        record.totalHits += 1;
+        return { totalHits: record.totalHits, resetTime: new Date(record.resetAt) };
+    };
+    const localDecrement = (key: string) => {
+        const record = localHits.get(key);
+        if (!record) return;
+        record.totalHits -= 1;
+        if (record.totalHits <= 0) localHits.delete(key);
     };
 
     return {
@@ -49,10 +93,12 @@ const createRedisStore = (redisClient: any, prefix: string) => {
         },
         get: async (key: string) => {
             try {
+                const redisClient = getRedisClient();
+                if (!redisClient) return localGet(key);
                 const redisKey = withPrefix(key);
                 const rawHits = await redisClient.get(redisKey);
                 if (rawHits === null || rawHits === undefined) {
-                    return undefined;
+                    return localGet(key);
                 }
                 const totalHits = Number(rawHits);
                 const ttlMs = Number(await redisClient.pTTL(redisKey));
@@ -60,11 +106,13 @@ const createRedisStore = (redisClient: any, prefix: string) => {
                 return { totalHits, resetTime };
             } catch (err) {
                 logStoreError(err);
-                return undefined;
+                return localGet(key);
             }
         },
         increment: async (key: string) => {
             try {
+                const redisClient = getRedisClient();
+                if (!redisClient) return localIncrement(key);
                 const redisKey = withPrefix(key);
                 const now = Date.now();
                 const totalHits = Number(await redisClient.incr(redisKey));
@@ -77,11 +125,13 @@ const createRedisStore = (redisClient: any, prefix: string) => {
                 return { totalHits, resetTime };
             } catch (err) {
                 logStoreError(err);
-                return { totalHits: 1, resetTime: new Date(Date.now() + windowMs) };
+                return localIncrement(key);
             }
         },
         decrement: async (key: string) => {
             try {
+                const redisClient = getRedisClient();
+                if (!redisClient) return localDecrement(key);
                 const redisKey = withPrefix(key);
                 const remaining = Number(await redisClient.decr(redisKey));
                 if (!Number.isFinite(remaining) || remaining <= 0) {
@@ -89,18 +139,28 @@ const createRedisStore = (redisClient: any, prefix: string) => {
                 }
             } catch (err) {
                 logStoreError(err);
+                localDecrement(key);
             }
         },
         resetKey: async (key: string) => {
             try {
+                const redisClient = getRedisClient();
+                if (!redisClient) {
+                    localHits.delete(key);
+                    return;
+                }
                 await redisClient.del(withPrefix(key));
             } catch (err) {
                 logStoreError(err);
+                localHits.delete(key);
             }
         },
         shutdown: async () => {
             try {
-                await redisClient.quit();
+                const redisClient = getRedisClient();
+                if (redisClient) {
+                    await redisClient.quit();
+                }
             } catch (err) {
                 // ignore shutdown errors
             }
@@ -117,21 +177,95 @@ if (redisUrl) {
         );
         const urlWantsTls = redisUrl.startsWith("rediss://");
         const tlsEnabled = tlsOverride ?? urlWantsTls;
-        const effectiveUrl = tlsEnabled ? redisUrl : redisUrl.replace(/^rediss:/, "redis:");
-        const socketOptions = tlsEnabled
-            ? { tls: true, rejectUnauthorized: tlsRejectUnauthorized ?? false }
-            : undefined;
 
-        const redisClient = deps.createClient(
-            socketOptions ? { url: effectiveUrl, socket: socketOptions } : { url: effectiveUrl }
+        const parsed = new URL(redisUrl);
+        const finalTls = tlsEnabled;
+        const effectiveUrl = normalizeRedisScheme(redisUrl, finalTls);
+
+        const socketOptions: Record<string, unknown> = {
+            host: parsed.hostname,
+            port: parsed.port ? Number(parsed.port) : undefined,
+            tls: finalTls,
+            connectTimeout: Number(process.env.RATE_LIMIT_REDIS_CONNECT_TIMEOUT_MS) || 5000,
+            reconnectStrategy: (retries: number, cause: Error) => {
+                // Stop reconnect loops on TLS-protocol mismatch so we can fall back cleanly.
+                if (isSslWrongVersionError(cause)) return cause;
+                return Math.min(retries * 50, 500);
+            },
+        };
+        if (finalTls) {
+            socketOptions.servername = parsed.hostname;
+            socketOptions.rejectUnauthorized = tlsRejectUnauthorized ?? false;
+        }
+
+        let activeRedisClient: any | null = deps.createClient({ url: effectiveUrl, socket: socketOptions });
+
+        const getActiveRedisClient = () => {
+            const candidate = activeRedisClient;
+            if (!candidate) return null;
+            if (typeof candidate.isReady === "boolean" && candidate.isReady !== true) return null;
+            return candidate;
+        };
+
+        const fallbackSetting = parseBoolean(
+            process.env.RATE_LIMIT_REDIS_TLS_AUTO_FALLBACK || process.env.REDIS_TLS_AUTO_FALLBACK
         );
-        redisClient.on("error", (err: unknown) => {
-            console.error("[RateLimit] Redis error:", err);
-        });
-        redisClient.connect().catch((err: unknown) => {
+        const autoTlsFallback = fallbackSetting ?? (process.env.NODE_ENV !== "production");
+        const allowFallbackWhenForcedTls = fallbackSetting === true;
+
+        const connectWithTlsFallback = async () => {
+            try {
+                activeRedisClient.on("error", (err: unknown) => {
+                    console.error("[RateLimit] Redis error:", err);
+                });
+                await activeRedisClient.connect();
+                console.info("[RateLimit] Redis connected successfully");
+            } catch (err) {
+                if (
+                    autoTlsFallback &&
+                    finalTls === true &&
+                    isSslWrongVersionError(err) &&
+                    (tlsOverride === undefined || allowFallbackWhenForcedTls)
+                ) {
+                    console.warn(
+                        "[RateLimit] Redis TLS handshake failed (ERR_SSL_WRONG_VERSION_NUMBER). Retrying with TLS disabled. " +
+                            "Fix by setting RATE_LIMIT_REDIS_URL=redis://... (no TLS) or RATE_LIMIT_REDIS_TLS=false."
+                    );
+                    try {
+                        await activeRedisClient.disconnect();
+                    } catch {
+                        // ignore
+                    }
+
+                    const retryTls = false;
+                    const retryUrl = normalizeRedisScheme(redisUrl, retryTls);
+                    const retrySocket: Record<string, unknown> = {
+                        host: parsed.hostname,
+                        port: parsed.port ? Number(parsed.port) : undefined,
+                        tls: retryTls,
+                        connectTimeout: Number(process.env.RATE_LIMIT_REDIS_CONNECT_TIMEOUT_MS) || 5000,
+                        reconnectStrategy: (retries: number, cause: Error) => {
+                            if (isSslWrongVersionError(cause)) return cause;
+                            return Math.min(retries * 50, 500);
+                        },
+                    };
+                    const retryClient = deps.createClient({ url: retryUrl, socket: retrySocket });
+                    retryClient.on("error", (e: unknown) => console.error("[RateLimit] Redis error:", e));
+                    await retryClient.connect();
+                    console.info("[RateLimit] Redis connected successfully (TLS disabled fallback)");
+                    activeRedisClient = retryClient;
+                    return;
+                }
+
+                throw err;
+            }
+        };
+
+        connectWithTlsFallback().catch((err: unknown) => {
             console.error("[RateLimit] Failed to connect to Redis:", err);
         });
-        redisStoreFactory = (prefix: string) => createRedisStore(redisClient, prefix);
+
+        redisStoreFactory = (prefix: string) => createRedisStore(getActiveRedisClient, prefix);
     } else {
         console.warn("[RateLimit] Redis URL set but redis deps are missing. Falling back to in-memory store.");
     }

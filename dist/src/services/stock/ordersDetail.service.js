@@ -11,6 +11,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.OrdersDetailService = void 0;
 const socket_service_1 = require("../socket.service");
+const realtimeEvents_1 = require("../../utils/realtimeEvents");
 class OrdersDetailService {
     constructor(ordersDetailModel) {
         this.ordersDetailModel = ordersDetailModel;
@@ -28,7 +29,15 @@ class OrdersDetailService {
                 if (orderItem) {
                     const emitBranchId = branchId || ((_a = orderItem.orders) === null || _a === void 0 ? void 0 : _a.branch_id);
                     if (emitBranchId) {
-                        this.socketService.emitToBranch(emitBranchId, "orders_updated", {
+                        this.socketService.emitToBranch(emitBranchId, realtimeEvents_1.RealtimeEvents.stockOrders.detailUpdate, {
+                            orderId: orderItem.orders.id,
+                            detail: savedDetail
+                        });
+                        this.socketService.emitToBranch(emitBranchId, realtimeEvents_1.RealtimeEvents.stock.update, {
+                            source: "stock-orders-detail",
+                            orderId: orderItem.orders.id,
+                        });
+                        this.socketService.emitToBranch(emitBranchId, realtimeEvents_1.LegacyRealtimeEvents.stockOrdersUpdated, {
                             action: "update_item_detail",
                             orderId: orderItem.orders.id,
                             data: savedDetail

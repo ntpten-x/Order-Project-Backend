@@ -40,13 +40,17 @@ function parseIntOrUndefined(value) {
 }
 function main() {
     return __awaiter(this, void 0, void 0, function* () {
-        var _a, _b;
+        var _a, _b, _c, _d;
         const retentionDays = (_a = parseIntOrUndefined(process.env.ORDER_RETENTION_DAYS)) !== null && _a !== void 0 ? _a : orderRetention_service_1.DEFAULT_ORDER_RETENTION_DAYS;
         const statuses = (_b = parseCsv(process.env.ORDER_RETENTION_STATUSES)) !== null && _b !== void 0 ? _b : orderRetention_service_1.DEFAULT_CLOSED_ORDER_STATUSES;
         const batchSize = parseIntOrUndefined(process.env.ORDER_RETENTION_BATCH_SIZE);
         const maxBatches = parseIntOrUndefined(process.env.ORDER_RETENTION_MAX_BATCHES);
         const enabled = parseBoolean(process.env.ORDER_RETENTION_ENABLED, false);
         const dryRun = !enabled ? true : parseBoolean(process.env.ORDER_RETENTION_DRY_RUN, false);
+        const queueEnabled = parseBoolean(process.env.ORDER_QUEUE_RETENTION_ENABLED, false);
+        const queueDryRun = !queueEnabled ? true : parseBoolean(process.env.ORDER_QUEUE_RETENTION_DRY_RUN, false);
+        const queueDays = (_c = parseIntOrUndefined(process.env.ORDER_QUEUE_RETENTION_DAYS)) !== null && _c !== void 0 ? _c : orderRetention_service_1.DEFAULT_ORDER_QUEUE_RETENTION_DAYS;
+        const queueStatuses = (_d = parseCsv(process.env.ORDER_QUEUE_RETENTION_STATUSES)) !== null && _d !== void 0 ? _d : orderRetention_service_1.DEFAULT_QUEUE_CLOSED_STATUSES;
         console.log("[Retention] Cleanup closed orders started");
         console.log("[Retention] Config:", {
             retentionDays,
@@ -60,6 +64,9 @@ function main() {
         if (!enabled) {
             console.log("[Retention] ORDER_RETENTION_ENABLED is not true; running in dry-run mode (no deletes).");
         }
+        if (!queueEnabled) {
+            console.log("[Retention] ORDER_QUEUE_RETENTION_ENABLED is not true; queue cleanup will run in dry-run mode.");
+        }
         yield (0, database_1.connectDatabase)();
         try {
             const result = yield (0, orderRetention_service_1.cleanupClosedOrdersOlderThan)({
@@ -70,6 +77,12 @@ function main() {
                 dryRun,
             });
             console.log("[Retention] Result:", result);
+            const queueResult = yield (0, orderRetention_service_1.cleanupOrderQueueOlderThan)({
+                retentionDays: queueDays,
+                statuses: queueStatuses,
+                dryRun: queueDryRun,
+            });
+            console.log("[Retention] Queue Result:", queueResult);
         }
         finally {
             if (database_1.AppDataSource.isInitialized) {

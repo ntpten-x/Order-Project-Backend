@@ -9,8 +9,9 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.DEFAULT_CLOSED_ORDER_STATUSES = exports.DEFAULT_ORDER_RETENTION_DAYS = void 0;
+exports.DEFAULT_QUEUE_CLOSED_STATUSES = exports.DEFAULT_ORDER_QUEUE_RETENTION_DAYS = exports.DEFAULT_CLOSED_ORDER_STATUSES = exports.DEFAULT_ORDER_RETENTION_DAYS = void 0;
 exports.cleanupClosedOrdersOlderThan = cleanupClosedOrdersOlderThan;
+exports.cleanupOrderQueueOlderThan = cleanupOrderQueueOlderThan;
 const dbContext_1 = require("../../database/dbContext");
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 exports.DEFAULT_ORDER_RETENTION_DAYS = 30;
@@ -22,6 +23,8 @@ exports.DEFAULT_CLOSED_ORDER_STATUSES = [
     "completed",
     "cancelled",
 ];
+exports.DEFAULT_ORDER_QUEUE_RETENTION_DAYS = 7;
+exports.DEFAULT_QUEUE_CLOSED_STATUSES = ["Completed", "Cancelled", "completed", "cancelled"];
 function toInt(value) {
     if (value === undefined || value === null)
         return undefined;
@@ -170,5 +173,23 @@ function cleanupClosedOrdersOlderThan() {
                 deleted,
             };
         }));
+    });
+}
+function cleanupOrderQueueOlderThan() {
+    return __awaiter(this, arguments, void 0, function* (options = {}) {
+        var _a, _b;
+        const retentionDays = clampInt(options.retentionDays, exports.DEFAULT_ORDER_QUEUE_RETENTION_DAYS, 1, 3650);
+        const statuses = normalizeStatuses((_a = options.statuses) !== null && _a !== void 0 ? _a : exports.DEFAULT_QUEUE_CLOSED_STATUSES);
+        const cutoffDate = new Date(Date.now() - retentionDays * MS_PER_DAY);
+        const dryRun = Boolean(options.dryRun);
+        const db = (0, dbContext_1.getDbManager)();
+        const candidateRows = yield db.query(`SELECT id FROM order_queue WHERE status::text = ANY($1::text[]) AND created_at < $2`, [statuses, cutoffDate]);
+        const candidateIds = (candidateRows !== null && candidateRows !== void 0 ? candidateRows : []).map((r) => String(r.id));
+        if (dryRun || candidateIds.length === 0) {
+            return { cutoffDate, dryRun, deleted: 0, candidateCount: candidateIds.length };
+        }
+        const result = yield db.query(`DELETE FROM order_queue WHERE id = ANY($1::uuid[]) RETURNING 1`, [candidateIds]);
+        const deleted = Number((_b = result === null || result === void 0 ? void 0 : result.length) !== null && _b !== void 0 ? _b : 0);
+        return { cutoffDate, dryRun: false, deleted, candidateCount: candidateIds.length };
     });
 }

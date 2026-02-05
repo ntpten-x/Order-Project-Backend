@@ -11,6 +11,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DiscountsService = void 0;
 const socket_service_1 = require("../socket.service");
+const realtimeEvents_1 = require("../../utils/realtimeEvents");
 class DiscountsService {
     constructor(discountsModel) {
         this.discountsModel = discountsModel;
@@ -62,7 +63,7 @@ class DiscountsService {
                 }
                 const createdDiscount = yield this.discountsModel.create(discounts);
                 if (effectiveBranchId) {
-                    this.socketService.emitToBranch(effectiveBranchId, 'discounts:create', createdDiscount);
+                    this.socketService.emitToBranch(effectiveBranchId, realtimeEvents_1.RealtimeEvents.discounts.create, createdDiscount);
                 }
                 return createdDiscount;
             }
@@ -94,7 +95,7 @@ class DiscountsService {
                 }
                 const updatedDiscount = yield this.discountsModel.update(id, discounts, effectiveBranchId);
                 if (effectiveBranchId) {
-                    this.socketService.emitToBranch(effectiveBranchId, 'discounts:update', updatedDiscount);
+                    this.socketService.emitToBranch(effectiveBranchId, realtimeEvents_1.RealtimeEvents.discounts.update, updatedDiscount);
                 }
                 return updatedDiscount;
             }
@@ -112,7 +113,7 @@ class DiscountsService {
                 const effectiveBranchId = branchId || existing.branch_id;
                 yield this.discountsModel.delete(id, effectiveBranchId);
                 if (effectiveBranchId) {
-                    this.socketService.emitToBranch(effectiveBranchId, 'discounts:delete', { id });
+                    this.socketService.emitToBranch(effectiveBranchId, realtimeEvents_1.RealtimeEvents.discounts.delete, { id });
                 }
             }
             catch (error) {

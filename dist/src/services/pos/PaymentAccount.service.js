@@ -14,6 +14,7 @@ const ShopProfile_1 = require("../../entity/pos/ShopProfile");
 const paymentAccount_schema_1 = require("../../schemas/paymentAccount.schema");
 const socket_service_1 = require("../socket.service");
 const dbContext_1 = require("../../database/dbContext");
+const realtimeEvents_1 = require("../../utils/realtimeEvents");
 class PaymentAccountService {
     constructor(model) {
         this.socketService = socket_service_1.SocketService.getInstance();
@@ -63,7 +64,7 @@ class PaymentAccountService {
                 // Sync with ShopProfile
                 yield this.syncToShopProfile(shopId, account);
             }
-            this.socketService.emitToBranch(branchId, "payment-accounts:create", account);
+            this.socketService.emitToBranch(branchId, realtimeEvents_1.RealtimeEvents.paymentAccounts.create, account);
             return account;
         });
     }
@@ -96,7 +97,7 @@ class PaymentAccountService {
             if (savedAccount.is_active) {
                 yield this.syncToShopProfile(shopId, savedAccount);
             }
-            this.socketService.emitToBranch(branchId, "payment-accounts:update", savedAccount);
+            this.socketService.emitToBranch(branchId, realtimeEvents_1.RealtimeEvents.paymentAccounts.update, savedAccount);
             return savedAccount;
         });
     }
@@ -113,7 +114,7 @@ class PaymentAccountService {
             const savedAccount = yield this.model.save(account);
             // Sync with ShopProfile
             yield this.syncToShopProfile(shopId, savedAccount);
-            this.socketService.emitToBranch(branchId, "payment-accounts:update", savedAccount);
+            this.socketService.emitToBranch(branchId, realtimeEvents_1.RealtimeEvents.paymentAccounts.update, savedAccount);
             return savedAccount;
         });
     }
@@ -127,7 +128,7 @@ class PaymentAccountService {
                 throw new Error("Cannot delete the active account. Please activate another account first.");
             }
             const result = yield this.model.delete(account);
-            this.socketService.emitToBranch(branchId, "payment-accounts:delete", { id: accountId });
+            this.socketService.emitToBranch(branchId, realtimeEvents_1.RealtimeEvents.paymentAccounts.delete, { id: accountId });
             return result;
         });
     }

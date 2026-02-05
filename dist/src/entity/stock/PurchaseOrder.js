@@ -86,5 +86,6 @@ exports.PurchaseOrder = PurchaseOrder = __decorate([
     // But if I want to be thorough, I should rename table too.
     // However, `stock_orders` table name is fine.
     ,
-    (0, typeorm_1.Index)("IDX_STOCK_ORDERS_STATUS_DATE", ["status", "create_date"])
+    (0, typeorm_1.Index)("IDX_STOCK_ORDERS_STATUS_DATE", ["status", "create_date"]),
+    (0, typeorm_1.Index)("IDX_STOCK_ORDERS_BRANCH_STATUS_DATE", ["branch_id", "status", "create_date"])
 ], PurchaseOrder);

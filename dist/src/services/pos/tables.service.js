@@ -11,6 +11,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TablesService = void 0;
 const socket_service_1 = require("../socket.service");
+const realtimeEvents_1 = require("../../utils/realtimeEvents");
 class TablesService {
     constructor(tablesModel) {
         this.tablesModel = tablesModel;
@@ -58,7 +59,7 @@ class TablesService {
                 }
                 const createdTable = yield this.tablesModel.create(tables);
                 if (createdTable.branch_id) {
-                    this.socketService.emitToBranch(createdTable.branch_id, 'tables:create', createdTable);
+                    this.socketService.emitToBranch(createdTable.branch_id, realtimeEvents_1.RealtimeEvents.tables.create, createdTable);
                 }
                 return createdTable;
             }
@@ -83,7 +84,7 @@ class TablesService {
                 const effectiveBranchId = tableToUpdate.branch_id || branchId || tables.branch_id;
                 const updatedTable = yield this.tablesModel.update(id, tables, effectiveBranchId);
                 if (effectiveBranchId) {
-                    this.socketService.emitToBranch(effectiveBranchId, 'tables:update', updatedTable);
+                    this.socketService.emitToBranch(effectiveBranchId, realtimeEvents_1.RealtimeEvents.tables.update, updatedTable);
                 }
                 return updatedTable;
             }
@@ -101,7 +102,7 @@ class TablesService {
                 yield this.tablesModel.delete(id, branchId);
                 const effectiveBranchId = existing.branch_id || branchId;
                 if (effectiveBranchId) {
-                    this.socketService.emitToBranch(effectiveBranchId, 'tables:delete', { id });
+                    this.socketService.emitToBranch(effectiveBranchId, realtimeEvents_1.RealtimeEvents.tables.delete, { id });
                 }
             }
             catch (error) {

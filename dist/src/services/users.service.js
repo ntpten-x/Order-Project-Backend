@@ -45,6 +45,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.UsersService = void 0;
 const bcrypt = __importStar(require("bcrypt"));
 const socket_service_1 = require("./socket.service");
+const realtimeEvents_1 = require("../utils/realtimeEvents");
 class UsersService {
     constructor(usersModel) {
         this.usersModel = usersModel;
@@ -80,7 +81,7 @@ class UsersService {
                 users.password = yield bcrypt.hash(users.password, 10);
                 yield this.usersModel.create(users);
                 const createdUser = yield this.usersModel.findOneByUsername(users.username);
-                this.socketService.emitToRole('Admin', 'users:create', createdUser);
+                this.socketService.emitToRole('Admin', realtimeEvents_1.RealtimeEvents.users.create, createdUser);
                 return createdUser;
             }
             catch (error) {
@@ -106,7 +107,7 @@ class UsersService {
                 }
                 yield this.usersModel.update(id, users);
                 const updatedUser = yield this.usersModel.findOne(id);
-                this.socketService.emitToRole('Admin', 'users:update', updatedUser);
+                this.socketService.emitToRole('Admin', realtimeEvents_1.RealtimeEvents.users.update, updatedUser);
                 return updatedUser;
             }
             catch (error) {
@@ -118,7 +119,7 @@ class UsersService {
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 yield this.usersModel.delete(id);
-                this.socketService.emitToRole('Admin', 'users:delete', { id });
+                this.socketService.emitToRole('Admin', realtimeEvents_1.RealtimeEvents.users.delete, { id });
             }
             catch (error) {
                 throw error;
