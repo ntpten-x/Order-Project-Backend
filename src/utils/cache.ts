@@ -7,6 +7,7 @@
  * - Reducing database load for read-heavy operations
  * - Cross-request caching for static-ish data
  */
+import { getRedisClient, getRedisPrefix } from "../lib/redisClient";
 
 interface CacheEntry<T> {
     value: T;
@@ -120,6 +121,10 @@ export class LRUCache<T> {
             maxSize: this.maxSize,
         };
     }
+
+    getDefaultTtl(): number {
+        return this.defaultTtl;
+    }
 }
 
 // Create singleton instances for different cache types
@@ -146,6 +151,51 @@ export const metadataCache = getCache<unknown>('metadata', {
     defaultTtl: 10 * 60 * 1000  // 10 minutes (for categories, units, etc.)
 });
 
+const redisCacheEnabled = process.env.REDIS_CACHE_ENABLED === "true";
+const redisCachePrefix = getRedisPrefix("cache");
+const redisScanCount = Number(process.env.REDIS_CACHE_SCAN_COUNT || 200);
+
+function toRedisCacheKey(key: string): string {
+    return `${redisCachePrefix}${key}`;
+}
+
+async function readFromRedisCache<T>(key: string): Promise<T | undefined> {
+    if (!redisCacheEnabled) return undefined;
+    const redis = await getRedisClient();
+    if (!redis) return undefined;
+
+    const raw = await redis.get(toRedisCacheKey(key));
+    if (!raw) return undefined;
+
+    try {
+        return JSON.parse(raw) as T;
+    } catch {
+        await redis.del(toRedisCacheKey(key));
+        return undefined;
+    }
+}
+
+async function writeToRedisCache<T>(key: string, value: T, ttlMs: number): Promise<void> {
+    if (!redisCacheEnabled) return;
+    const redis = await getRedisClient();
+    if (!redis) return;
+    await redis.set(toRedisCacheKey(key), JSON.stringify(value), { PX: ttlMs });
+}
+
+async function invalidateRedisCache(patterns: string[]): Promise<void> {
+    if (!redisCacheEnabled || patterns.length === 0) return;
+    const redis = await getRedisClient();
+    if (!redis) return;
+
+    for (const pattern of patterns) {
+        const match = `${toRedisCacheKey(pattern)}*`;
+        // scanIterator is non-blocking and safe for large keyspaces
+        for await (const key of redis.scanIterator({ MATCH: match, COUNT: redisScanCount })) {
+            await redis.del(String(key));
+        }
+    }
+}
+
 /**
  * Cache decorator for async functions
  * Usage:
@@ -157,13 +207,21 @@ export async function withCache<T>(
     ttl?: number,
     cache: LRUCache<T> = queryCache as LRUCache<T>
 ): Promise<T> {
+    const effectiveTtl = ttl ?? cache.getDefaultTtl();
     const cached = cache.get(key);
     if (cached !== undefined) {
         return cached;
     }
 
+    const redisCached = await readFromRedisCache<T>(key);
+    if (redisCached !== undefined) {
+        cache.set(key, redisCached, effectiveTtl);
+        return redisCached;
+    }
+
     const value = await fetcher();
-    cache.set(key, value, ttl);
+    cache.set(key, value, effectiveTtl);
+    await writeToRedisCache(key, value, effectiveTtl);
     return value;
 }
 
@@ -186,6 +244,9 @@ export function invalidateCache(patterns: string[]): void {
         queryCache.invalidatePattern(pattern);
         metadataCache.invalidatePattern(pattern);
     }
+    void invalidateRedisCache(patterns).catch((error) => {
+        console.error("[Cache] Redis invalidation failed:", error);
+    });
 }
 
 export default {

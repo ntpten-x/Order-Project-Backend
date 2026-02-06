@@ -43,8 +43,23 @@ Windows Task Scheduler example (Action: Start a program):
 - Program: `cmd.exe`
 - Arguments: `/c "cd /d E:\Project\Order-Project-Backend && set ORDER_RETENTION_ENABLED=true && npm run maintenance:cleanup-orders"`
 
+You can install schedules with helper scripts:
+
+- Linux: `bash scripts/maintenance/install-retention-cron.sh`
+- Windows (PowerShell): `.\scripts\maintenance\install-retention-task.ps1`
+
+## Monitoring the deletion result
+
+Each run writes a structured JSON summary to:
+
+- `RETENTION_LOG_FILE` (default: `logs/retention-jobs.log`)
+
+Useful env vars:
+
+- `RETENTION_WARN_DELETED_TOTAL` (default: `5000`) logs warning when total deleted rows in one run exceed threshold.
+- `ORDER_RETENTION_ENABLED` / `ORDER_QUEUE_RETENTION_ENABLED` must be `true` to delete data.
+
 ## Safety
 
 - Deletes only occur when `ORDER_RETENTION_ENABLED=true`. Otherwise the job runs in **dry-run** mode and only reports how many orders would be eligible.
 - Use `ORDER_RETENTION_DRY_RUN=true` to force dry-run even when enabled.
-

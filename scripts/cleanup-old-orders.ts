@@ -1,4 +1,6 @@
 import { AppDataSource, connectDatabase } from "../src/database/database";
+import { appendFile, mkdir } from "node:fs/promises";
+import path from "node:path";
 import {
     cleanupClosedOrdersOlderThan,
     cleanupOrderQueueOlderThan,
@@ -32,7 +34,15 @@ function parseIntOrUndefined(value: string | undefined): number | undefined {
     return Math.trunc(n);
 }
 
+async function appendRetentionLog(payload: Record<string, unknown>): Promise<void> {
+    const target = process.env.RETENTION_LOG_FILE || "logs/retention-jobs.log";
+    const absolutePath = path.isAbsolute(target) ? target : path.join(process.cwd(), target);
+    await mkdir(path.dirname(absolutePath), { recursive: true });
+    await appendFile(absolutePath, `${JSON.stringify(payload)}\n`, "utf8");
+}
+
 async function main(): Promise<void> {
+    const startedAt = Date.now();
     const retentionDays = parseIntOrUndefined(process.env.ORDER_RETENTION_DAYS) ?? DEFAULT_ORDER_RETENTION_DAYS;
     const statuses = parseCsv(process.env.ORDER_RETENTION_STATUSES) ?? DEFAULT_CLOSED_ORDER_STATUSES;
     const batchSize = parseIntOrUndefined(process.env.ORDER_RETENTION_BATCH_SIZE);
@@ -44,6 +54,7 @@ async function main(): Promise<void> {
     const queueDryRun = !queueEnabled ? true : parseBoolean(process.env.ORDER_QUEUE_RETENTION_DRY_RUN, false);
     const queueDays = parseIntOrUndefined(process.env.ORDER_QUEUE_RETENTION_DAYS) ?? DEFAULT_ORDER_QUEUE_RETENTION_DAYS;
     const queueStatuses = parseCsv(process.env.ORDER_QUEUE_RETENTION_STATUSES) ?? DEFAULT_QUEUE_CLOSED_STATUSES;
+    const warnDeletedThreshold = parseIntOrUndefined(process.env.RETENTION_WARN_DELETED_TOTAL) ?? 5000;
 
     console.log("[Retention] Cleanup closed orders started");
     console.log("[Retention] Config:", {
@@ -81,6 +92,31 @@ async function main(): Promise<void> {
             dryRun: queueDryRun,
         });
         console.log("[Retention] Queue Result:", queueResult);
+
+        const deletedTotal =
+            result.deleted.orders +
+            result.deleted.orderQueue +
+            result.deleted.payments +
+            result.deleted.items +
+            result.deleted.details +
+            queueResult.deleted;
+        const durationMs = Date.now() - startedAt;
+
+        if (deletedTotal >= warnDeletedThreshold) {
+            console.warn(`[Retention] High deletion volume detected: ${deletedTotal} rows (threshold: ${warnDeletedThreshold})`);
+        }
+
+        const summary = {
+            ts: new Date().toISOString(),
+            status: "success",
+            durationMs,
+            deletedTotal,
+            warnDeletedThreshold,
+            orders: result,
+            queue: queueResult,
+        };
+        console.log("[Retention][Summary]", JSON.stringify(summary));
+        await appendRetentionLog(summary);
     } finally {
         if (AppDataSource.isInitialized) {
             await AppDataSource.destroy();
@@ -90,5 +126,10 @@ async function main(): Promise<void> {
 
 main().catch((error) => {
     console.error("[Retention] Cleanup failed:", error);
+    void appendRetentionLog({
+        ts: new Date().toISOString(),
+        status: "failed",
+        error: error instanceof Error ? error.message : String(error),
+    });
     process.exitCode = 1;
 });

@@ -46,7 +46,7 @@ import { metrics } from "./src/utils/metrics";
 
 const app = express();
 const httpServer = createServer(app); // Wrap express with HTTP server
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 4000;
 const bodyLimitMb = Number(process.env.REQUEST_BODY_LIMIT_MB || 5);
 const enablePerfLogs = process.env.ENABLE_PERF_LOG === "true" || process.env.NODE_ENV !== "production";
 

@@ -14,6 +14,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SocketService = void 0;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
+const redis_1 = require("redis");
 const database_1 = require("../database/database");
 const Users_1 = require("../entity/Users");
 const realtimeEvents_1 = require("../utils/realtimeEvents");
@@ -37,6 +38,7 @@ const parseCookies = (cookieHeader) => {
 class SocketService {
     constructor() {
         this.io = null;
+        this.adapterInitStarted = false;
     }
     static getInstance() {
         if (!SocketService.instance) {
@@ -46,6 +48,7 @@ class SocketService {
     }
     init(io) {
         this.io = io;
+        void this.initRedisAdapter();
         // Middleware for authentication
         this.io.use((socket, next) => __awaiter(this, void 0, void 0, function* () {
             try {
@@ -140,6 +143,41 @@ class SocketService {
                 }
             }));
         }));
+    }
+    initRedisAdapter() {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (!this.io || this.adapterInitStarted)
+                return;
+            this.adapterInitStarted = true;
+            if (process.env.SOCKET_REDIS_ADAPTER_ENABLED !== "true") {
+                return;
+            }
+            const resolved = (0, redisClient_1.resolveRedisConfig)(process.env.REDIS_URL);
+            if (!resolved) {
+                console.warn("[SocketAdapter] SOCKET_REDIS_ADAPTER_ENABLED=true but REDIS_URL is missing.");
+                return;
+            }
+            try {
+                // Optional dependency for multi-instance Socket.IO fan-out.
+                // eslint-disable-next-line @typescript-eslint/no-var-requires
+                const adapterPkg = require("@socket.io/redis-adapter");
+                const createAdapter = adapterPkg === null || adapterPkg === void 0 ? void 0 : adapterPkg.createAdapter;
+                if (!createAdapter) {
+                    console.warn("[SocketAdapter] '@socket.io/redis-adapter' not available; running without distributed adapter.");
+                    return;
+                }
+                const pubClient = (0, redis_1.createClient)(resolved.config);
+                const subClient = pubClient.duplicate();
+                pubClient.on("error", (err) => console.error("[SocketAdapter] Redis pub error:", err));
+                subClient.on("error", (err) => console.error("[SocketAdapter] Redis sub error:", err));
+                yield Promise.all([pubClient.connect(), subClient.connect()]);
+                this.io.adapter(createAdapter(pubClient, subClient));
+                console.info("[SocketAdapter] Redis adapter enabled for multi-instance realtime.");
+            }
+            catch (error) {
+                console.error("[SocketAdapter] Failed to initialize Redis adapter. Falling back to local adapter.", error);
+            }
+        });
     }
     updateUserStatus(userId, isActive) {
         return __awaiter(this, void 0, void 0, function* () {

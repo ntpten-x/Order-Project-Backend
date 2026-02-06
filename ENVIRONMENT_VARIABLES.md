@@ -48,10 +48,12 @@
 ### Redis
 - `REDIS_URL` - Redis connection string (used for sessions/auth and as fallback for rate limiting)
 - `REDIS_PREFIX` - Key prefix namespace (default: `order-app`)
+- `REDIS_CACHE_ENABLED` - Enable Redis-backed cross-instance cache for `withCache` utilities (`true`/`false`)
 - `REDIS_TLS` - Optional override for Redis TLS (`true`/`false`). Defaults based on URL scheme (`rediss://` enables TLS)
 - `REDIS_TLS_REJECT_UNAUTHORIZED` - Optional override to reject unauthorized TLS certs (`true`/`false`)
 - `REDIS_TLS_AUTO_FALLBACK` - If `true`, retries with TLS disabled on `ERR_SSL_WRONG_VERSION_NUMBER` (defaults to `true` in non-production)
 - `REDIS_CONNECT_TIMEOUT_MS` - Optional Redis connect timeout in ms (default: 5000)
+- `SOCKET_REDIS_ADAPTER_ENABLED` - Enable Socket.IO Redis adapter for multi-instance realtime fan-out (`true`/`false`)
 
 ### Rate Limiting (Redis)
 - `RATE_LIMIT_REDIS_URL` - Redis connection string for distributed rate limiting (recommended in production)
@@ -81,6 +83,12 @@
 - `ORDER_RETENTION_BATCH_SIZE` - Max orders deleted per batch (default: 500)
 - `ORDER_RETENTION_MAX_BATCHES` - Max batches per run (default: 50)
 - `ORDER_RETENTION_DRY_RUN` - If `true`, only counts eligible orders and does not delete (default: false)
+- `ORDER_QUEUE_RETENTION_ENABLED` - Must be `true` to delete queue rows during retention runs
+- `ORDER_QUEUE_RETENTION_DAYS` - Delete queue rows older than N days (default: 7)
+- `ORDER_QUEUE_RETENTION_STATUSES` - Comma-separated `order_queue.status` values eligible for deletion
+- `ORDER_QUEUE_RETENTION_DRY_RUN` - If `true`, queue cleanup only counts and does not delete
+- `RETENTION_LOG_FILE` - Path to JSONL log file for retention run summaries (default: `logs/retention-jobs.log`)
+- `RETENTION_WARN_DELETED_TOTAL` - Warn threshold when one run deletes too many rows (default: 5000)
 
 ## Monitoring Services (Optional)
 

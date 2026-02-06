@@ -56,7 +56,7 @@ const monitoring_middleware_1 = require("./src/middleware/monitoring.middleware"
 const metrics_1 = require("./src/utils/metrics");
 const app = (0, express_1.default)();
 const httpServer = (0, http_1.createServer)(app); // Wrap express with HTTP server
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 4000;
 const bodyLimitMb = Number(process.env.REQUEST_BODY_LIMIT_MB || 5);
 const enablePerfLogs = process.env.ENABLE_PERF_LOG === "true" || process.env.NODE_ENV !== "production";
 // Trust proxy for secure cookies behind proxies (e.g., Render, Nginx)

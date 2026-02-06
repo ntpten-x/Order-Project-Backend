@@ -52,6 +52,28 @@ function buildRedisConfig(url: string, tlsEnabled: boolean, rejectUnauthorized: 
     return { url, socket };
 }
 
+export function resolveRedisConfig(url?: string): {
+    normalizedUrl: string;
+    tlsEnabled: boolean;
+    rejectUnauthorized: boolean;
+    config: ReturnType<typeof buildRedisConfig>;
+} | null {
+    const rawUrl = (url ?? REDIS_URL)?.trim();
+    if (!rawUrl) return null;
+
+    const tlsOverride = parseBoolean(process.env.REDIS_TLS);
+    const urlWantsTls = rawUrl.startsWith("rediss://");
+    const tlsEnabled = tlsOverride ?? urlWantsTls;
+    const rejectUnauthorized = parseBoolean(process.env.REDIS_TLS_REJECT_UNAUTHORIZED) ?? false;
+    const normalizedUrl = normalizeRedisScheme(rawUrl, tlsEnabled);
+    return {
+        normalizedUrl,
+        tlsEnabled,
+        rejectUnauthorized,
+        config: buildRedisConfig(normalizedUrl, tlsEnabled, rejectUnauthorized),
+    };
+}
+
 export function getRedisPrefix(namespace: string): string {
     return `${DEFAULT_REDIS_PREFIX}:${namespace}:`;
 }
@@ -67,17 +89,15 @@ export async function getRedisClient(): Promise<AnyRedisClient | null> {
     initializing = (async (): Promise<AnyRedisClient | null> => {
         try {
             const tlsOverride = parseBoolean(process.env.REDIS_TLS);
-            const urlWantsTls = REDIS_URL.startsWith("rediss://");
-            const tlsEnabled = tlsOverride ?? urlWantsTls;
-
-            const rejectUnauthorized = parseBoolean(process.env.REDIS_TLS_REJECT_UNAUTHORIZED) ?? false;
-            const normalizedUrl = normalizeRedisScheme(REDIS_URL, tlsEnabled);
+            const resolved = resolveRedisConfig(REDIS_URL);
+            if (!resolved) return null;
+            const { normalizedUrl, tlsEnabled, rejectUnauthorized, config } = resolved;
 
             const fallbackSetting = parseBoolean(process.env.REDIS_TLS_AUTO_FALLBACK);
             const autoTlsFallback = fallbackSetting ?? (process.env.NODE_ENV !== "production");
             const allowFallbackWhenForcedTls = fallbackSetting === true;
 
-            const instance = createClient(buildRedisConfig(normalizedUrl, tlsEnabled, rejectUnauthorized));
+            const instance = createClient(config);
 
             instance.on("error", (err) => {
                 console.error("[Redis] Client error:", err);

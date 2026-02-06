@@ -9,6 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.resolveRedisConfig = resolveRedisConfig;
 exports.getRedisPrefix = getRedisPrefix;
 exports.getRedisClient = getRedisClient;
 exports.getSessionKey = getSessionKey;
@@ -61,6 +62,23 @@ function buildRedisConfig(url, tlsEnabled, rejectUnauthorized) {
     }
     return { url, socket };
 }
+function resolveRedisConfig(url) {
+    var _a, _b;
+    const rawUrl = (_a = (url !== null && url !== void 0 ? url : REDIS_URL)) === null || _a === void 0 ? void 0 : _a.trim();
+    if (!rawUrl)
+        return null;
+    const tlsOverride = parseBoolean(process.env.REDIS_TLS);
+    const urlWantsTls = rawUrl.startsWith("rediss://");
+    const tlsEnabled = tlsOverride !== null && tlsOverride !== void 0 ? tlsOverride : urlWantsTls;
+    const rejectUnauthorized = (_b = parseBoolean(process.env.REDIS_TLS_REJECT_UNAUTHORIZED)) !== null && _b !== void 0 ? _b : false;
+    const normalizedUrl = normalizeRedisScheme(rawUrl, tlsEnabled);
+    return {
+        normalizedUrl,
+        tlsEnabled,
+        rejectUnauthorized,
+        config: buildRedisConfig(normalizedUrl, tlsEnabled, rejectUnauthorized),
+    };
+}
 function getRedisPrefix(namespace) {
     return `${DEFAULT_REDIS_PREFIX}:${namespace}:`;
 }
@@ -74,17 +92,16 @@ function getRedisClient() {
         if (initializing)
             return initializing;
         initializing = (() => __awaiter(this, void 0, void 0, function* () {
-            var _a;
             try {
                 const tlsOverride = parseBoolean(process.env.REDIS_TLS);
-                const urlWantsTls = REDIS_URL.startsWith("rediss://");
-                const tlsEnabled = tlsOverride !== null && tlsOverride !== void 0 ? tlsOverride : urlWantsTls;
-                const rejectUnauthorized = (_a = parseBoolean(process.env.REDIS_TLS_REJECT_UNAUTHORIZED)) !== null && _a !== void 0 ? _a : false;
-                const normalizedUrl = normalizeRedisScheme(REDIS_URL, tlsEnabled);
+                const resolved = resolveRedisConfig(REDIS_URL);
+                if (!resolved)
+                    return null;
+                const { normalizedUrl, tlsEnabled, rejectUnauthorized, config } = resolved;
                 const fallbackSetting = parseBoolean(process.env.REDIS_TLS_AUTO_FALLBACK);
                 const autoTlsFallback = fallbackSetting !== null && fallbackSetting !== void 0 ? fallbackSetting : (process.env.NODE_ENV !== "production");
                 const allowFallbackWhenForcedTls = fallbackSetting === true;
-                const instance = (0, redis_1.createClient)(buildRedisConfig(normalizedUrl, tlsEnabled, rejectUnauthorized));
+                const instance = (0, redis_1.createClient)(config);
                 instance.on("error", (err) => {
                     console.error("[Redis] Client error:", err);
                 });
@@ -103,7 +120,7 @@ function getRedisClient() {
                         try {
                             yield instance.disconnect();
                         }
-                        catch (_b) {
+                        catch (_a) {
                             // ignore
                         }
                         const retryTls = false;
