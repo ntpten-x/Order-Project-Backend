@@ -22,6 +22,12 @@ export class Shifts {
     @Column({ name: "branch_id", type: "uuid" })
     branch_id?: string;
 
+    @Column({ name: "opened_by_user_id", type: "uuid", nullable: true })
+    opened_by_user_id?: string;
+
+    @Column({ name: "closed_by_user_id", type: "uuid", nullable: true })
+    closed_by_user_id?: string;
+
     @ManyToOne(() => Branch)
     @JoinColumn({ name: "branch_id" })
     branch?: Branch;

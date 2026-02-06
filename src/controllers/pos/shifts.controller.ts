@@ -1,4 +1,3 @@
-
 import { Request, Response } from "express";
 import { ShiftsService } from "../../services/pos/shifts.service";
 import { catchAsync } from "../../utils/catchAsync";
@@ -12,7 +11,6 @@ export class ShiftsController {
     constructor(private shiftsService: ShiftsService) { }
 
     openShift = catchAsync(async (req: Request, res: Response) => {
-        // Get user_id from authenticated user
         const user_id = (req as any).user?.id;
         const branch_id = getBranchId(req as any);
         const { start_amount } = req.body;
@@ -32,8 +30,8 @@ export class ShiftsController {
             action_type: AuditActionType.SHIFT_OPEN,
             ...userInfo,
             ip_address: getClientIp(req),
-            user_agent: req.get('User-Agent'),
-            entity_type: 'Shifts',
+            user_agent: req.get("User-Agent"),
+            entity_type: "Shifts",
             entity_id: shift.id,
             branch_id,
             new_values: { start_amount: Number(start_amount) },
@@ -45,29 +43,47 @@ export class ShiftsController {
     });
 
     closeShift = catchAsync(async (req: Request, res: Response) => {
-        // Get user_id from authenticated user
         const user_id = (req as any).user?.id;
+        const userRole = (req as any).user?.roles?.roles_name;
+        const branchId = getBranchId(req as any);
         const { end_amount } = req.body;
 
         if (!user_id) {
             throw new AppError("Unauthorized - User not authenticated", 401);
+        }
+        if (!branchId) {
+            throw new AppError("Branch context is required", 400);
         }
 
         if (end_amount === undefined || end_amount === null) {
             throw new AppError("กรุณาระบุจำนวนเงินที่นับได้", 400);
         }
 
-        const shift = await this.shiftsService.closeShift(user_id, Number(end_amount));
+        const currentShift = await this.shiftsService.getCurrentShift(branchId);
+        if (!currentShift) {
+            throw new AppError("ไม่พบกะที่กำลังทำงานอยู่", 404);
+        }
+
+        const canCloseByRole = userRole === "Admin" || userRole === "Manager";
+        const isShiftOpener = currentShift.opened_by_user_id
+            ? currentShift.opened_by_user_id === user_id
+            : currentShift.user_id === user_id;
+
+        if (!canCloseByRole && !isShiftOpener) {
+            throw new AppError("Access denied: only Admin/Manager or shift opener can close shift", 403);
+        }
+
+        const shift = await this.shiftsService.closeShift(branchId, Number(end_amount), user_id);
 
         const userInfo = getUserInfoFromRequest(req as any);
         await auditLogger.log({
             action_type: AuditActionType.SHIFT_CLOSE,
             ...userInfo,
             ip_address: getClientIp(req),
-            user_agent: req.get('User-Agent'),
-            entity_type: 'Shifts',
+            user_agent: req.get("User-Agent"),
+            entity_type: "Shifts",
             entity_id: shift.id,
-            branch_id: getBranchId(req as any),
+            branch_id: branchId,
             new_values: { end_amount: Number(end_amount) },
             path: req.originalUrl,
             method: req.method,
@@ -77,14 +93,8 @@ export class ShiftsController {
     });
 
     getCurrentShift = catchAsync(async (req: Request, res: Response) => {
-        // Get user_id from authenticated user
-        const userId = (req as any).user?.id;
-
-        if (!userId) {
-            throw new AppError("Unauthorized - User not authenticated", 401);
-        }
-
-        const shift = await this.shiftsService.getCurrentShift(userId);
+        const branchId = getBranchId(req as any);
+        const shift = await this.shiftsService.getCurrentShift(branchId);
         return ApiResponses.ok(res, shift);
     });
 
@@ -96,13 +106,10 @@ export class ShiftsController {
     });
 
     getCurrentSummary = catchAsync(async (req: Request, res: Response) => {
-        const userId = (req as any).user?.id;
-        if (!userId) throw new AppError("Unauthorized", 401);
-
-        const currentShift = await this.shiftsService.getCurrentShift(userId);
+        const branchId = getBranchId(req as any);
+        const currentShift = await this.shiftsService.getCurrentShift(branchId);
         if (!currentShift) throw new AppError("No active shift found", 404);
 
-        const branchId = getBranchId(req as any);
         const summary = await this.shiftsService.getShiftSummary(currentShift.id, branchId);
         return ApiResponses.ok(res, summary);
     });

@@ -148,7 +148,7 @@ export class PaymentsService {
                 payments.change_amount = Number((amountReceived - amount).toFixed(2));
 
                 // Link to Active Shift
-                const activeShift = await this.shiftsService.getCurrentShift(userId);
+                const activeShift = await this.shiftsService.getCurrentShift(effectiveBranchId || branchId);
                 if (!activeShift) {
                     throw new AppError("กรุณาเปิดกะก่อนทำรายการชำระเงิน (Open Shift Required)", 400);
                 }

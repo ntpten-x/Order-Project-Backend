@@ -6,7 +6,7 @@ import { SalesOrder } from "../../entity/pos/SalesOrder";
 import { OrderStatus } from "../../entity/pos/OrderEnums";
 import { AppError } from "../../utils/AppError";
 import { SocketService } from "../socket.service";
-import { getRepository } from "../../database/dbContext";
+import { getRepository, runInTransaction } from "../../database/dbContext";
 import { RealtimeEvents } from "../../utils/realtimeEvents";
 
 export class ShiftsService {
@@ -25,49 +25,68 @@ export class ShiftsService {
     private socketService = SocketService.getInstance();
 
     async openShift(userId: string, startAmount: number, branchId?: string): Promise<Shifts> {
-        // Check if user already has an OPEN shift
-        const activeShift = await this.shiftsRepo.findOne({
-            where: {
-                user_id: userId,
-                status: ShiftStatus.OPEN
+        if (!branchId) {
+            throw new AppError("Branch context is required to open shift", 400);
+        }
+
+        const normalizedStartAmount = isNaN(startAmount) ? 0 : startAmount;
+
+        const shift = await runInTransaction(async (manager) => {
+            const repo = manager.getRepository(Shifts);
+            const activeShift = await repo.findOne({
+                where: {
+                    branch_id: branchId,
+                    status: ShiftStatus.OPEN
+                }
+            });
+
+            if (activeShift) {
+                return activeShift;
             }
+
+            const newShift = repo.create({
+                user_id: userId,
+                opened_by_user_id: userId,
+                branch_id: branchId,
+                start_amount: normalizedStartAmount,
+                status: ShiftStatus.OPEN,
+                open_time: new Date()
+            });
+
+            return await repo.save(newShift);
+        }).catch(async (error: any) => {
+            if (error?.code === "23505") {
+                const existing = await this.shiftsRepo.findOne({
+                    where: {
+                        branch_id: branchId,
+                        status: ShiftStatus.OPEN
+                    }
+                });
+                if (existing) return existing;
+            }
+            throw error;
         });
 
-        if (activeShift) {
-            throw new AppError("ผู้ใช้งานนี้มีกะที่เปิดอยู่แล้ว กรุณาปิดกะก่อนเปิดใหม่", 400);
-        }
-
-        const newShift = new Shifts();
-        newShift.user_id = userId;
-        if (branchId) newShift.branch_id = branchId;
-        newShift.start_amount = isNaN(startAmount) ? 0 : startAmount;
-        newShift.status = ShiftStatus.OPEN;
-        newShift.open_time = new Date();
-
-        const savedShift = await this.shiftsRepo.save(newShift);
-        if (branchId) {
-            this.socketService.emitToBranch(branchId, RealtimeEvents.shifts.update, savedShift);
-        }
-        return savedShift;
+        this.socketService.emitToBranch(branchId, RealtimeEvents.shifts.update, shift);
+        return shift;
     }
 
-    async getCurrentShift(userId: string): Promise<Shifts | null> {
+    async getCurrentShift(branchId?: string): Promise<Shifts | null> {
+        if (!branchId) return null;
         return await this.shiftsRepo.findOne({
             where: {
-                user_id: userId,
+                branch_id: branchId,
                 status: ShiftStatus.OPEN
             }
         });
     }
 
-    async closeShift(userId: string, endAmount: number): Promise<Shifts> {
-        const activeShift = await this.getCurrentShift(userId);
+    async closeShift(branchId: string, endAmount: number, closedByUserId?: string): Promise<Shifts> {
+        const activeShift = await this.getCurrentShift(branchId);
         if (!activeShift) {
             throw new AppError("ไม่พบกะที่กำลังทำงานอยู่", 404);
         }
 
-        // Check for pending/incomplete orders
-        // Only check orders created during this shift
         const pendingOrders = await this.salesOrderRepo.count({
             where: [
                 { status: OrderStatus.Pending, create_date: MoreThanOrEqual(activeShift.open_time), branch_id: activeShift.branch_id },
@@ -81,15 +100,12 @@ export class ShiftsService {
         if (pendingOrders > 0) {
             throw new AppError(`ไม่สามารถปิดกะได้ เนื่องจากยังมีออเดอร์ค้างอยู่ในระบบจำนวน ${pendingOrders} รายการ กรุณาจัดการให้เรียบร้อย (เสร็จสิ้น หรือ ยกเลิก) ก่อนปิดกะ`, 400);
         }
-        // Sum of all payments linked to this shift
+
         const payments = await this.paymentsRepo.find({
             where: { shift_id: activeShift.id }
         });
 
         const totalSales = Math.round(payments.reduce((sum, p) => sum + Number(p.amount), 0) * 100) / 100;
-
-        // Expected Amount = Start + Sales
-        // Note: In real world, we might subtract payouts/expenses. For now simple logic.
         const expectedAmount = Math.round((Number(activeShift.start_amount) + totalSales) * 100) / 100;
 
         activeShift.end_amount = endAmount;
@@ -97,12 +113,12 @@ export class ShiftsService {
         activeShift.diff_amount = Math.round((Number(endAmount) - expectedAmount) * 100) / 100;
         activeShift.status = ShiftStatus.CLOSED;
         activeShift.close_time = new Date();
+        if (closedByUserId) {
+            activeShift.closed_by_user_id = closedByUserId;
+        }
 
         const savedShift = await this.shiftsRepo.save(activeShift);
-        const branchId = activeShift.branch_id;
-        if (branchId) {
-            this.socketService.emitToBranch(branchId, RealtimeEvents.shifts.update, savedShift);
-        }
+        this.socketService.emitToBranch(branchId, RealtimeEvents.shifts.update, savedShift);
         return savedShift;
     }
 
@@ -118,10 +134,8 @@ export class ShiftsService {
 
         const payments = shift.payments || [];
 
-        // 1. Sales Calculation (only successful payments)
         const totalSales = Math.round(payments.reduce((sum, p) => sum + Number(p.amount), 0) * 100) / 100;
 
-        // 2. Cost and Profit Calculation
         let totalCost = 0;
         const categoryCounts: Record<string, number> = {};
         const productSales: Record<string, { id: string, name: string, quantity: number, revenue: number, unit: string }> = {};
@@ -135,11 +149,9 @@ export class ShiftsService {
             "Delivery": 0
         };
 
-        // Track seen orders to avoid double counting items
         const seenOrderIds = new Set<string>();
 
         payments.forEach(payment => {
-            // Calculate sales by payment method
             const methodName = payment.payment_method?.display_name || "อื่นๆ";
             paymentMethodSales[methodName] = Math.round(((paymentMethodSales[methodName] || 0) + Number(payment.amount)) * 100) / 100;
 
@@ -161,11 +173,9 @@ export class ShiftsService {
 
                 totalCost += cost * qty;
 
-                // Category counts
                 const catName = item.product?.category?.display_name || "อื่นๆ";
                 categoryCounts[catName] = (categoryCounts[catName] || 0) + qty;
 
-                // Product sales for top 5
                 const pId = item.product?.id;
                 if (pId) {
                     if (!productSales[pId]) {
@@ -186,7 +196,6 @@ export class ShiftsService {
         totalCost = Math.round(totalCost * 100) / 100;
         const netProfit = Math.round((totalSales - totalCost) * 100) / 100;
 
-        // Top 5 Products
         const topProducts = Object.values(productSales)
             .sort((a, b) => b.quantity - a.quantity)
             .slice(0, 5);
