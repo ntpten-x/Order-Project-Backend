@@ -60,9 +60,10 @@ function handleZodError(err: ZodError): { message: string; details: unknown } {
 // Handle database errors
 function handleDatabaseError(err: Error): { code: ErrorCode; message: string } {
     const errorMessage = err.message.toLowerCase();
+    const pgCode = (err as any)?.code || (err as any)?.driverError?.code;
 
     // PostgreSQL duplicate key violation
-    if (errorMessage.includes('duplicate key') || errorMessage.includes('unique constraint')) {
+    if (pgCode === '23505' || errorMessage.includes('duplicate key') || errorMessage.includes('unique constraint')) {
         return {
             code: ErrorCodes.DUPLICATE_ENTRY,
             message: 'A record with this value already exists',
@@ -70,16 +71,40 @@ function handleDatabaseError(err: Error): { code: ErrorCode; message: string } {
     }
 
     // PostgreSQL foreign key violation
-    if (errorMessage.includes('foreign key constraint')) {
+    if (pgCode === '23503' || errorMessage.includes('foreign key constraint')) {
         return {
             code: ErrorCodes.VALIDATION_ERROR,
             message: 'Referenced record does not exist',
         };
     }
 
+    // PostgreSQL not-null violation
+    if (pgCode === '23502' || errorMessage.includes('null value in column')) {
+        return {
+            code: ErrorCodes.VALIDATION_ERROR,
+            message: 'Required data is missing',
+        };
+    }
+
+    // PostgreSQL invalid text representation (e.g. invalid uuid)
+    if (pgCode === '22P02' || errorMessage.includes('invalid input syntax')) {
+        return {
+            code: ErrorCodes.VALIDATION_ERROR,
+            message: err.message || 'Invalid input syntax',
+        };
+    }
+
+    // PostgreSQL RLS / permission denied
+    if (pgCode === '42501' || errorMessage.includes('row-level security')) {
+        return {
+            code: ErrorCodes.FORBIDDEN,
+            message: 'Branch access denied by database policy',
+        };
+    }
+
     return {
         code: ErrorCodes.DATABASE_ERROR,
-        message: 'Database operation failed',
+        message: err.message || 'Database operation failed',
     };
 }
 
@@ -113,10 +138,17 @@ export const globalErrorHandler = (
     }
     // Handle database errors
     else if (err.name === 'QueryFailedError' || err.message.includes('violates')) {
-        statusCode = 409;
         const dbResult = handleDatabaseError(err);
         errorCode = dbResult.code;
         message = dbResult.message;
+
+        if (dbResult.code === ErrorCodes.DUPLICATE_ENTRY) {
+            statusCode = 409;
+        } else if (dbResult.code === ErrorCodes.VALIDATION_ERROR) {
+            statusCode = 400;
+        } else {
+            statusCode = 500;
+        }
     }
     // Handle JWT errors
     else if (err.name === 'JsonWebTokenError') {

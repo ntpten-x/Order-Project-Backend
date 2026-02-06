@@ -1,4 +1,4 @@
-import { MoreThanOrEqual } from "typeorm";
+import { MoreThanOrEqual, SelectQueryBuilder } from "typeorm";
 import { Shifts, ShiftStatus } from "../../entity/pos/Shifts";
 import { Payments } from "../../entity/pos/Payments";
 import { SalesOrderItem } from "../../entity/pos/SalesOrderItem";
@@ -221,6 +221,138 @@ export class ShiftsService {
             },
             categories: categoryCounts,
             top_products: topProducts
+        };
+    }
+
+    async getShiftHistory(options: {
+        branchId: string;
+        page?: number;
+        limit?: number;
+        q?: string;
+        status?: ShiftStatus;
+        dateFrom?: Date;
+        dateTo?: Date;
+    }) {
+        const {
+            branchId,
+            page = 1,
+            limit = 20,
+            q,
+            status,
+            dateFrom,
+            dateTo
+        } = options;
+
+        const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
+        const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(Math.floor(limit), 200) : 20;
+
+        const applyFilters = <T extends SelectQueryBuilder<Shifts>>(qb: T) => {
+            qb.where("shift.branch_id = :branchId", { branchId });
+
+            if (status) {
+                qb.andWhere("shift.status = :status", { status });
+            }
+
+            const keyword = q?.trim();
+            if (keyword) {
+                qb.andWhere(
+                    "(CAST(shift.id AS text) ILIKE :q OR user.username ILIKE :q OR user.name ILIKE :q)",
+                    { q: `%${keyword}%` }
+                );
+            }
+
+            if (dateFrom) {
+                qb.andWhere("shift.open_time >= :dateFrom", { dateFrom });
+            }
+
+            if (dateTo) {
+                qb.andWhere("shift.open_time <= :dateTo", { dateTo });
+            }
+
+            return qb;
+        };
+
+        const historyQuery = this.shiftsRepo
+            .createQueryBuilder("shift")
+            .leftJoinAndSelect("shift.user", "user");
+        applyFilters(historyQuery);
+
+        const [rows, total] = await historyQuery
+            .orderBy("shift.open_time", "DESC")
+            .skip((safePage - 1) * safeLimit)
+            .take(safeLimit)
+            .getManyAndCount();
+
+        const statsQuery = this.shiftsRepo
+            .createQueryBuilder("shift")
+            .leftJoin("shift.user", "user")
+            .select("COUNT(shift.id)", "total_count")
+            .addSelect("COALESCE(SUM(CASE WHEN shift.status = :openStatus THEN 1 ELSE 0 END), 0)", "open_count")
+            .addSelect("COALESCE(SUM(CASE WHEN shift.status = :closedStatus THEN 1 ELSE 0 END), 0)", "closed_count")
+            .addSelect("COALESCE(SUM(shift.start_amount), 0)", "total_start_amount")
+            .addSelect("COALESCE(SUM(shift.end_amount), 0)", "total_end_amount")
+            .addSelect("COALESCE(SUM(shift.expected_amount), 0)", "total_expected_amount")
+            .addSelect("COALESCE(SUM(shift.diff_amount), 0)", "total_diff_amount")
+            .setParameters({
+                openStatus: ShiftStatus.OPEN,
+                closedStatus: ShiftStatus.CLOSED
+            });
+        applyFilters(statsQuery);
+
+        const statsRaw = await statsQuery.getRawOne<{
+            total_count: string | number | null;
+            open_count: string | number | null;
+            closed_count: string | number | null;
+            total_start_amount: string | number | null;
+            total_end_amount: string | number | null;
+            total_expected_amount: string | number | null;
+            total_diff_amount: string | number | null;
+        }>();
+
+        const data = rows.map((shift) => ({
+            id: shift.id,
+            user_id: shift.user_id,
+            opened_by_user_id: shift.opened_by_user_id || null,
+            closed_by_user_id: shift.closed_by_user_id || null,
+            start_amount: Number(shift.start_amount || 0),
+            end_amount: shift.end_amount !== undefined && shift.end_amount !== null ? Number(shift.end_amount) : null,
+            expected_amount: shift.expected_amount !== undefined && shift.expected_amount !== null ? Number(shift.expected_amount) : null,
+            diff_amount: shift.diff_amount !== undefined && shift.diff_amount !== null ? Number(shift.diff_amount) : null,
+            status: shift.status,
+            open_time: shift.open_time,
+            close_time: shift.close_time || null,
+            create_date: shift.create_date,
+            update_date: shift.update_date,
+            user: shift.user
+                ? {
+                    id: shift.user.id,
+                    username: shift.user.username,
+                    name: shift.user.name || null
+                }
+                : null
+        }));
+
+        const totalPages = Math.max(Math.ceil(total / safeLimit), 1);
+
+        return {
+            data,
+            pagination: {
+                page: safePage,
+                limit: safeLimit,
+                total,
+                total_pages: totalPages,
+                has_next: safePage < totalPages,
+                has_prev: safePage > 1
+            },
+            stats: {
+                total: Number(statsRaw?.total_count || 0),
+                open: Number(statsRaw?.open_count || 0),
+                closed: Number(statsRaw?.closed_count || 0),
+                total_start_amount: Number(statsRaw?.total_start_amount || 0),
+                total_end_amount: Number(statsRaw?.total_end_amount || 0),
+                total_expected_amount: Number(statsRaw?.total_expected_amount || 0),
+                total_diff_amount: Number(statsRaw?.total_diff_amount || 0)
+            }
         };
     }
 }

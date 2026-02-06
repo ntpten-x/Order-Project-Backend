@@ -6,6 +6,7 @@ import { authenticateToken } from "../../middleware/auth.middleware";
 import { requireBranch } from "../../middleware/branch.middleware";
 import { validate } from "../../middleware/validate.middleware";
 import { closeShiftSchema, openShiftSchema, shiftSummaryIdParamSchema } from "../../utils/schemas/posMaster.schema";
+import { paginationQuerySchema } from "../../utils/schemas/common.schema";
 
 const shiftsRouter = Router();
 const shiftsService = new ShiftsService();
@@ -16,6 +17,7 @@ shiftsRouter.post("/open", authenticateToken, requireBranch, validate(openShiftS
 shiftsRouter.post("/close", authenticateToken, requireBranch, validate(closeShiftSchema), shiftsController.closeShift);
 shiftsRouter.get("/current", authenticateToken, requireBranch, shiftsController.getCurrentShift);
 shiftsRouter.get("/current/summary", authenticateToken, requireBranch, shiftsController.getCurrentSummary);
+shiftsRouter.get("/history", authenticateToken, requireBranch, validate(paginationQuerySchema), shiftsController.getHistory);
 shiftsRouter.get("/summary/:id", authenticateToken, requireBranch, validate(shiftSummaryIdParamSchema), shiftsController.getSummary);
 
 export default shiftsRouter;

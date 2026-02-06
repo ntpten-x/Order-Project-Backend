@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { ShiftsService } from "../../services/pos/shifts.service";
+import { ShiftStatus } from "../../entity/pos/Shifts";
 import { catchAsync } from "../../utils/catchAsync";
 import { AppError } from "../../utils/AppError";
 import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../../utils/auditLogger";
@@ -112,5 +113,51 @@ export class ShiftsController {
 
         const summary = await this.shiftsService.getShiftSummary(currentShift.id, branchId);
         return ApiResponses.ok(res, summary);
+    });
+
+    getHistory = catchAsync(async (req: Request, res: Response) => {
+        const branchId = getBranchId(req as any);
+        if (!branchId) {
+            throw new AppError("Branch context is required", 400);
+        }
+
+        const page = Math.max(parseInt(req.query.page as string) || 1, 1);
+        const rawLimit = parseInt(req.query.limit as string);
+        const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 20;
+        const q = (req.query.q as string | undefined) || undefined;
+
+        const rawStatus = (req.query.status as string | undefined)?.toUpperCase();
+        let status: ShiftStatus | undefined;
+        if (rawStatus) {
+            if (rawStatus !== ShiftStatus.OPEN && rawStatus !== ShiftStatus.CLOSED) {
+                throw new AppError("Invalid shift status filter", 400);
+            }
+            status = rawStatus as ShiftStatus;
+        }
+
+        const dateFromRaw = req.query.date_from as string | undefined;
+        const dateToRaw = req.query.date_to as string | undefined;
+
+        const dateFrom = dateFromRaw ? new Date(dateFromRaw) : undefined;
+        const dateTo = dateToRaw ? new Date(dateToRaw) : undefined;
+
+        if (dateFromRaw && Number.isNaN(dateFrom?.getTime())) {
+            throw new AppError("Invalid date_from", 400);
+        }
+        if (dateToRaw && Number.isNaN(dateTo?.getTime())) {
+            throw new AppError("Invalid date_to", 400);
+        }
+
+        const result = await this.shiftsService.getShiftHistory({
+            branchId,
+            page,
+            limit,
+            q,
+            status,
+            dateFrom,
+            dateTo
+        });
+
+        return ApiResponses.ok(res, result);
     });
 }

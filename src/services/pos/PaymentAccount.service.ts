@@ -5,6 +5,8 @@ import { ShopPaymentAccount } from "../../entity/pos/ShopPaymentAccount"
 import { SocketService } from "../socket.service"
 import { getRepository } from "../../database/dbContext"
 import { RealtimeEvents } from "../../utils/realtimeEvents"
+import { AppError } from "../../utils/AppError"
+import { Branch } from "../../entity/Branch"
 
 
 export class PaymentAccountService {
@@ -15,18 +17,64 @@ export class PaymentAccountService {
         this.model = model
     }
 
+    private async ensureBranchExists(branchId: string): Promise<void> {
+        const branchRepository = getRepository(Branch);
+        const branch = await branchRepository.findOne({ where: { id: branchId } as any });
+        if (!branch) {
+            throw AppError.badRequest("Invalid branch: branch not found.");
+        }
+    }
+
+    private throwPersistenceError(error: unknown, fallback: string): never {
+        const err = error as { code?: string; message?: string; driverError?: { code?: string } };
+        const code = err?.code || err?.driverError?.code;
+        const message = err?.message || fallback;
+        const lowerMessage = message.toLowerCase();
+
+        if (code === "23505" || lowerMessage.includes("duplicate key") || lowerMessage.includes("unique constraint")) {
+            throw AppError.conflict("This account number already exists in your shop.");
+        }
+
+        if (code === "23503" || lowerMessage.includes("foreign key constraint")) {
+            throw AppError.badRequest("Invalid branch/shop reference. Please verify branch selection.");
+        }
+
+        if (code === "23502" || lowerMessage.includes("null value in column")) {
+            throw AppError.badRequest("Missing required branch/shop information.");
+        }
+
+        if (code === "42501" || lowerMessage.includes("row-level security")) {
+            throw AppError.forbidden("Branch access denied for this operation.");
+        }
+
+        if (error instanceof Error) {
+            throw error;
+        }
+
+        throw AppError.internal(fallback);
+    }
+
     private async getShopIdForBranch(branchId: string): Promise<string> {
+        await this.ensureBranchExists(branchId);
+
         const shopRepository = getRepository(ShopProfile)
         const existing = await shopRepository.findOne({ where: { branch_id: branchId } as any });
         if (existing) return existing.id;
 
-        const created = await shopRepository.save({ branch_id: branchId, shop_name: "POS Shop" } as any);
-        return created.id;
+        try {
+            const created = await shopRepository.save({ branch_id: branchId, shop_name: "POS Shop" } as any);
+            return created.id;
+        } catch (error) {
+            // Handle race condition: another request may create the shop profile first.
+            const retry = await shopRepository.findOne({ where: { branch_id: branchId } as any });
+            if (retry) return retry.id;
+            this.throwPersistenceError(error, "Failed to create shop profile for branch.");
+        }
     }
 
     async getAccounts(branchId: string) {
         const shopId = await this.getShopIdForBranch(branchId);
-        return await this.model.findByShopId(shopId)
+        return await this.model.findByShopId(shopId, branchId)
     }
 
     async createAccount(branchId: string, data: CreatePaymentAccountDto) {
@@ -38,33 +86,37 @@ export class PaymentAccountService {
         }
 
         // Check for duplicate account number in this shop
-        const existing = await this.model.findByAccountNumber(shopId, data.account_number);
+        const existing = await this.model.findByAccountNumber(shopId, data.account_number, branchId);
 
-        if (existing) {
-            throw new Error("This account number already exists in your shop.");
-        }
+        if (existing) throw AppError.conflict("This account number already exists in your shop.");
 
         const accountData: Partial<ShopPaymentAccount> = {
+            branch_id: branchId,
             shop_id: shopId,
             ...data
         };
 
         // If this is the first account, make it active
-        const count = await this.model.count(shopId);
+        const count = await this.model.count(shopId, branchId);
         if (count === 0) {
             accountData.is_active = true;
         }
 
         // If newly created is set to active, deactivate others
         if (accountData.is_active) {
-            await this.model.deactivateAll(shopId);
+            await this.model.deactivateAll(shopId, branchId);
         }
 
-        const account = await this.model.create(accountData);
+        let account: ShopPaymentAccount;
+        try {
+            account = await this.model.create(accountData) as ShopPaymentAccount;
 
-        if (account.is_active) {
-            // Sync with ShopProfile
-            await this.syncToShopProfile(shopId, account);
+            if (account.is_active) {
+                // Sync with ShopProfile
+                await this.syncToShopProfile(shopId, account);
+            }
+        } catch (error) {
+            this.throwPersistenceError(error, "Failed to create payment account.");
         }
 
         this.socketService.emitToBranch(branchId, RealtimeEvents.paymentAccounts.create, account);
@@ -73,8 +125,8 @@ export class PaymentAccountService {
 
     async updateAccount(branchId: string, accountId: string, data: Partial<CreatePaymentAccountDto>) {
         const shopId = await this.getShopIdForBranch(branchId);
-        const account = await this.model.findOne(shopId, accountId);
-        if (!account) throw new Error("Account not found");
+        const account = await this.model.findOne(shopId, accountId, branchId);
+        if (!account) throw AppError.notFound("Payment account");
 
         if (data.account_number) {
             // Validate format
@@ -84,23 +136,28 @@ export class PaymentAccountService {
             }
             // Check duplicates if changing number
             if (data.account_number !== account.account_number) {
-                const existing = await this.model.findByAccountNumber(shopId, data.account_number);
-                if (existing) throw new Error("This account number already exists.");
+                const scopedExisting = await this.model.findByAccountNumber(shopId, data.account_number, branchId);
+                if (scopedExisting) throw AppError.conflict("This account number already exists in your shop.");
             }
         }
 
         Object.assign(account, data);
 
         if (account.is_active) {
-            await this.model.deactivateAll(shopId);
+            await this.model.deactivateAll(shopId, branchId);
             // Ensure it's true after bulk update (though object assignment handles it locally, model needs to save)
             account.is_active = true;
         }
 
-        const savedAccount = await this.model.save(account);
+        let savedAccount: ShopPaymentAccount;
+        try {
+            savedAccount = await this.model.save(account);
 
-        if (savedAccount.is_active) {
-            await this.syncToShopProfile(shopId, savedAccount);
+            if (savedAccount.is_active) {
+                await this.syncToShopProfile(shopId, savedAccount);
+            }
+        } catch (error) {
+            this.throwPersistenceError(error, "Failed to update payment account.");
         }
 
         this.socketService.emitToBranch(branchId, RealtimeEvents.paymentAccounts.update, savedAccount);
@@ -109,18 +166,23 @@ export class PaymentAccountService {
 
     async activateAccount(branchId: string, accountId: string) {
         const shopId = await this.getShopIdForBranch(branchId);
-        const account = await this.model.findOne(shopId, accountId);
-        if (!account) throw new Error("Account not found");
+        const account = await this.model.findOne(shopId, accountId, branchId);
+        if (!account) throw AppError.notFound("Payment account");
 
         // Deactivate all
-        await this.model.deactivateAll(shopId);
+        await this.model.deactivateAll(shopId, branchId);
 
         // Activate target
         account.is_active = true;
-        const savedAccount = await this.model.save(account);
+        let savedAccount: ShopPaymentAccount;
+        try {
+            savedAccount = await this.model.save(account);
 
-        // Sync with ShopProfile
-        await this.syncToShopProfile(shopId, savedAccount);
+            // Sync with ShopProfile
+            await this.syncToShopProfile(shopId, savedAccount);
+        } catch (error) {
+            this.throwPersistenceError(error, "Failed to activate payment account.");
+        }
 
         this.socketService.emitToBranch(branchId, RealtimeEvents.paymentAccounts.update, savedAccount);
         return savedAccount;
@@ -128,14 +190,20 @@ export class PaymentAccountService {
 
     async deleteAccount(branchId: string, accountId: string) {
         const shopId = await this.getShopIdForBranch(branchId);
-        const account = await this.model.findOne(shopId, accountId);
-        if (!account) throw new Error("Account not found");
+        const account = await this.model.findOne(shopId, accountId, branchId);
+        if (!account) throw AppError.notFound("Payment account");
 
         if (account.is_active) {
-            throw new Error("Cannot delete the active account. Please activate another account first.");
+            throw AppError.conflict("Cannot delete the active account. Please activate another account first.");
         }
 
-        const result = await this.model.delete(account);
+        let result: ShopPaymentAccount;
+        try {
+            result = await this.model.delete(account);
+        } catch (error) {
+            this.throwPersistenceError(error, "Failed to delete payment account.");
+        }
+
         this.socketService.emitToBranch(branchId, RealtimeEvents.paymentAccounts.delete, { id: accountId });
         return result;
     }
