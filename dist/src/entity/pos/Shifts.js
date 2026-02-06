@@ -34,6 +34,14 @@ __decorate([
     __metadata("design:type", String)
 ], Shifts.prototype, "branch_id", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ name: "opened_by_user_id", type: "uuid", nullable: true }),
+    __metadata("design:type", String)
+], Shifts.prototype, "opened_by_user_id", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: "closed_by_user_id", type: "uuid", nullable: true }),
+    __metadata("design:type", String)
+], Shifts.prototype, "closed_by_user_id", void 0);
+__decorate([
     (0, typeorm_1.ManyToOne)(() => Branch_1.Branch),
     (0, typeorm_1.JoinColumn)({ name: "branch_id" }),
     __metadata("design:type", Branch_1.Branch)

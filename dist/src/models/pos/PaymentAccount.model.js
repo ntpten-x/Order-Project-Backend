@@ -13,23 +13,27 @@ exports.PaymentAccountModel = void 0;
 const ShopPaymentAccount_1 = require("../../entity/pos/ShopPaymentAccount");
 const dbContext_1 = require("../../database/dbContext");
 class PaymentAccountModel {
-    findByShopId(shopId) {
+    findByShopId(shopId, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             return yield (0, dbContext_1.getRepository)(ShopPaymentAccount_1.ShopPaymentAccount).find({
-                where: { shop_id: shopId },
+                where: branchId ? { shop_id: shopId, branch_id: branchId } : { shop_id: shopId },
                 order: { is_active: "DESC", created_at: "DESC" }
             });
         });
     }
-    findOne(shopId, accountId) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, dbContext_1.getRepository)(ShopPaymentAccount_1.ShopPaymentAccount).findOne({ where: { id: accountId, shop_id: shopId } });
-        });
-    }
-    findByAccountNumber(shopId, accountNumber) {
+    findOne(shopId, accountId, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             return yield (0, dbContext_1.getRepository)(ShopPaymentAccount_1.ShopPaymentAccount).findOne({
-                where: { shop_id: shopId, account_number: accountNumber }
+                where: branchId ? { id: accountId, shop_id: shopId, branch_id: branchId } : { id: accountId, shop_id: shopId }
+            });
+        });
+    }
+    findByAccountNumber(shopId, accountNumber, branchId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return yield (0, dbContext_1.getRepository)(ShopPaymentAccount_1.ShopPaymentAccount).findOne({
+                where: branchId
+                    ? { shop_id: shopId, account_number: accountNumber, branch_id: branchId }
+                    : { shop_id: shopId, account_number: accountNumber }
             });
         });
     }
@@ -45,9 +49,9 @@ class PaymentAccountModel {
             return yield (0, dbContext_1.getRepository)(ShopPaymentAccount_1.ShopPaymentAccount).save(account);
         });
     }
-    deactivateAll(shopId) {
+    deactivateAll(shopId, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, dbContext_1.getRepository)(ShopPaymentAccount_1.ShopPaymentAccount).update({ shop_id: shopId }, { is_active: false });
+            return yield (0, dbContext_1.getRepository)(ShopPaymentAccount_1.ShopPaymentAccount).update(branchId ? { shop_id: shopId, branch_id: branchId } : { shop_id: shopId }, { is_active: false });
         });
     }
     delete(account) {
@@ -55,9 +59,11 @@ class PaymentAccountModel {
             return yield (0, dbContext_1.getRepository)(ShopPaymentAccount_1.ShopPaymentAccount).remove(account);
         });
     }
-    count(shopId) {
+    count(shopId, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
-            return yield (0, dbContext_1.getRepository)(ShopPaymentAccount_1.ShopPaymentAccount).count({ where: { shop_id: shopId } });
+            return yield (0, dbContext_1.getRepository)(ShopPaymentAccount_1.ShopPaymentAccount).count({
+                where: branchId ? { shop_id: shopId, branch_id: branchId } : { shop_id: shopId }
+            });
         });
     }
 }

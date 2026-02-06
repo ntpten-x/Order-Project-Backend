@@ -38,48 +38,65 @@ class ShiftsService {
     }
     openShift(userId, startAmount, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
-            // Check if user already has an OPEN shift
-            const activeShift = yield this.shiftsRepo.findOne({
-                where: {
-                    user_id: userId,
-                    status: Shifts_1.ShiftStatus.OPEN
+            if (!branchId) {
+                throw new AppError_1.AppError("Branch context is required to open shift", 400);
+            }
+            const normalizedStartAmount = isNaN(startAmount) ? 0 : startAmount;
+            const shift = yield (0, dbContext_1.runInTransaction)((manager) => __awaiter(this, void 0, void 0, function* () {
+                const repo = manager.getRepository(Shifts_1.Shifts);
+                const activeShift = yield repo.findOne({
+                    where: {
+                        branch_id: branchId,
+                        status: Shifts_1.ShiftStatus.OPEN
+                    }
+                });
+                if (activeShift) {
+                    return activeShift;
                 }
-            });
-            if (activeShift) {
-                throw new AppError_1.AppError("ผู้ใช้งานนี้มีกะที่เปิดอยู่แล้ว กรุณาปิดกะก่อนเปิดใหม่", 400);
-            }
-            const newShift = new Shifts_1.Shifts();
-            newShift.user_id = userId;
-            if (branchId)
-                newShift.branch_id = branchId;
-            newShift.start_amount = isNaN(startAmount) ? 0 : startAmount;
-            newShift.status = Shifts_1.ShiftStatus.OPEN;
-            newShift.open_time = new Date();
-            const savedShift = yield this.shiftsRepo.save(newShift);
-            if (branchId) {
-                this.socketService.emitToBranch(branchId, realtimeEvents_1.RealtimeEvents.shifts.update, savedShift);
-            }
-            return savedShift;
+                const newShift = repo.create({
+                    user_id: userId,
+                    opened_by_user_id: userId,
+                    branch_id: branchId,
+                    start_amount: normalizedStartAmount,
+                    status: Shifts_1.ShiftStatus.OPEN,
+                    open_time: new Date()
+                });
+                return yield repo.save(newShift);
+            })).catch((error) => __awaiter(this, void 0, void 0, function* () {
+                if ((error === null || error === void 0 ? void 0 : error.code) === "23505") {
+                    const existing = yield this.shiftsRepo.findOne({
+                        where: {
+                            branch_id: branchId,
+                            status: Shifts_1.ShiftStatus.OPEN
+                        }
+                    });
+                    if (existing)
+                        return existing;
+                }
+                throw error;
+            }));
+            this.socketService.emitToBranch(branchId, realtimeEvents_1.RealtimeEvents.shifts.update, shift);
+            return shift;
         });
     }
-    getCurrentShift(userId) {
+    getCurrentShift(branchId) {
         return __awaiter(this, void 0, void 0, function* () {
+            if (!branchId)
+                return null;
             return yield this.shiftsRepo.findOne({
                 where: {
-                    user_id: userId,
+                    branch_id: branchId,
                     status: Shifts_1.ShiftStatus.OPEN
                 }
             });
         });
     }
-    closeShift(userId, endAmount) {
+    closeShift(branchId, endAmount, closedByUserId) {
         return __awaiter(this, void 0, void 0, function* () {
-            const activeShift = yield this.getCurrentShift(userId);
+            const activeShift = yield this.getCurrentShift(branchId);
             if (!activeShift) {
                 throw new AppError_1.AppError("ไม่พบกะที่กำลังทำงานอยู่", 404);
             }
-            // Check for pending/incomplete orders
-            // Only check orders created during this shift
             const pendingOrders = yield this.salesOrderRepo.count({
                 where: [
                     { status: OrderEnums_1.OrderStatus.Pending, create_date: (0, typeorm_1.MoreThanOrEqual)(activeShift.open_time), branch_id: activeShift.branch_id },
@@ -92,24 +109,21 @@ class ShiftsService {
             if (pendingOrders > 0) {
                 throw new AppError_1.AppError(`ไม่สามารถปิดกะได้ เนื่องจากยังมีออเดอร์ค้างอยู่ในระบบจำนวน ${pendingOrders} รายการ กรุณาจัดการให้เรียบร้อย (เสร็จสิ้น หรือ ยกเลิก) ก่อนปิดกะ`, 400);
             }
-            // Sum of all payments linked to this shift
             const payments = yield this.paymentsRepo.find({
                 where: { shift_id: activeShift.id }
             });
             const totalSales = Math.round(payments.reduce((sum, p) => sum + Number(p.amount), 0) * 100) / 100;
-            // Expected Amount = Start + Sales
-            // Note: In real world, we might subtract payouts/expenses. For now simple logic.
             const expectedAmount = Math.round((Number(activeShift.start_amount) + totalSales) * 100) / 100;
             activeShift.end_amount = endAmount;
             activeShift.expected_amount = expectedAmount;
             activeShift.diff_amount = Math.round((Number(endAmount) - expectedAmount) * 100) / 100;
             activeShift.status = Shifts_1.ShiftStatus.CLOSED;
             activeShift.close_time = new Date();
-            const savedShift = yield this.shiftsRepo.save(activeShift);
-            const branchId = activeShift.branch_id;
-            if (branchId) {
-                this.socketService.emitToBranch(branchId, realtimeEvents_1.RealtimeEvents.shifts.update, savedShift);
+            if (closedByUserId) {
+                activeShift.closed_by_user_id = closedByUserId;
             }
+            const savedShift = yield this.shiftsRepo.save(activeShift);
+            this.socketService.emitToBranch(branchId, realtimeEvents_1.RealtimeEvents.shifts.update, savedShift);
             return savedShift;
         });
     }
@@ -123,9 +137,7 @@ class ShiftsService {
                 throw new AppError_1.AppError("ไม่พบข้อมูลกะ", 404);
             }
             const payments = shift.payments || [];
-            // 1. Sales Calculation (only successful payments)
             const totalSales = Math.round(payments.reduce((sum, p) => sum + Number(p.amount), 0) * 100) / 100;
-            // 2. Cost and Profit Calculation
             let totalCost = 0;
             const categoryCounts = {};
             const productSales = {};
@@ -138,11 +150,9 @@ class ShiftsService {
                 "TakeAway": 0,
                 "Delivery": 0
             };
-            // Track seen orders to avoid double counting items
             const seenOrderIds = new Set();
             payments.forEach(payment => {
                 var _a;
-                // Calculate sales by payment method
                 const methodName = ((_a = payment.payment_method) === null || _a === void 0 ? void 0 : _a.display_name) || "อื่นๆ";
                 paymentMethodSales[methodName] = Math.round(((paymentMethodSales[methodName] || 0) + Number(payment.amount)) * 100) / 100;
                 if (payment.order) {
@@ -161,10 +171,8 @@ class ShiftsService {
                     const cost = Number(((_a = item.product) === null || _a === void 0 ? void 0 : _a.cost) || 0);
                     const revenue = Number(item.total_price);
                     totalCost += cost * qty;
-                    // Category counts
                     const catName = ((_c = (_b = item.product) === null || _b === void 0 ? void 0 : _b.category) === null || _c === void 0 ? void 0 : _c.display_name) || "อื่นๆ";
                     categoryCounts[catName] = (categoryCounts[catName] || 0) + qty;
-                    // Product sales for top 5
                     const pId = (_d = item.product) === null || _d === void 0 ? void 0 : _d.id;
                     if (pId) {
                         if (!productSales[pId]) {
@@ -183,7 +191,6 @@ class ShiftsService {
             });
             totalCost = Math.round(totalCost * 100) / 100;
             const netProfit = Math.round((totalSales - totalCost) * 100) / 100;
-            // Top 5 Products
             const topProducts = Object.values(productSales)
                 .sort((a, b) => b.quantity - a.quantity)
                 .slice(0, 5);
@@ -208,6 +215,98 @@ class ShiftsService {
                 },
                 categories: categoryCounts,
                 top_products: topProducts
+            };
+        });
+    }
+    getShiftHistory(options) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const { branchId, page = 1, limit = 20, q, status, dateFrom, dateTo } = options;
+            const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
+            const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(Math.floor(limit), 200) : 20;
+            const applyFilters = (qb) => {
+                qb.where("shift.branch_id = :branchId", { branchId });
+                if (status) {
+                    qb.andWhere("shift.status = :status", { status });
+                }
+                const keyword = q === null || q === void 0 ? void 0 : q.trim();
+                if (keyword) {
+                    qb.andWhere("(CAST(shift.id AS text) ILIKE :q OR user.username ILIKE :q OR user.name ILIKE :q)", { q: `%${keyword}%` });
+                }
+                if (dateFrom) {
+                    qb.andWhere("shift.open_time >= :dateFrom", { dateFrom });
+                }
+                if (dateTo) {
+                    qb.andWhere("shift.open_time <= :dateTo", { dateTo });
+                }
+                return qb;
+            };
+            const historyQuery = this.shiftsRepo
+                .createQueryBuilder("shift")
+                .leftJoinAndSelect("shift.user", "user");
+            applyFilters(historyQuery);
+            const [rows, total] = yield historyQuery
+                .orderBy("shift.open_time", "DESC")
+                .skip((safePage - 1) * safeLimit)
+                .take(safeLimit)
+                .getManyAndCount();
+            const statsQuery = this.shiftsRepo
+                .createQueryBuilder("shift")
+                .leftJoin("shift.user", "user")
+                .select("COUNT(shift.id)", "total_count")
+                .addSelect("COALESCE(SUM(CASE WHEN shift.status = :openStatus THEN 1 ELSE 0 END), 0)", "open_count")
+                .addSelect("COALESCE(SUM(CASE WHEN shift.status = :closedStatus THEN 1 ELSE 0 END), 0)", "closed_count")
+                .addSelect("COALESCE(SUM(shift.start_amount), 0)", "total_start_amount")
+                .addSelect("COALESCE(SUM(shift.end_amount), 0)", "total_end_amount")
+                .addSelect("COALESCE(SUM(shift.expected_amount), 0)", "total_expected_amount")
+                .addSelect("COALESCE(SUM(shift.diff_amount), 0)", "total_diff_amount")
+                .setParameters({
+                openStatus: Shifts_1.ShiftStatus.OPEN,
+                closedStatus: Shifts_1.ShiftStatus.CLOSED
+            });
+            applyFilters(statsQuery);
+            const statsRaw = yield statsQuery.getRawOne();
+            const data = rows.map((shift) => ({
+                id: shift.id,
+                user_id: shift.user_id,
+                opened_by_user_id: shift.opened_by_user_id || null,
+                closed_by_user_id: shift.closed_by_user_id || null,
+                start_amount: Number(shift.start_amount || 0),
+                end_amount: shift.end_amount !== undefined && shift.end_amount !== null ? Number(shift.end_amount) : null,
+                expected_amount: shift.expected_amount !== undefined && shift.expected_amount !== null ? Number(shift.expected_amount) : null,
+                diff_amount: shift.diff_amount !== undefined && shift.diff_amount !== null ? Number(shift.diff_amount) : null,
+                status: shift.status,
+                open_time: shift.open_time,
+                close_time: shift.close_time || null,
+                create_date: shift.create_date,
+                update_date: shift.update_date,
+                user: shift.user
+                    ? {
+                        id: shift.user.id,
+                        username: shift.user.username,
+                        name: shift.user.name || null
+                    }
+                    : null
+            }));
+            const totalPages = Math.max(Math.ceil(total / safeLimit), 1);
+            return {
+                data,
+                pagination: {
+                    page: safePage,
+                    limit: safeLimit,
+                    total,
+                    total_pages: totalPages,
+                    has_next: safePage < totalPages,
+                    has_prev: safePage > 1
+                },
+                stats: {
+                    total: Number((statsRaw === null || statsRaw === void 0 ? void 0 : statsRaw.total_count) || 0),
+                    open: Number((statsRaw === null || statsRaw === void 0 ? void 0 : statsRaw.open_count) || 0),
+                    closed: Number((statsRaw === null || statsRaw === void 0 ? void 0 : statsRaw.closed_count) || 0),
+                    total_start_amount: Number((statsRaw === null || statsRaw === void 0 ? void 0 : statsRaw.total_start_amount) || 0),
+                    total_end_amount: Number((statsRaw === null || statsRaw === void 0 ? void 0 : statsRaw.total_end_amount) || 0),
+                    total_expected_amount: Number((statsRaw === null || statsRaw === void 0 ? void 0 : statsRaw.total_expected_amount) || 0),
+                    total_diff_amount: Number((statsRaw === null || statsRaw === void 0 ? void 0 : statsRaw.total_diff_amount) || 0)
+                }
             };
         });
     }

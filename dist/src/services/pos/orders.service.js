@@ -59,11 +59,11 @@ class OrdersService {
             return ["admin"];
         return ["public"];
     }
-    ensureActiveShift(userId) {
+    ensureActiveShift(branchId) {
         return __awaiter(this, void 0, void 0, function* () {
-            const activeShift = yield this.shiftsService.getCurrentShift(userId);
+            const activeShift = yield this.shiftsService.getCurrentShift(branchId);
             if (!activeShift) {
-                throw new AppError_1.AppError("กรุณาเปิดกะก่อนทำรายการ (Active Shift Required)", 400);
+                throw new AppError_1.AppError("เน€เธยเน€เธเธเน€เธเธเน€เธโ€เน€เธเธ’เน€เธโฌเน€เธยเน€เธเธ”เน€เธโ€เน€เธยเน€เธเธเน€เธยเน€เธยเน€เธเธเน€เธยเน€เธโ€”เน€เธเธ“เน€เธเธเน€เธเธ’เน€เธเธเน€เธยเน€เธเธ’เน€เธเธ (Active Shift Required)", 400);
             }
         });
     }
@@ -93,7 +93,7 @@ class OrdersService {
                 .map(i => i.product_id)
                 .filter((id) => !!id);
             if (productIds.length === 0) {
-                throw new AppError_1.AppError("ไม่มีรายการสินค้าในคำสั่งซื้อ", 400);
+                throw new AppError_1.AppError("เน€เธยเน€เธเธเน€เธยเน€เธเธเน€เธเธ•เน€เธเธเน€เธเธ’เน€เธเธเน€เธยเน€เธเธ’เน€เธเธเน€เธเธเน€เธเธ”เน€เธยเน€เธยเน€เธยเน€เธเธ’เน€เธยเน€เธยเน€เธยเน€เธเธ“เน€เธเธเน€เธเธ‘เน€เธยเน€เธยเน€เธยเน€เธเธ—เน€เธยเน€เธเธ", 400);
             }
             // 2. Optimization: Batch Fetch Products (Single Query)
             // Instead of querying N times inside the loop
@@ -209,15 +209,13 @@ class OrdersService {
     }
     create(orders, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
-            if (orders.created_by_id) {
-                yield this.ensureActiveShift(orders.created_by_id);
-            }
+            yield this.ensureActiveShift(orders.branch_id || branchId);
             return yield (0, dbContext_1.runInTransaction)((manager) => __awaiter(this, void 0, void 0, function* () {
                 try {
                     if (orders.order_no) {
                         const existingOrder = yield this.ordersModel.findOneByOrderNo(orders.order_no);
                         if (existingOrder) {
-                            throw new Error("เลขที่ออเดอร์นี้มีอยู่ในระบบแล้ว");
+                            throw new Error("เน€เธโฌเน€เธเธ…เน€เธยเน€เธโ€”เน€เธเธ•เน€เธยเน€เธเธเน€เธเธเน€เธโฌเน€เธโ€เน€เธเธเน€เธเธเน€เธยเน€เธยเน€เธเธ•เน€เธยเน€เธเธเน€เธเธ•เน€เธเธเน€เธเธเน€เธเธเน€เธยเน€เธยเน€เธยเน€เธเธเน€เธเธเน€เธยเน€เธยเน€เธยเน€เธเธ…เน€เธยเน€เธเธ");
                         }
                     }
                     else {
@@ -287,17 +285,15 @@ class OrdersService {
     createFullOrder(data, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             const { items } = data, orderData = __rest(data, ["items"]);
-            if (orderData.created_by_id) {
-                yield this.ensureActiveShift(orderData.created_by_id);
-            }
+            yield this.ensureActiveShift(orderData.branch_id || branchId);
             return yield (0, dbContext_1.runInTransaction)((manager) => __awaiter(this, void 0, void 0, function* () {
                 if (!items || !Array.isArray(items) || items.length === 0) {
-                    throw new AppError_1.AppError("กรุณาระบุรายการสินค้า", 400);
+                    throw new AppError_1.AppError("เน€เธยเน€เธเธเน€เธเธเน€เธโ€เน€เธเธ’เน€เธเธเน€เธเธเน€เธยเน€เธเธเน€เธเธเน€เธเธ’เน€เธเธเน€เธยเน€เธเธ’เน€เธเธเน€เธเธเน€เธเธ”เน€เธยเน€เธยเน€เธยเน€เธเธ’", 400);
                 }
                 if (orderData.order_no) {
                     const existingOrder = yield this.ordersModel.findOneByOrderNo(orderData.order_no);
                     if (existingOrder) {
-                        throw new Error("เลขที่ออเดอร์นี้มีอยู่ในระบบแล้ว");
+                        throw new Error("เน€เธโฌเน€เธเธ…เน€เธยเน€เธโ€”เน€เธเธ•เน€เธยเน€เธเธเน€เธเธเน€เธโฌเน€เธโ€เน€เธเธเน€เธเธเน€เธยเน€เธยเน€เธเธ•เน€เธยเน€เธเธเน€เธเธ•เน€เธเธเน€เธเธเน€เธเธเน€เธยเน€เธยเน€เธยเน€เธเธเน€เธเธเน€เธยเน€เธยเน€เธยเน€เธเธ…เน€เธยเน€เธเธ");
                     }
                 }
                 else {
@@ -384,7 +380,7 @@ class OrdersService {
             try {
                 const orderToUpdate = yield this.ordersModel.findOne(id, branchId);
                 if (!orderToUpdate) {
-                    throw new Error("ไม่พบข้อมูลออเดอร์ที่ต้องการแก้ไข");
+                    throw new Error("เน€เธยเน€เธเธเน€เธยเน€เธยเน€เธยเน€เธยเน€เธยเน€เธเธเน€เธเธเน€เธเธเน€เธเธ…เน€เธเธเน€เธเธเน€เธโฌเน€เธโ€เน€เธเธเน€เธเธเน€เธยเน€เธโ€”เน€เธเธ•เน€เธยเน€เธโ€ขเน€เธยเน€เธเธเน€เธยเน€เธยเน€เธเธ’เน€เธเธเน€เธยเน€เธยเน€เธยเน€เธยเน€เธย");
                 }
                 const effectiveBranchId = orderToUpdate.branch_id || branchId;
                 // Validate foreign keys to prevent cross-branch access
@@ -408,7 +404,7 @@ class OrdersService {
                 if (orders.order_no && orders.order_no !== orderToUpdate.order_no) {
                     const existingOrder = yield this.ordersModel.findOneByOrderNo(orders.order_no, effectiveBranchId);
                     if (existingOrder) {
-                        throw new Error("เลขที่ออเดอร์นี้มีอยู่ในระบบแล้ว");
+                        throw new Error("เน€เธโฌเน€เธเธ…เน€เธยเน€เธโ€”เน€เธเธ•เน€เธยเน€เธเธเน€เธเธเน€เธโฌเน€เธโ€เน€เธเธเน€เธเธเน€เธยเน€เธยเน€เธเธ•เน€เธยเน€เธเธเน€เธเธ•เน€เธเธเน€เธเธเน€เธเธเน€เธยเน€เธยเน€เธยเน€เธเธเน€เธเธเน€เธยเน€เธยเน€เธยเน€เธเธ…เน€เธยเน€เธเธ");
                     }
                 }
                 if (orders.status) {
