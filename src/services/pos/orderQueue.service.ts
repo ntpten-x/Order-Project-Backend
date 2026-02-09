@@ -62,7 +62,7 @@ export class OrderQueueService {
 
         const saved = await queueRepository.save(queueItem);
         this.invalidateQueueCache(effectiveBranchId);
-        
+
         // Emit socket event
         this.socketService.emitToBranch(
             effectiveBranchId || "",
@@ -78,12 +78,18 @@ export class OrderQueueService {
      */
     private async getNextQueuePosition(branchId?: string): Promise<number> {
         const queueRepository = getRepository(OrderQueue);
+
+        // Reset daily: get max position created today
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+
         const query = queueRepository
             .createQueryBuilder('queue')
-            .select('MAX(queue.queue_position)', 'max');
+            .select('MAX(queue.queue_position)', 'max')
+            .where('queue.created_at >= :startOfToday', { startOfToday });
 
         if (branchId) {
-            query.where('queue.branch_id = :branchId', { branchId });
+            query.andWhere('queue.branch_id = :branchId', { branchId });
         }
 
         const result = await query.getRawOne();
@@ -190,7 +196,7 @@ export class OrderQueueService {
             where: branchId ? { branch_id: branchId, status: QueueStatus.Pending } : { status: QueueStatus.Pending },
             order: { priority: "DESC", queue_position: "ASC" },
         });
-        
+
         // Sort by priority and current position
         queueItems.sort((a, b) => {
             const priorityOrder = {
