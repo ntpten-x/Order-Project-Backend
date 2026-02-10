@@ -39,6 +39,7 @@ const orderQueue_service_1 = require("./orderQueue.service");
 const OrderQueue_1 = require("../../entity/pos/OrderQueue");
 const dbContext_1 = require("../../database/dbContext");
 const realtimeEvents_1 = require("../../utils/realtimeEvents");
+const orderStatus_1 = require("../../utils/orderStatus");
 class OrdersService {
     constructor(ordersModel) {
         this.ordersModel = ordersModel;
@@ -152,10 +153,13 @@ class OrdersService {
         });
     }
     ensureValidStatus(status) {
-        if (!Object.values(OrderEnums_1.OrderStatus).includes(status)) {
+        try {
+            // Accept legacy values but always normalize to canonical casing.
+            return (0, orderStatus_1.normalizeOrderStatus)(status);
+        }
+        catch (_a) {
             throw new AppError_1.AppError("Invalid status", 400);
         }
-        return status;
     }
     findAll(page, limit, statuses, type, query, branchId) {
         return __awaiter(this, void 0, void 0, function* () {

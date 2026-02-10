@@ -20,6 +20,7 @@ const Tables_1 = require("../../entity/pos/Tables");
 const PaymentMethod_1 = require("../../entity/pos/PaymentMethod");
 const dbContext_1 = require("../../database/dbContext");
 const realtimeEvents_1 = require("../../utils/realtimeEvents");
+const orderStatus_1 = require("../../utils/orderStatus");
 class PaymentsService {
     constructor(paymentsModel) {
         this.paymentsModel = paymentsModel;
@@ -60,7 +61,7 @@ class PaymentsService {
             const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount), 0);
             const totalReceived = payments.reduce((sum, p) => sum + Number(p.amount_received || 0), 0);
             const totalChange = payments.reduce((sum, p) => sum + Number(p.change_amount || 0), 0);
-            const nextStatus = order.status === OrderEnums_1.OrderStatus.Cancelled
+            const nextStatus = (0, orderStatus_1.isCancelledStatus)(order.status)
                 ? OrderEnums_1.OrderStatus.Cancelled
                 : totalPaid >= Number(order.total_amount)
                     ? OrderEnums_1.OrderStatus.Completed // Order is Completed
@@ -125,7 +126,7 @@ class PaymentsService {
                     if (!order) {
                         throw new AppError_1.AppError("ไม่พบออเดอร์", 404);
                     }
-                    if (order.status === OrderEnums_1.OrderStatus.Cancelled) {
+                    if ((0, orderStatus_1.isCancelledStatus)(order.status)) {
                         throw new AppError_1.AppError("ออเดอร์ถูกยกเลิกแล้ว", 400);
                     }
                     const effectiveBranchId = order.branch_id || branchId;

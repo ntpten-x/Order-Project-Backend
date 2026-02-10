@@ -14,6 +14,8 @@ const socket_service_1 = require("../socket.service");
 const SalesOrder_1 = require("../../entity/pos/SalesOrder");
 const dbContext_1 = require("../../database/dbContext");
 const realtimeEvents_1 = require("../../utils/realtimeEvents");
+const orderTotals_service_1 = require("./orderTotals.service");
+const orderStatus_1 = require("../../utils/orderStatus");
 class SalesOrderItemService {
     constructor(salesOrderItemModel) {
         this.salesOrderItemModel = salesOrderItemModel;
@@ -55,7 +57,16 @@ class SalesOrderItemService {
                         throw new Error("Order not found for this branch");
                     }
                 }
+                // Normalize legacy status values (e.g. 'cancelled') to canonical casing on write.
+                if (salesOrderItem.status !== undefined) {
+                    salesOrderItem.status = (0, orderStatus_1.normalizeOrderStatus)(salesOrderItem.status);
+                }
                 const createdItem = yield this.salesOrderItemModel.create(salesOrderItem);
+                // Keep order totals consistent even if this endpoint is used directly.
+                yield (0, orderTotals_service_1.recalculateOrderTotal)(createdItem.order_id);
+                if (branchId) {
+                    this.socketService.emitToBranch(branchId, realtimeEvents_1.RealtimeEvents.orders.update, { id: createdItem.order_id });
+                }
                 const completeItem = yield this.salesOrderItemModel.findOne(createdItem.id, branchId);
                 if (completeItem) {
                     if (branchId) {
@@ -77,7 +88,14 @@ class SalesOrderItemService {
                 if (!itemToUpdate) {
                     throw new Error("ไม่พบข้อมูลรายการสินค้าในออเดอร์ที่ต้องการแก้ไข");
                 }
+                if (salesOrderItem.status !== undefined) {
+                    salesOrderItem.status = (0, orderStatus_1.normalizeOrderStatus)(salesOrderItem.status);
+                }
                 const updatedItem = yield this.salesOrderItemModel.update(id, salesOrderItem, branchId);
+                yield (0, orderTotals_service_1.recalculateOrderTotal)(itemToUpdate.order_id);
+                if (branchId) {
+                    this.socketService.emitToBranch(branchId, realtimeEvents_1.RealtimeEvents.orders.update, { id: itemToUpdate.order_id });
+                }
                 if (branchId) {
                     this.socketService.emitToBranch(branchId, realtimeEvents_1.RealtimeEvents.salesOrderItem.update, updatedItem);
                 }
@@ -91,7 +109,14 @@ class SalesOrderItemService {
     delete(id, branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
+                const item = yield this.salesOrderItemModel.findOne(id, branchId);
                 yield this.salesOrderItemModel.delete(id, branchId);
+                if (item === null || item === void 0 ? void 0 : item.order_id) {
+                    yield (0, orderTotals_service_1.recalculateOrderTotal)(item.order_id);
+                    if (branchId) {
+                        this.socketService.emitToBranch(branchId, realtimeEvents_1.RealtimeEvents.orders.update, { id: item.order_id });
+                    }
+                }
                 if (branchId) {
                     this.socketService.emitToBranch(branchId, realtimeEvents_1.RealtimeEvents.salesOrderItem.delete, { id });
                 }

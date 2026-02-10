@@ -20,6 +20,7 @@ const AppError_1 = require("../../utils/AppError");
 const socket_service_1 = require("../socket.service");
 const dbContext_1 = require("../../database/dbContext");
 const realtimeEvents_1 = require("../../utils/realtimeEvents");
+const orderStatus_1 = require("../../utils/orderStatus");
 class ShiftsService {
     constructor() {
         this.socketService = socket_service_1.SocketService.getInstance();
@@ -165,7 +166,7 @@ class ShiftsService {
                 const items = payment.order.items || [];
                 items.forEach(item => {
                     var _a, _b, _c, _d, _e;
-                    if (item.status === 'Cancelled')
+                    if ((0, orderStatus_1.isCancelledStatus)(item.status))
                         return;
                     const qty = Number(item.quantity);
                     const cost = Number(((_a = item.product) === null || _a === void 0 ? void 0 : _a.cost) || 0);
