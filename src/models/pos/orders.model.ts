@@ -137,7 +137,7 @@ export class OrdersModels {
                         FROM sales_order_item i
                         LEFT JOIN products p ON p.id = i.product_id
                         LEFT JOIN category c ON c.id = p.category_id
-                        WHERE i.order_id = o.id AND i.status <> 'Cancelled'
+                        WHERE i.order_id = o.id AND i.status::text NOT IN ('Cancelled', 'cancelled')
                         GROUP BY c.display_name
                     ) s
                 ) item_summary ON true

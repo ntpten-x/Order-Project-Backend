@@ -19,6 +19,7 @@ import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../../util
 import { getClientIp } from "../../utils/securityLogger";
 import { getDbContext, getRepository, runInTransaction } from "../../database/dbContext";
 import { RealtimeEvents } from "../../utils/realtimeEvents";
+import { normalizeOrderStatus } from "../../utils/orderStatus";
 
 export class OrdersService {
     private socketService = SocketService.getInstance();
@@ -149,10 +150,12 @@ export class OrdersService {
     }
 
     private ensureValidStatus(status: string): OrderStatus {
-        if (!Object.values(OrderStatus).includes(status as OrderStatus)) {
+        try {
+            // Accept legacy values but always normalize to canonical casing.
+            return normalizeOrderStatus(status);
+        } catch {
             throw new AppError("Invalid status", 400);
         }
-        return status as OrderStatus;
     }
 
     async findAll(page: number, limit: number, statuses?: string[], type?: string, query?: string, branchId?: string): Promise<{ data: SalesOrder[], total: number, page: number, limit: number }> {

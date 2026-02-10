@@ -8,6 +8,7 @@ import { AppError } from "../../utils/AppError";
 import { SocketService } from "../socket.service";
 import { getRepository, runInTransaction } from "../../database/dbContext";
 import { RealtimeEvents } from "../../utils/realtimeEvents";
+import { isCancelledStatus } from "../../utils/orderStatus";
 
 export class ShiftsService {
     private get shiftsRepo() {
@@ -165,7 +166,7 @@ export class ShiftsService {
 
             const items = payment.order.items || [];
             items.forEach(item => {
-                if (item.status === 'Cancelled') return;
+                if (isCancelledStatus(item.status)) return;
 
                 const qty = Number(item.quantity);
                 const cost = Number(item.product?.cost || 0);

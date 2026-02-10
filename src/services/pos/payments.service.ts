@@ -10,6 +10,7 @@ import { EntityManager } from "typeorm";
 import { PaymentMethod } from "../../entity/pos/PaymentMethod";
 import { getDbManager, runInTransaction } from "../../database/dbContext";
 import { RealtimeEvents } from "../../utils/realtimeEvents";
+import { isCancelledStatus } from "../../utils/orderStatus";
 
 export class PaymentsService {
     private socketService = SocketService.getInstance();
@@ -51,7 +52,7 @@ export class PaymentsService {
         const totalChange = payments.reduce((sum, p) => sum + Number(p.change_amount || 0), 0);
 
         const nextStatus =
-            order.status === OrderStatus.Cancelled
+            isCancelledStatus(order.status)
                 ? OrderStatus.Cancelled
                 : totalPaid >= Number(order.total_amount)
                     ? OrderStatus.Completed // Order is Completed
@@ -123,7 +124,7 @@ export class PaymentsService {
                 if (!order) {
                     throw new AppError("ไม่พบออเดอร์", 404);
                 }
-                if (order.status === OrderStatus.Cancelled) {
+                if (isCancelledStatus(order.status)) {
                     throw new AppError("ออเดอร์ถูกยกเลิกแล้ว", 400);
                 }
 
