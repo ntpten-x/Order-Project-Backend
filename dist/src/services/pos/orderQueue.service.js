@@ -81,11 +81,15 @@ class OrderQueueService {
     getNextQueuePosition(branchId) {
         return __awaiter(this, void 0, void 0, function* () {
             const queueRepository = (0, dbContext_1.getRepository)(OrderQueue_1.OrderQueue);
+            // Reset daily: get max position created today
+            const startOfToday = new Date();
+            startOfToday.setHours(0, 0, 0, 0);
             const query = queueRepository
                 .createQueryBuilder('queue')
-                .select('MAX(queue.queue_position)', 'max');
+                .select('MAX(queue.queue_position)', 'max')
+                .where('queue.created_at >= :startOfToday', { startOfToday });
             if (branchId) {
-                query.where('queue.branch_id = :branchId', { branchId });
+                query.andWhere('queue.branch_id = :branchId', { branchId });
             }
             const result = yield query.getRawOne();
             return ((result === null || result === void 0 ? void 0 : result.max) || 0) + 1;
