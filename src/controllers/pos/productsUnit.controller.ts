@@ -6,6 +6,7 @@ import { ApiResponses } from "../../utils/ApiResponse";
 import { AppError } from "../../utils/AppError";
 import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../../utils/auditLogger";
 import { getClientIp } from "../../utils/securityLogger";
+import { setPrivateSwrHeaders } from "../../utils/cacheHeaders";
 
 export class ProductsUnitController {
     constructor(private productsUnitService: ProductsUnitService) { }
@@ -13,6 +14,7 @@ export class ProductsUnitController {
     findAll = catchAsync(async (req: Request, res: Response) => {
         const branchId = getBranchId(req as any);
         const productsUnits = await this.productsUnitService.findAll(branchId);
+        setPrivateSwrHeaders(res);
         return ApiResponses.ok(res, productsUnits);
     });
 
@@ -20,6 +22,7 @@ export class ProductsUnitController {
         const branchId = getBranchId(req as any);
         const productsUnit = await this.productsUnitService.findOne(req.params.id, branchId);
         if (!productsUnit) throw AppError.notFound("Products unit");
+        setPrivateSwrHeaders(res);
         return ApiResponses.ok(res, productsUnit);
     });
 
@@ -27,6 +30,7 @@ export class ProductsUnitController {
         const branchId = getBranchId(req as any);
         const productsUnit = await this.productsUnitService.findOneByName(req.params.products_unit_name, branchId);
         if (!productsUnit) throw AppError.notFound("Products unit");
+        setPrivateSwrHeaders(res);
         return ApiResponses.ok(res, productsUnit);
     });
 

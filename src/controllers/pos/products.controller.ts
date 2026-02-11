@@ -6,6 +6,7 @@ import { ApiResponses } from "../../utils/ApiResponse";
 import { getBranchId } from "../../middleware/branch.middleware";
 import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../../utils/auditLogger";
 import { getClientIp } from "../../utils/securityLogger";
+import { setPrivateSwrHeaders } from "../../utils/cacheHeaders";
 
 /**
  * Products Controller
@@ -43,7 +44,7 @@ export class ProductsController {
         const branchId = getBranchId(req as any);
         
         const result = await this.productsService.findAll(page, limit, category_id, q, is_active, branchId);
-        
+        setPrivateSwrHeaders(res);
         return ApiResponses.paginated(res, result.data, {
             page: result.page,
             limit: limit,
@@ -57,6 +58,7 @@ export class ProductsController {
         if (!product) {
             throw AppError.notFound("สินค้า");
         }
+        setPrivateSwrHeaders(res);
         return ApiResponses.ok(res, product);
     });
 
@@ -66,6 +68,7 @@ export class ProductsController {
         if (!product) {
             throw AppError.notFound("สินค้า");
         }
+        setPrivateSwrHeaders(res);
         return ApiResponses.ok(res, product);
     });
 

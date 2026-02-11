@@ -187,13 +187,21 @@ export class OrdersService {
         }
     }
 
-    async findAllSummary(page: number, limit: number, statuses?: string[], type?: string, query?: string, branchId?: string): Promise<{ data: any[], total: number, page: number, limit: number }> {
+    async findAllSummary(
+        page: number,
+        limit: number,
+        statuses?: string[],
+        type?: string,
+        query?: string,
+        branchId?: string,
+        options?: { bypassCache?: boolean }
+    ): Promise<{ data: any[], total: number, page: number, limit: number }> {
         const statusKey = statuses?.length ? statuses.join(",") : "all";
         const typeKey = type || "all";
         const scope = this.getCacheScopeParts(branchId);
         const key = cacheKey(this.SUMMARY_CACHE_PREFIX, ...scope, "list", page, limit, statusKey, typeKey);
 
-        if (query?.trim() || page > 1) {
+        if (options?.bypassCache || query?.trim() || page > 1) {
             return this.ordersModel.findAllSummary(page, limit, statuses, type, query, branchId);
         }
 
@@ -209,13 +217,17 @@ export class OrdersService {
         );
     }
 
-    async getStats(branchId?: string): Promise<{ dineIn: number, takeaway: number, delivery: number, total: number }> {
+    async getStats(branchId?: string, options?: { bypassCache?: boolean }): Promise<{ dineIn: number, takeaway: number, delivery: number, total: number }> {
         const activeStatuses = [
             OrderStatus.Pending,
             OrderStatus.Cooking,
             OrderStatus.Served,
             OrderStatus.WaitingForPayment,
         ];
+
+        if (options?.bypassCache) {
+            return this.ordersModel.getStats(activeStatuses, branchId);
+        }
 
         const scope = this.getCacheScopeParts(branchId);
         const key = cacheKey(this.STATS_CACHE_PREFIX, ...scope, "active");

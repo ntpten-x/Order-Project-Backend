@@ -6,6 +6,7 @@ import { ApiResponses } from "../../utils/ApiResponse";
 import { getBranchId } from "../../middleware/branch.middleware";
 import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../../utils/auditLogger";
 import { getClientIp } from "../../utils/securityLogger";
+import { setPrivateSwrHeaders } from "../../utils/cacheHeaders";
 
 export class DiscountsController {
     constructor(private discountsService: DiscountsService) { }
@@ -14,6 +15,7 @@ export class DiscountsController {
         const q = (req.query.q as string | undefined) || undefined;
         const branchId = getBranchId(req as any);
         const discounts = await this.discountsService.findAll(q, branchId);
+        setPrivateSwrHeaders(res);
         return ApiResponses.ok(res, discounts);
     });
 
@@ -23,6 +25,7 @@ export class DiscountsController {
         if (!discount) {
             throw AppError.notFound("ส่วนลด");
         }
+        setPrivateSwrHeaders(res);
         return ApiResponses.ok(res, discount);
     });
 
@@ -32,6 +35,7 @@ export class DiscountsController {
         if (!discount) {
             throw AppError.notFound("ส่วนลด");
         }
+        setPrivateSwrHeaders(res);
         return ApiResponses.ok(res, discount);
     });
 
