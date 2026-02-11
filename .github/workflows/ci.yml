@@ -7,7 +7,7 @@ on:
     branches: [ main, master ]
 
 jobs:
-  build:
+  check-dev:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -22,8 +22,66 @@ jobs:
       - name: Install
         run: npm ci
 
-      - name: Lint
-        run: npm run lint
+      - name: Dev Gate
+        run: npm run check:dev
+
+  check-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Release Gate
+        run: npm run check:release
+
+      - name: Perf Regression Guard
+        run: npm run perf:guard
+
+      - name: API Perf Regression (p95/TTFB)
+        if: ${{ secrets.DATABASE_HOST != '' && secrets.DATABASE_USER != '' && secrets.DATABASE_PASSWORD != '' && secrets.DATABASE_NAME != '' }}
+        run: npm run perf:api
+        env:
+          DATABASE_HOST: ${{ secrets.DATABASE_HOST }}
+          DATABASE_PORT: ${{ secrets.DATABASE_PORT }}
+          DATABASE_USER: ${{ secrets.DATABASE_USER }}
+          DATABASE_PASSWORD: ${{ secrets.DATABASE_PASSWORD }}
+          DATABASE_NAME: ${{ secrets.DATABASE_NAME }}
+          DATABASE_SSL: ${{ secrets.DATABASE_SSL }}
+          DATABASE_SSL_REJECT_UNAUTHORIZED: ${{ secrets.DATABASE_SSL_REJECT_UNAUTHORIZED }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          PERF_GUARD_P95_MS: 250
+          PERF_GUARD_TTFB_P95_MS: 120
+          PERF_GUARD_MAX_ERROR_RATE: 0.02
+
+      - name: Auth Orders Summary Perf Regression
+        if: ${{ secrets.DATABASE_HOST != '' && secrets.DATABASE_USER != '' && secrets.DATABASE_PASSWORD != '' && secrets.DATABASE_NAME != '' }}
+        run: npm run perf:orders-summary
+        env:
+          DATABASE_HOST: ${{ secrets.DATABASE_HOST }}
+          DATABASE_PORT: ${{ secrets.DATABASE_PORT }}
+          DATABASE_USER: ${{ secrets.DATABASE_USER }}
+          DATABASE_PASSWORD: ${{ secrets.DATABASE_PASSWORD }}
+          DATABASE_NAME: ${{ secrets.DATABASE_NAME }}
+          DATABASE_SSL: ${{ secrets.DATABASE_SSL }}
+          DATABASE_SSL_REJECT_UNAUTHORIZED: ${{ secrets.DATABASE_SSL_REJECT_UNAUTHORIZED }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          E2E_USERNAME: ${{ secrets.E2E_USERNAME }}
+          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
+          PERF_SUMMARY_ENDPOINT: /pos/orders/summary?page=1&limit=50
+          PERF_SUMMARY_REQUESTS: 50
+          PERF_SUMMARY_CONCURRENCY: 5
+          PERF_SUMMARY_P95_MS: 800
+          PERF_SUMMARY_TTFB_P95_MS: 500
+          PERF_SUMMARY_MAX_ERROR_RATE: 0.02
 
       - name: Test
         run: npm run test

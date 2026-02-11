@@ -10,6 +10,18 @@ import { parseStatusQuery } from "../../utils/statusQuery";
 
 export class OrdersController {
     constructor(private ordersService: OrdersService) { }
+    private readonly summaryResponseMaxAgeSec = Number(process.env.ORDERS_SUMMARY_RESPONSE_CACHE_MAX_AGE_SEC || 10);
+    private readonly summaryResponseStaleSec = Number(process.env.ORDERS_SUMMARY_RESPONSE_CACHE_STALE_SEC || 20);
+    private readonly summaryResponseCachePublic = process.env.ORDERS_SUMMARY_RESPONSE_CACHE_PUBLIC === "true";
+
+    private setSummaryCacheHeaders(res: Response): void {
+        const visibility = this.summaryResponseCachePublic ? "public" : "private";
+        res.setHeader(
+            "Cache-Control",
+            `${visibility}, max-age=0, s-maxage=${this.summaryResponseMaxAgeSec}, stale-while-revalidate=${this.summaryResponseStaleSec}`
+        );
+        res.setHeader("Vary", "Authorization, Cookie");
+    }
 
     findAll = catchAsync(async (req: Request, res: Response) => {
         const page = Math.max(parseInt(req.query.page as string) || 1, 1);
@@ -38,6 +50,7 @@ export class OrdersController {
         const branchId = getBranchId(req as any);
 
         const result = await this.ordersService.findAllSummary(page, limit, statuses, type, query, branchId);
+        this.setSummaryCacheHeaders(res);
         return ApiResponses.paginated(res, result.data, {
             page: result.page,
             limit: result.limit,
@@ -48,6 +61,7 @@ export class OrdersController {
     getStats = catchAsync(async (req: Request, res: Response) => {
         const branchId = getBranchId(req as any);
         const stats = await this.ordersService.getStats(branchId);
+        this.setSummaryCacheHeaders(res);
         return ApiResponses.ok(res, stats);
     })
 
