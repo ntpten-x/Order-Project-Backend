@@ -7,6 +7,7 @@ import { securityLogger, getClientIp } from "../utils/securityLogger";
 import { getRepository, runWithDbContext } from "../database/dbContext";
 import { ApiResponses } from "../utils/ApiResponse";
 import { getRedisClient, getSessionKey } from "../lib/redisClient";
+import { normalizeRoleName } from "../utils/role";
 
 export interface AuthRequest extends Request {
     user?: Users;
@@ -128,8 +129,12 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
             return ApiResponses.forbidden(res, "Account disabled");
         }
 
-        const role = user.roles?.roles_name;
-        const isAdmin = role === "Admin";
+        const normalizedRole = normalizeRoleName(user.roles?.roles_name);
+        if (!normalizedRole) {
+            return ApiResponses.forbidden(res, "Invalid role configuration");
+        }
+        user.roles.roles_name = normalizedRole;
+        const isAdmin = normalizedRole === "Admin";
 
         // Admin branch switching:
         // - Non-admins are always scoped to their own branch_id.
@@ -143,7 +148,7 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
         // Run the rest of the request inside a DB context so Postgres RLS (if enabled)
         // can enforce branch isolation even if a future query forgets branch_id filters.
         return runWithDbContext(
-            { branchId: effectiveBranchId, userId: user.id, role, isAdmin },
+            { branchId: effectiveBranchId, userId: user.id, role: normalizedRole, isAdmin },
             async () => {
                 if (user.branch_id) {
                     const branch = await getRepository(Branch).findOneBy({ id: user.branch_id });
@@ -204,9 +209,12 @@ export const authorizeRole = (allowedRoles: string[]) => {
             return ApiResponses.unauthorized(res, "Authentication required");
         }
 
-        const userRole = req.user.roles?.roles_name;
+        const userRole = normalizeRoleName(req.user.roles?.roles_name);
+        const normalizedAllowed = allowedRoles
+            .map((role) => normalizeRoleName(role))
+            .filter((role): role is NonNullable<typeof role> => !!role);
 
-        if (!userRole || !allowedRoles.includes(userRole)) {
+        if (!userRole || !normalizedAllowed.includes(userRole)) {
             return ApiResponses.forbidden(res, "Access denied: Insufficient permissions");
         }
 

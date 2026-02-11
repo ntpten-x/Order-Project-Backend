@@ -39,12 +39,12 @@ class PriceCalculatorService {
         const amountAfterDiscount = subTotal - discountAmount;
         let vatAmount = 0;
         if (vatIncluded) {
-            // Price includes VAT (e.g. 107 baht -> VAT 7)
+            // Price includes VAT (currently configured as 0%)
             // Formula: Amount * (Rate / (1 + Rate))
             vatAmount = amountAfterDiscount * (PriceCalculatorService.VAT_RATE / (1 + PriceCalculatorService.VAT_RATE));
         }
         else {
-            // Price excludes VAT (e.g. 100 baht -> VAT 7 -> Total 107)
+            // Price excludes VAT (currently configured as 0%)
             vatAmount = amountAfterDiscount * PriceCalculatorService.VAT_RATE;
         }
         // 4. Calculate Net Total
@@ -65,4 +65,4 @@ class PriceCalculatorService {
     }
 }
 exports.PriceCalculatorService = PriceCalculatorService;
-PriceCalculatorService.VAT_RATE = 0.07; // 7%
+PriceCalculatorService.VAT_RATE = 0; // 0%

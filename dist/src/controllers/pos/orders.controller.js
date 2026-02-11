@@ -16,6 +16,7 @@ const auditLogger_1 = require("../../utils/auditLogger");
 const securityLogger_1 = require("../../utils/securityLogger");
 const ApiResponse_1 = require("../../utils/ApiResponse");
 const branch_middleware_1 = require("../../middleware/branch.middleware");
+const statusQuery_1 = require("../../utils/statusQuery");
 class OrdersController {
     constructor(ordersService) {
         this.ordersService = ordersService;
@@ -23,7 +24,7 @@ class OrdersController {
             const page = Math.max(parseInt(req.query.page) || 1, 1);
             const limitRaw = parseInt(req.query.limit) || 50;
             const limit = Math.min(Math.max(limitRaw, 1), 200); // cap to prevent huge payloads
-            const statuses = req.query.status ? req.query.status.split(',') : undefined;
+            const statuses = (0, statusQuery_1.parseStatusQuery)(req.query.status);
             const type = req.query.type;
             const query = req.query.q;
             const branchId = (0, branch_middleware_1.getBranchId)(req);
@@ -38,7 +39,7 @@ class OrdersController {
             const page = Math.max(parseInt(req.query.page) || 1, 1);
             const limitRaw = parseInt(req.query.limit) || 50;
             const limit = Math.min(Math.max(limitRaw, 1), 200);
-            const statuses = req.query.status ? req.query.status.split(',') : undefined;
+            const statuses = (0, statusQuery_1.parseStatusQuery)(req.query.status);
             const type = req.query.type;
             const query = req.query.q;
             const branchId = (0, branch_middleware_1.getBranchId)(req);
@@ -113,7 +114,7 @@ class OrdersController {
         this.update = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(this, void 0, void 0, function* () {
             var _a;
             const user = req.user;
-            const branchId = user === null || user === void 0 ? void 0 : user.branch_id;
+            const branchId = (0, branch_middleware_1.getBranchId)(req);
             if (branchId) {
                 // Prevent branch_id tampering
                 req.body.branch_id = branchId;
@@ -129,7 +130,7 @@ class OrdersController {
                 user_agent: req.headers['user-agent'],
                 entity_type: 'SalesOrder',
                 entity_id: order.id,
-                branch_id: user === null || user === void 0 ? void 0 : user.branch_id,
+                branch_id: branchId,
                 old_values: oldOrder ? { status: oldOrder.status, order_no: oldOrder.order_no } : undefined,
                 new_values: { status: order.status, order_no: order.order_no },
                 description: `Updated order ${order.order_no}`,
@@ -146,7 +147,7 @@ class OrdersController {
                     user_agent: req.headers['user-agent'],
                     entity_type: 'SalesOrder',
                     entity_id: order.id,
-                    branch_id: user === null || user === void 0 ? void 0 : user.branch_id,
+                    branch_id: branchId,
                     old_values: { status: oldOrder.status },
                     new_values: { status: req.body.status },
                     description: `Changed order status ${order.order_no}: ${oldOrder.status} -> ${req.body.status}`,

@@ -27,11 +27,11 @@ export class Users {
     roles_id!: string
 
     @Index()
-    @Column({ default: true })
+    @Column({ type: "boolean", default: true })
     is_use!: boolean
 
     @Index()
-    @Column({ default: false })
+    @Column({ type: "boolean", default: false })
     is_active!: boolean
 
     @ManyToOne(() => Roles, (roles) => roles.users)

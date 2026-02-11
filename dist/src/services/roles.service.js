@@ -12,10 +12,17 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.RolesService = void 0;
 const socket_service_1 = require("./socket.service");
 const realtimeEvents_1 = require("../utils/realtimeEvents");
+const role_1 = require("../utils/role");
 class RolesService {
     constructor(rolesModels) {
         this.rolesModels = rolesModels;
         this.socketService = socket_service_1.SocketService.getInstance();
+    }
+    normalizeWellKnownRole(data) {
+        const normalized = (0, role_1.normalizeRoleName)(data === null || data === void 0 ? void 0 : data.roles_name);
+        if (!normalized)
+            return data;
+        return Object.assign(Object.assign({}, data), { roles_name: normalized });
     }
     findAll() {
         return __awaiter(this, void 0, void 0, function* () {
@@ -40,6 +47,7 @@ class RolesService {
     create(data) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
+                data = this.normalizeWellKnownRole(data);
                 // @ts-ignore - model returns {id} essentially
                 const savedRole = yield this.rolesModels.create(data);
                 const createdRole = yield this.rolesModels.findOne(savedRole.id);
@@ -57,6 +65,7 @@ class RolesService {
     update(id, data) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
+                data = this.normalizeWellKnownRole(data);
                 yield this.rolesModels.update(id, data);
                 const updatedRole = yield this.rolesModels.findOne(id);
                 if (updatedRole) {

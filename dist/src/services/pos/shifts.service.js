@@ -21,6 +21,7 @@ const socket_service_1 = require("../socket.service");
 const dbContext_1 = require("../../database/dbContext");
 const realtimeEvents_1 = require("../../utils/realtimeEvents");
 const orderStatus_1 = require("../../utils/orderStatus");
+const shiftSummary_utils_1 = require("./shiftSummary.utils");
 class ShiftsService {
     constructor() {
         this.socketService = socket_service_1.SocketService.getInstance();
@@ -111,9 +112,9 @@ class ShiftsService {
                 throw new AppError_1.AppError(`ไม่สามารถปิดกะได้ เนื่องจากยังมีออเดอร์ค้างอยู่ในระบบจำนวน ${pendingOrders} รายการ กรุณาจัดการให้เรียบร้อย (เสร็จสิ้น หรือ ยกเลิก) ก่อนปิดกะ`, 400);
             }
             const payments = yield this.paymentsRepo.find({
-                where: { shift_id: activeShift.id }
+                where: { shift_id: activeShift.id, status: Payments_1.PaymentStatus.Success }
             });
-            const totalSales = Math.round(payments.reduce((sum, p) => sum + Number(p.amount), 0) * 100) / 100;
+            const totalSales = Math.round((0, shiftSummary_utils_1.sumPaymentAmount)(payments) * 100) / 100;
             const expectedAmount = Math.round((Number(activeShift.start_amount) + totalSales) * 100) / 100;
             activeShift.end_amount = endAmount;
             activeShift.expected_amount = expectedAmount;
@@ -137,8 +138,8 @@ class ShiftsService {
             if (!shift) {
                 throw new AppError_1.AppError("ไม่พบข้อมูลกะ", 404);
             }
-            const payments = shift.payments || [];
-            const totalSales = Math.round(payments.reduce((sum, p) => sum + Number(p.amount), 0) * 100) / 100;
+            const payments = (0, shiftSummary_utils_1.filterSuccessfulPayments)(shift.payments || []);
+            const totalSales = Math.round((0, shiftSummary_utils_1.sumPaymentAmount)(payments) * 100) / 100;
             let totalCost = 0;
             const categoryCounts = {};
             const productSales = {};

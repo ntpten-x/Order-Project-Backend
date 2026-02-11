@@ -21,6 +21,7 @@ const securityLogger_1 = require("../utils/securityLogger");
 const dbContext_1 = require("../database/dbContext");
 const ApiResponse_1 = require("../utils/ApiResponse");
 const redisClient_1 = require("../lib/redisClient");
+const role_1 = require("../utils/role");
 // Session timeout in milliseconds (default: 8 hours)
 const SESSION_TIMEOUT = Number(process.env.SESSION_TIMEOUT_MS) || 8 * 60 * 60 * 1000;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -129,8 +130,12 @@ const authenticateToken = (req, res, next) => __awaiter(void 0, void 0, void 0, 
             });
             return ApiResponse_1.ApiResponses.forbidden(res, "Account disabled");
         }
-        const role = (_b = user.roles) === null || _b === void 0 ? void 0 : _b.roles_name;
-        const isAdmin = role === "Admin";
+        const normalizedRole = (0, role_1.normalizeRoleName)((_b = user.roles) === null || _b === void 0 ? void 0 : _b.roles_name);
+        if (!normalizedRole) {
+            return ApiResponse_1.ApiResponses.forbidden(res, "Invalid role configuration");
+        }
+        user.roles.roles_name = normalizedRole;
+        const isAdmin = normalizedRole === "Admin";
         // Admin branch switching:
         // - Non-admins are always scoped to their own branch_id.
         // - Admins can optionally set a selected branch via the "active_branch_id" cookie.
@@ -140,7 +145,7 @@ const authenticateToken = (req, res, next) => __awaiter(void 0, void 0, void 0, 
         const effectiveBranchId = isAdmin ? (cookieBranchId && UUID_RE.test(cookieBranchId) ? cookieBranchId : user.branch_id) : user.branch_id;
         // Run the rest of the request inside a DB context so Postgres RLS (if enabled)
         // can enforce branch isolation even if a future query forgets branch_id filters.
-        return (0, dbContext_1.runWithDbContext)({ branchId: effectiveBranchId, userId: user.id, role, isAdmin }, () => __awaiter(void 0, void 0, void 0, function* () {
+        return (0, dbContext_1.runWithDbContext)({ branchId: effectiveBranchId, userId: user.id, role: normalizedRole, isAdmin }, () => __awaiter(void 0, void 0, void 0, function* () {
             if (user.branch_id) {
                 const branch = yield (0, dbContext_1.getRepository)(Branch_1.Branch).findOneBy({ id: user.branch_id });
                 if (branch)
@@ -199,8 +204,11 @@ const authorizeRole = (allowedRoles) => {
         if (!req.user) {
             return ApiResponse_1.ApiResponses.unauthorized(res, "Authentication required");
         }
-        const userRole = (_a = req.user.roles) === null || _a === void 0 ? void 0 : _a.roles_name;
-        if (!userRole || !allowedRoles.includes(userRole)) {
+        const userRole = (0, role_1.normalizeRoleName)((_a = req.user.roles) === null || _a === void 0 ? void 0 : _a.roles_name);
+        const normalizedAllowed = allowedRoles
+            .map((role) => (0, role_1.normalizeRoleName)(role))
+            .filter((role) => !!role);
+        if (!userRole || !normalizedAllowed.includes(userRole)) {
             return ApiResponse_1.ApiResponses.forbidden(res, "Access denied: Insufficient permissions");
         }
         next();

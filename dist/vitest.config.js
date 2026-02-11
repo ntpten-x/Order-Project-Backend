@@ -10,5 +10,6 @@ exports.default = (0, config_1.defineConfig)({
     },
     test: {
         environment: "node",
+        setupFiles: ["./src/tests/setup.ts"],
     },
 });

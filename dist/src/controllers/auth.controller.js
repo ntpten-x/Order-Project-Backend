@@ -24,9 +24,11 @@ const dbContext_1 = require("../database/dbContext");
 const realtimeEvents_1 = require("../utils/realtimeEvents");
 const uuid_1 = require("uuid");
 const redisClient_1 = require("../lib/redisClient");
+const role_1 = require("../utils/role");
 class AuthController {
     static login(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
+            var _a;
             const { username, password } = req.body;
             const userRepository = database_1.AppDataSource.getRepository(Users_1.Users);
             const ip = (0, securityLogger_1.getClientIp)(req);
@@ -89,7 +91,11 @@ class AuthController {
                     method: req.method,
                     details: { username }
                 });
-                const role = user.roles.roles_name;
+                const role = (0, role_1.normalizeRoleName)((_a = user.roles) === null || _a === void 0 ? void 0 : _a.roles_name);
+                if (!role) {
+                    return ApiResponse_1.ApiResponses.forbidden(res, "Invalid role configuration");
+                }
+                user.roles.roles_name = role;
                 const isAdmin = role === "Admin";
                 const jti = (0, uuid_1.v4)();
                 // branches table is RLS-protected; load branch under branch context
@@ -251,7 +257,7 @@ class AuthController {
             if (!req.user) {
                 return ApiResponse_1.ApiResponses.unauthorized(res, "Authentication required");
             }
-            const role = (_a = req.user.roles) === null || _a === void 0 ? void 0 : _a.roles_name;
+            const role = (0, role_1.normalizeRoleName)((_a = req.user.roles) === null || _a === void 0 ? void 0 : _a.roles_name);
             if (role !== "Admin") {
                 return ApiResponse_1.ApiResponses.forbidden(res, "Access denied: Admin only");
             }

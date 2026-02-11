@@ -60,6 +60,7 @@ exports.TopSellingItemsView = TopSellingItemsView = __decorate([
             .innerJoin(SalesOrder_1.SalesOrder, "o", "oi.order_id = o.id")
             .leftJoin(Products_1.Products, "p", "oi.product_id = p.id")
             .where("o.status IN ('Paid', 'Completed')")
+            .andWhere("oi.status::text NOT IN ('Cancelled', 'cancelled')")
             .addGroupBy("o.branch_id")
             .addGroupBy("oi.product_id")
             .addGroupBy("p.display_name")

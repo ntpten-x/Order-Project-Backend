@@ -3,11 +3,21 @@ import { RolesModels } from "../models/roles.model"
 
 import { SocketService } from "./socket.service"
 import { RealtimeEvents } from "../utils/realtimeEvents"
+import { normalizeRoleName } from "../utils/role"
 
 export class RolesService {
     private socketService = SocketService.getInstance();
 
     constructor(private rolesModels: RolesModels) { }
+
+    private normalizeWellKnownRole(data: Roles): Roles {
+        const normalized = normalizeRoleName(data?.roles_name);
+        if (!normalized) return data;
+        return {
+            ...data,
+            roles_name: normalized,
+        };
+    }
 
     async findAll(): Promise<Roles[]> {
         try {
@@ -27,6 +37,7 @@ export class RolesService {
 
     async create(data: Roles): Promise<Roles> {
         try {
+            data = this.normalizeWellKnownRole(data);
             // @ts-ignore - model returns {id} essentially
             const savedRole = await this.rolesModels.create(data)
             const createdRole = await this.rolesModels.findOne(savedRole.id)
@@ -42,6 +53,7 @@ export class RolesService {
 
     async update(id: string, data: Roles): Promise<Roles> {
         try {
+            data = this.normalizeWellKnownRole(data);
             await this.rolesModels.update(id, data)
             const updatedRole = await this.rolesModels.findOne(id)
             if (updatedRole) {

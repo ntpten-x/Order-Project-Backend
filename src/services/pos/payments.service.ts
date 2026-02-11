@@ -75,13 +75,15 @@ export class PaymentsService {
                 this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.update, { ...order, status: nextStatus } as SalesOrder);
             }
 
-            // Update all items to Paid
-            //  const itemsRepo = manager.getRepository(SalesOrderItem); // Need to import or use QueryBuilder
-            //  await itemsRepo.update({ order_id: orderId }, { status: OrderStatus.Paid });
-
-            // Wait, removing imports might be messy if I don't check what's imported.
-            // Let's use custom query or existing connection.
-            await manager.query(`UPDATE sales_order_item SET status = $1 WHERE order_id = $2`, [OrderStatus.Paid, orderId]);
+            // Update non-cancelled items to Paid only.
+            // Cancelled items must keep their status so totals/details remain consistent after payment.
+            await manager.query(
+                `UPDATE sales_order_item
+                 SET status = $1
+                 WHERE order_id = $2
+                   AND status::text NOT IN ('Cancelled', 'cancelled')`,
+                [OrderStatus.Paid, orderId]
+            );
         }
 
         if (nextStatus === OrderStatus.Completed && order.table_id) {

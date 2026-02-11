@@ -6,6 +6,7 @@ import { auditLogger, AuditActionType } from "../../utils/auditLogger";
 import { getClientIp } from "../../utils/securityLogger";
 import { ApiResponses } from "../../utils/ApiResponse";
 import { getBranchId } from "../../middleware/branch.middleware";
+import { parseStatusQuery } from "../../utils/statusQuery";
 
 export class OrdersController {
     constructor(private ordersService: OrdersService) { }
@@ -14,7 +15,7 @@ export class OrdersController {
         const page = Math.max(parseInt(req.query.page as string) || 1, 1);
         const limitRaw = parseInt(req.query.limit as string) || 50;
         const limit = Math.min(Math.max(limitRaw, 1), 200); // cap to prevent huge payloads
-        const statuses = req.query.status ? (req.query.status as string).split(',') : undefined;
+        const statuses = parseStatusQuery(req.query.status as string | undefined);
         const type = req.query.type as string;
         const query = req.query.q as string | undefined;
         const branchId = getBranchId(req as any);
@@ -31,7 +32,7 @@ export class OrdersController {
         const page = Math.max(parseInt(req.query.page as string) || 1, 1);
         const limitRaw = parseInt(req.query.limit as string) || 50;
         const limit = Math.min(Math.max(limitRaw, 1), 200);
-        const statuses = req.query.status ? (req.query.status as string).split(',') : undefined;
+        const statuses = parseStatusQuery(req.query.status as string | undefined);
         const type = req.query.type as string;
         const query = req.query.q as string | undefined;
         const branchId = getBranchId(req as any);
@@ -113,7 +114,7 @@ export class OrdersController {
 
     update = catchAsync(async (req: Request, res: Response) => {
         const user = (req as any).user;
-        const branchId = user?.branch_id;
+        const branchId = getBranchId(req as any);
         if (branchId) {
             // Prevent branch_id tampering
             req.body.branch_id = branchId;
@@ -131,7 +132,7 @@ export class OrdersController {
             user_agent: req.headers['user-agent'],
             entity_type: 'SalesOrder',
             entity_id: order.id,
-            branch_id: user?.branch_id,
+            branch_id: branchId,
             old_values: oldOrder ? { status: oldOrder.status, order_no: oldOrder.order_no } : undefined,
             new_values: { status: order.status, order_no: order.order_no },
             description: `Updated order ${order.order_no}`,
@@ -149,7 +150,7 @@ export class OrdersController {
                 user_agent: req.headers['user-agent'],
                 entity_type: 'SalesOrder',
                 entity_id: order.id,
-                branch_id: user?.branch_id,
+                branch_id: branchId,
                 old_values: { status: oldOrder.status },
                 new_values: { status: req.body.status },
                 description: `Changed order status ${order.order_no}: ${oldOrder.status} -> ${req.body.status}`,

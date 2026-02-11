@@ -47,12 +47,12 @@ __decorate([
 ], Users.prototype, "roles_id", void 0);
 __decorate([
     (0, typeorm_1.Index)(),
-    (0, typeorm_1.Column)({ default: true }),
+    (0, typeorm_1.Column)({ type: "boolean", default: true }),
     __metadata("design:type", Boolean)
 ], Users.prototype, "is_use", void 0);
 __decorate([
     (0, typeorm_1.Index)(),
-    (0, typeorm_1.Column)({ default: false }),
+    (0, typeorm_1.Column)({ type: "boolean", default: false }),
     __metadata("design:type", Boolean)
 ], Users.prototype, "is_active", void 0);
 __decorate([

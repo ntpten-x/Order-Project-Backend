@@ -11,6 +11,7 @@ import { getRepository, runWithDbContext } from "../database/dbContext";
 import { RealtimeEvents } from "../utils/realtimeEvents";
 import { v4 as uuidv4 } from "uuid";
 import { getRedisClient, getSessionKey } from "../lib/redisClient";
+import { normalizeRoleName } from "../utils/role";
 
 export class AuthController {
 
@@ -85,7 +86,11 @@ export class AuthController {
                 details: { username }
             });
 
-            const role = user.roles.roles_name;
+            const role = normalizeRoleName(user.roles?.roles_name);
+            if (!role) {
+                return ApiResponses.forbidden(res, "Invalid role configuration");
+            }
+            user.roles.roles_name = role;
             const isAdmin = role === "Admin";
             const jti = uuidv4();
 
@@ -259,10 +264,10 @@ export class AuthController {
             return ApiResponses.unauthorized(res, "Authentication required");
         }
 
-        const role = req.user.roles?.roles_name;
-        if (role !== "Admin") {
-            return ApiResponses.forbidden(res, "Access denied: Admin only");
-        }
+            const role = normalizeRoleName(req.user.roles?.roles_name);
+            if (role !== "Admin") {
+                return ApiResponses.forbidden(res, "Access denied: Admin only");
+            }
 
         const branchId = (req.body?.branch_id ?? null) as string | null;
 
