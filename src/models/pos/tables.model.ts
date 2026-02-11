@@ -7,7 +7,14 @@ export class TablesModels {
             const skip = (page - 1) * limit;
             const tablesRepository = getRepository(Tables);
             const query = tablesRepository.createQueryBuilder("tables")
-                .leftJoinAndMapOne("tables.active_order", "SalesOrder", "so", "so.table_id = tables.id AND so.status NOT IN (:...statuses)", { statuses: ['Paid', 'Cancelled', 'completed'] })
+                // Support legacy 'completed'/'cancelled' statuses so tables don't stay stuck as Unavailable.
+                .leftJoinAndMapOne(
+                    "tables.active_order",
+                    "SalesOrder",
+                    "so",
+                    "so.table_id = tables.id AND so.status NOT IN (:...statuses)",
+                    { statuses: ["Paid", "Cancelled", "cancelled", "Completed", "completed"] },
+                )
                 .orderBy("tables.create_date", "ASC");
 
             if (q && q.trim()) {

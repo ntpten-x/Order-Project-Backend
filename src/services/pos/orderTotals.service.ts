@@ -1,9 +1,9 @@
 import { EntityManager } from "typeorm";
 import { SalesOrder } from "../../entity/pos/SalesOrder";
 import { SalesOrderItem } from "../../entity/pos/SalesOrderItem";
-import { OrderStatus } from "../../entity/pos/OrderEnums";
 import { PriceCalculatorService } from "./priceCalculator.service";
 import { getRepository } from "../../database/dbContext";
+import { isCancelledStatus } from "../../utils/orderStatus";
 
 export const recalculateOrderTotal = async (orderId: string, manager?: EntityManager): Promise<void> => {
     const orderRepo = manager ? manager.getRepository(SalesOrder) : getRepository(SalesOrder);
@@ -17,7 +17,8 @@ export const recalculateOrderTotal = async (orderId: string, manager?: EntityMan
     if (!order) return;
 
     const items = await itemRepo.find({ where: { order_id: orderId } });
-    const validItems = items.filter(i => i.status !== OrderStatus.Cancelled);
+    // Support legacy 'cancelled' values too.
+    const validItems = items.filter(i => !isCancelledStatus(i.status));
 
     const result = PriceCalculatorService.calculateOrderTotal(validItems, order.discount);
 

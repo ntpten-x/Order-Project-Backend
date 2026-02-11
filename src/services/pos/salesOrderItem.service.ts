@@ -4,6 +4,8 @@ import { SalesOrderItem } from "../../entity/pos/SalesOrderItem";
 import { SalesOrder } from "../../entity/pos/SalesOrder";
 import { getRepository } from "../../database/dbContext";
 import { RealtimeEvents } from "../../utils/realtimeEvents";
+import { recalculateOrderTotal } from "./orderTotals.service";
+import { normalizeOrderStatus } from "../../utils/orderStatus";
 
 export class SalesOrderItemService {
     private socketService = SocketService.getInstance();
@@ -43,7 +45,18 @@ export class SalesOrderItemService {
                 }
             }
 
+            // Normalize legacy status values (e.g. 'cancelled') to canonical casing on write.
+            if ((salesOrderItem as any).status !== undefined) {
+                (salesOrderItem as any).status = normalizeOrderStatus((salesOrderItem as any).status);
+            }
+
             const createdItem = await this.salesOrderItemModel.create(salesOrderItem)
+
+            // Keep order totals consistent even if this endpoint is used directly.
+            await recalculateOrderTotal(createdItem.order_id);
+            if (branchId) {
+                this.socketService.emitToBranch(branchId, RealtimeEvents.orders.update, { id: createdItem.order_id } as any);
+            }
 
             const completeItem = await this.salesOrderItemModel.findOne(createdItem.id, branchId)
             if (completeItem) {
@@ -65,7 +78,15 @@ export class SalesOrderItemService {
                 throw new Error("ไม่พบข้อมูลรายการสินค้าในออเดอร์ที่ต้องการแก้ไข")
             }
 
+            if ((salesOrderItem as any).status !== undefined) {
+                (salesOrderItem as any).status = normalizeOrderStatus((salesOrderItem as any).status);
+            }
+
             const updatedItem = await this.salesOrderItemModel.update(id, salesOrderItem, branchId)
+            await recalculateOrderTotal(itemToUpdate.order_id);
+            if (branchId) {
+                this.socketService.emitToBranch(branchId, RealtimeEvents.orders.update, { id: itemToUpdate.order_id } as any);
+            }
             if (branchId) {
                 this.socketService.emitToBranch(branchId, RealtimeEvents.salesOrderItem.update, updatedItem)
             }
@@ -77,7 +98,14 @@ export class SalesOrderItemService {
 
     async delete(id: string, branchId?: string): Promise<void> {
         try {
+            const item = await this.salesOrderItemModel.findOne(id, branchId)
             await this.salesOrderItemModel.delete(id, branchId)
+            if (item?.order_id) {
+                await recalculateOrderTotal(item.order_id);
+                if (branchId) {
+                    this.socketService.emitToBranch(branchId, RealtimeEvents.orders.update, { id: item.order_id } as any);
+                }
+            }
             if (branchId) {
                 this.socketService.emitToBranch(branchId, RealtimeEvents.salesOrderItem.delete, { id })
             }

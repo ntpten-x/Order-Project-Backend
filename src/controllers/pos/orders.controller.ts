@@ -6,15 +6,28 @@ import { auditLogger, AuditActionType } from "../../utils/auditLogger";
 import { getClientIp } from "../../utils/securityLogger";
 import { ApiResponses } from "../../utils/ApiResponse";
 import { getBranchId } from "../../middleware/branch.middleware";
+import { parseStatusQuery } from "../../utils/statusQuery";
 
 export class OrdersController {
     constructor(private ordersService: OrdersService) { }
+    private readonly summaryResponseMaxAgeSec = Number(process.env.ORDERS_SUMMARY_RESPONSE_CACHE_MAX_AGE_SEC || 10);
+    private readonly summaryResponseStaleSec = Number(process.env.ORDERS_SUMMARY_RESPONSE_CACHE_STALE_SEC || 20);
+    private readonly summaryResponseCachePublic = process.env.ORDERS_SUMMARY_RESPONSE_CACHE_PUBLIC === "true";
+
+    private setSummaryCacheHeaders(res: Response): void {
+        const visibility = this.summaryResponseCachePublic ? "public" : "private";
+        res.setHeader(
+            "Cache-Control",
+            `${visibility}, max-age=0, s-maxage=${this.summaryResponseMaxAgeSec}, stale-while-revalidate=${this.summaryResponseStaleSec}`
+        );
+        res.setHeader("Vary", "Authorization, Cookie");
+    }
 
     findAll = catchAsync(async (req: Request, res: Response) => {
         const page = Math.max(parseInt(req.query.page as string) || 1, 1);
         const limitRaw = parseInt(req.query.limit as string) || 50;
         const limit = Math.min(Math.max(limitRaw, 1), 200); // cap to prevent huge payloads
-        const statuses = req.query.status ? (req.query.status as string).split(',') : undefined;
+        const statuses = parseStatusQuery(req.query.status as string | undefined);
         const type = req.query.type as string;
         const query = req.query.q as string | undefined;
         const branchId = getBranchId(req as any);
@@ -31,12 +44,13 @@ export class OrdersController {
         const page = Math.max(parseInt(req.query.page as string) || 1, 1);
         const limitRaw = parseInt(req.query.limit as string) || 50;
         const limit = Math.min(Math.max(limitRaw, 1), 200);
-        const statuses = req.query.status ? (req.query.status as string).split(',') : undefined;
+        const statuses = parseStatusQuery(req.query.status as string | undefined);
         const type = req.query.type as string;
         const query = req.query.q as string | undefined;
         const branchId = getBranchId(req as any);
 
         const result = await this.ordersService.findAllSummary(page, limit, statuses, type, query, branchId);
+        this.setSummaryCacheHeaders(res);
         return ApiResponses.paginated(res, result.data, {
             page: result.page,
             limit: result.limit,
@@ -47,6 +61,7 @@ export class OrdersController {
     getStats = catchAsync(async (req: Request, res: Response) => {
         const branchId = getBranchId(req as any);
         const stats = await this.ordersService.getStats(branchId);
+        this.setSummaryCacheHeaders(res);
         return ApiResponses.ok(res, stats);
     })
 
@@ -113,7 +128,7 @@ export class OrdersController {
 
     update = catchAsync(async (req: Request, res: Response) => {
         const user = (req as any).user;
-        const branchId = user?.branch_id;
+        const branchId = getBranchId(req as any);
         if (branchId) {
             // Prevent branch_id tampering
             req.body.branch_id = branchId;
@@ -131,7 +146,7 @@ export class OrdersController {
             user_agent: req.headers['user-agent'],
             entity_type: 'SalesOrder',
             entity_id: order.id,
-            branch_id: user?.branch_id,
+            branch_id: branchId,
             old_values: oldOrder ? { status: oldOrder.status, order_no: oldOrder.order_no } : undefined,
             new_values: { status: order.status, order_no: order.order_no },
             description: `Updated order ${order.order_no}`,
@@ -149,7 +164,7 @@ export class OrdersController {
                 user_agent: req.headers['user-agent'],
                 entity_type: 'SalesOrder',
                 entity_id: order.id,
-                branch_id: user?.branch_id,
+                branch_id: branchId,
                 old_values: { status: oldOrder.status },
                 new_values: { status: req.body.status },
                 description: `Changed order status ${order.order_no}: ${oldOrder.status} -> ${req.body.status}`,

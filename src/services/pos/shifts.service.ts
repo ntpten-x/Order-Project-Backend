@@ -1,6 +1,6 @@
 import { MoreThanOrEqual, SelectQueryBuilder } from "typeorm";
 import { Shifts, ShiftStatus } from "../../entity/pos/Shifts";
-import { Payments } from "../../entity/pos/Payments";
+import { Payments, PaymentStatus } from "../../entity/pos/Payments";
 import { SalesOrderItem } from "../../entity/pos/SalesOrderItem";
 import { SalesOrder } from "../../entity/pos/SalesOrder";
 import { OrderStatus } from "../../entity/pos/OrderEnums";
@@ -8,6 +8,8 @@ import { AppError } from "../../utils/AppError";
 import { SocketService } from "../socket.service";
 import { getRepository, runInTransaction } from "../../database/dbContext";
 import { RealtimeEvents } from "../../utils/realtimeEvents";
+import { isCancelledStatus } from "../../utils/orderStatus";
+import { filterSuccessfulPayments, sumPaymentAmount } from "./shiftSummary.utils";
 
 export class ShiftsService {
     private get shiftsRepo() {
@@ -102,10 +104,10 @@ export class ShiftsService {
         }
 
         const payments = await this.paymentsRepo.find({
-            where: { shift_id: activeShift.id }
+            where: { shift_id: activeShift.id, status: PaymentStatus.Success }
         });
 
-        const totalSales = Math.round(payments.reduce((sum, p) => sum + Number(p.amount), 0) * 100) / 100;
+        const totalSales = Math.round(sumPaymentAmount(payments) * 100) / 100;
         const expectedAmount = Math.round((Number(activeShift.start_amount) + totalSales) * 100) / 100;
 
         activeShift.end_amount = endAmount;
@@ -132,9 +134,9 @@ export class ShiftsService {
             throw new AppError("ไม่พบข้อมูลกะ", 404);
         }
 
-        const payments = shift.payments || [];
+        const payments = filterSuccessfulPayments(shift.payments || []);
 
-        const totalSales = Math.round(payments.reduce((sum, p) => sum + Number(p.amount), 0) * 100) / 100;
+        const totalSales = Math.round(sumPaymentAmount(payments) * 100) / 100;
 
         let totalCost = 0;
         const categoryCounts: Record<string, number> = {};
@@ -165,7 +167,7 @@ export class ShiftsService {
 
             const items = payment.order.items || [];
             items.forEach(item => {
-                if (item.status === 'Cancelled') return;
+                if (isCancelledStatus(item.status)) return;
 
                 const qty = Number(item.quantity);
                 const cost = Number(item.product?.cost || 0);

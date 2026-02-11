@@ -5,6 +5,7 @@ import { Products } from "../../entity/pos/Products";
 import { OrderType } from "../../entity/pos/OrderEnums";
 import { EntityManager, In } from "typeorm";
 import { getDbManager, getRepository, runInTransaction } from "../../database/dbContext";
+import { executeProfiledQuery } from "../../utils/queryProfiler";
 
 export class OrdersModels {
     async findAll(page: number = 1, limit: number = 50, statuses?: string[], orderType?: string, searchTerm?: string, branchId?: string): Promise<{ data: SalesOrder[], total: number, page: number, limit: number }> {
@@ -99,9 +100,15 @@ export class OrdersModels {
             const countQuery = `
                 SELECT COUNT(*)::int AS total
                 FROM sales_orders o
+                LEFT JOIN tables t ON t.id = o.table_id
+                LEFT JOIN delivery d ON d.id = o.delivery_id
                 ${whereSql}
             `;
-            const countResult = await getDbManager().query(countQuery, params);
+            const countResult = await executeProfiledQuery<{ total: number }>(
+                "orders.summary.count",
+                countQuery,
+                params
+            );
             const total = countResult?.[0]?.total ?? 0;
 
             const dataParams = [...params, limit, (page - 1) * limit];
@@ -109,44 +116,70 @@ export class OrdersModels {
             const offsetIndex = params.length + 2;
 
             const dataQuery = `
-                SELECT
-                    o.id,
-                    o.order_no,
-                    o.order_type,
-                    o.status,
-                    o.create_date,
-                    o.total_amount,
-                    o.delivery_code,
-                    o.table_id,
-                    o.delivery_id,
-                    t.table_name AS table_name,
-                    d.delivery_name AS delivery_name,
-                    COALESCE(item_summary.items_summary, '{}'::jsonb) AS items_summary,
-                    COALESCE(item_summary.items_count, 0) AS items_count
-                FROM sales_orders o
-                LEFT JOIN tables t ON t.id = o.table_id
-                LEFT JOIN delivery d ON d.id = o.delivery_id
-                LEFT JOIN LATERAL (
+                WITH base_orders AS (
                     SELECT
-                        jsonb_object_agg(s.category_name, s.qty) FILTER (WHERE s.category_name IS NOT NULL) AS items_summary,
-                        SUM(s.qty) AS items_count
-                    FROM (
-                        SELECT
-                            c.display_name AS category_name,
-                            SUM(i.quantity)::int AS qty
-                        FROM sales_order_item i
-                        LEFT JOIN products p ON p.id = i.product_id
-                        LEFT JOIN category c ON c.id = p.category_id
-                        WHERE i.order_id = o.id AND i.status <> 'Cancelled'
-                        GROUP BY c.display_name
-                    ) s
-                ) item_summary ON true
-                ${whereSql}
-                ORDER BY o.create_date DESC
-                LIMIT $${limitIndex} OFFSET $${offsetIndex}
+                        o.id,
+                        o.order_no,
+                        o.order_type,
+                        o.status,
+                        o.create_date,
+                        o.total_amount,
+                        o.delivery_code,
+                        o.table_id,
+                        o.delivery_id,
+                        t.table_name AS table_name,
+                        d.delivery_name AS delivery_name
+                    FROM sales_orders o
+                    LEFT JOIN tables t ON t.id = o.table_id
+                    LEFT JOIN delivery d ON d.id = o.delivery_id
+                    ${whereSql}
+                    ORDER BY o.create_date DESC
+                    LIMIT $${limitIndex} OFFSET $${offsetIndex}
+                ),
+                item_agg_raw AS (
+                    SELECT
+                        i.order_id,
+                        c.display_name AS category_name,
+                        SUM(i.quantity)::int AS qty
+                    FROM sales_order_item i
+                    INNER JOIN base_orders bo ON bo.id = i.order_id
+                    LEFT JOIN products p ON p.id = i.product_id
+                    LEFT JOIN category c ON c.id = p.category_id
+                    WHERE i.status::text NOT IN ('Cancelled', 'cancelled')
+                    GROUP BY i.order_id, c.display_name
+                ),
+                item_agg AS (
+                    SELECT
+                        order_id,
+                        jsonb_object_agg(category_name, qty) FILTER (WHERE category_name IS NOT NULL) AS items_summary,
+                        SUM(qty)::int AS items_count
+                    FROM item_agg_raw
+                    GROUP BY order_id
+                )
+                SELECT
+                    bo.id,
+                    bo.order_no,
+                    bo.order_type,
+                    bo.status,
+                    bo.create_date,
+                    bo.total_amount,
+                    bo.delivery_code,
+                    bo.table_id,
+                    bo.delivery_id,
+                    bo.table_name,
+                    bo.delivery_name,
+                    COALESCE(ia.items_summary, '{}'::jsonb) AS items_summary,
+                    COALESCE(ia.items_count, 0) AS items_count
+                FROM base_orders bo
+                LEFT JOIN item_agg ia ON ia.order_id = bo.id
+                ORDER BY bo.create_date DESC
             `;
 
-            const rows = await getDbManager().query(dataQuery, dataParams);
+            const rows = await executeProfiledQuery<any>(
+                "orders.summary.data",
+                dataQuery,
+                dataParams
+            );
             const data = rows.map((row: any) => ({
                 id: row.id,
                 order_no: row.order_no,

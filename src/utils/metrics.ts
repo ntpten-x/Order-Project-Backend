@@ -14,6 +14,7 @@ let registry: any = null;
 let httpRequestDuration: any = null;
 let httpRequestTotal: any = null;
 let errorTotal: any = null;
+let cacheRequestTotal: any = null;
 
 if (metricsEnabled) {
     registry = new client.Registry();
@@ -38,9 +39,16 @@ if (metricsEnabled) {
         labelNames: ["type"],
     });
 
+    cacheRequestTotal = new client.Counter({
+        name: "app_cache_requests_total",
+        help: "Total cache requests grouped by operation and result",
+        labelNames: ["cache", "operation", "result", "source"],
+    });
+
     registry.registerMetric(httpRequestDuration);
     registry.registerMetric(httpRequestTotal);
     registry.registerMetric(errorTotal);
+    registry.registerMetric(cacheRequestTotal);
 }
 
 export const metrics = {
@@ -54,6 +62,22 @@ export const metrics = {
     countError: (type: string) => {
         if (!metricsEnabled || !errorTotal) return;
         errorTotal.labels(type).inc();
+    },
+    observeCache: (params: {
+        cache: string;
+        operation: string;
+        result: "hit" | "miss";
+        source?: "memory" | "redis" | "none";
+    }) => {
+        if (!metricsEnabled || !cacheRequestTotal) return;
+        cacheRequestTotal
+            .labels(
+                params.cache,
+                params.operation,
+                params.result,
+                params.source ?? "none"
+            )
+            .inc();
     },
     getMetrics: async () => (metricsEnabled && registry ? registry.metrics() : ""),
 };

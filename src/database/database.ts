@@ -48,7 +48,10 @@ const minPoolSize = Number(process.env.DATABASE_POOL_MIN || 5) // Minimum connec
 const connectionTimeoutMillis = Number(process.env.DATABASE_CONNECTION_TIMEOUT_MS || 30000)
 const statementTimeout = Number(process.env.STATEMENT_TIMEOUT_MS || 30000)
 const idleTimeoutMillis = Number(process.env.DATABASE_IDLE_TIMEOUT_MS || 30000) // Close idle connections after 30s
-const migrationsDir = path.join(__dirname, "../migrations/*.{ts,js}")
+const migrationsDir =
+    process.env.NODE_ENV === "test"
+        ? path.join(__dirname, "../migrations/*.js")
+        : path.join(__dirname, "../migrations/*.{ts,js}")
 
 export const AppDataSource = new DataSource({
     type: "postgres",

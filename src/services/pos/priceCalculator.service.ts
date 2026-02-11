@@ -10,7 +10,7 @@ export interface PriceCalculationResult {
 }
 
 export class PriceCalculatorService {
-    private static VAT_RATE = 0.07; // 7%
+    private static VAT_RATE = 0; // 0%
 
     /**
      * Calculate total for a single item line
@@ -56,11 +56,11 @@ export class PriceCalculatorService {
         let vatAmount = 0;
 
         if (vatIncluded) {
-            // Price includes VAT (e.g. 107 baht -> VAT 7)
+            // Price includes VAT (currently configured as 0%)
             // Formula: Amount * (Rate / (1 + Rate))
             vatAmount = amountAfterDiscount * (PriceCalculatorService.VAT_RATE / (1 + PriceCalculatorService.VAT_RATE));
         } else {
-            // Price excludes VAT (e.g. 100 baht -> VAT 7 -> Total 107)
+            // Price excludes VAT (currently configured as 0%)
             vatAmount = amountAfterDiscount * PriceCalculatorService.VAT_RATE;
         }
 
