@@ -11,6 +11,11 @@ import { getBranchId } from "../../middleware/branch.middleware";
 
 export class OrderQueueController {
     private queueService = new OrderQueueService();
+    private setNoStoreHeaders(res: Response): void {
+        res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+        res.setHeader("Pragma", "no-cache");
+        res.setHeader("Expires", "0");
+    }
 
     /**
      * Add order to queue
@@ -52,7 +57,8 @@ export class OrderQueueController {
         const branchId = getBranchId(req as any);
         const status = req.query.status as QueueStatus | undefined;
 
-        const queue = await this.queueService.getQueue(branchId, status);
+        const queue = await this.queueService.getQueue(branchId, status, { bypassCache: true });
+        this.setNoStoreHeaders(res);
 
         return ApiResponses.ok(res, queue);
     });

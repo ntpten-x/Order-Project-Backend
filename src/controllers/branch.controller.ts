@@ -5,12 +5,14 @@ import { ApiResponses } from "../utils/ApiResponse";
 import { AppError } from "../utils/AppError";
 import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../utils/auditLogger";
 import { getClientIp } from "../utils/securityLogger";
+import { setNoStoreHeaders } from "../utils/cacheHeaders";
 
 export class BranchController {
     private branchService = new BranchService();
 
     getAll = catchAsync(async (_req: Request, res: Response) => {
         const branches = await this.branchService.findAll();
+        setNoStoreHeaders(res);
         return ApiResponses.ok(res, branches);
     });
 
@@ -20,6 +22,7 @@ export class BranchController {
         if (!branch) {
             throw AppError.notFound("Branch");
         }
+        setNoStoreHeaders(res);
         return ApiResponses.ok(res, branch);
     });
 

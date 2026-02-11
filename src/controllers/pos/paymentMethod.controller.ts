@@ -6,6 +6,7 @@ import { ApiResponses } from "../../utils/ApiResponse";
 import { AppError } from "../../utils/AppError";
 import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../../utils/auditLogger";
 import { getClientIp } from "../../utils/securityLogger";
+import { setPrivateSwrHeaders } from "../../utils/cacheHeaders";
 
 export class PaymentMethodController {
     constructor(private paymentMethodService: PaymentMethodService) { }
@@ -18,6 +19,7 @@ export class PaymentMethodController {
         const branchId = getBranchId(req as any);
 
         const result = await this.paymentMethodService.findAll(page, limit, q, branchId);
+        setPrivateSwrHeaders(res);
         return ApiResponses.paginated(res, result.data, {
             page: result.page,
             limit,
@@ -29,6 +31,7 @@ export class PaymentMethodController {
         const branchId = getBranchId(req as any);
         const paymentMethod = await this.paymentMethodService.findOne(req.params.id, branchId);
         if (!paymentMethod) throw AppError.notFound("Payment method");
+        setPrivateSwrHeaders(res);
         return ApiResponses.ok(res, paymentMethod);
     });
 
@@ -36,6 +39,7 @@ export class PaymentMethodController {
         const branchId = getBranchId(req as any);
         const paymentMethod = await this.paymentMethodService.findOneByName(req.params.name, branchId);
         if (!paymentMethod) throw AppError.notFound("Payment method");
+        setPrivateSwrHeaders(res);
         return ApiResponses.ok(res, paymentMethod);
     });
 

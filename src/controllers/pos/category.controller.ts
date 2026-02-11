@@ -6,6 +6,7 @@ import { ApiResponses } from "../../utils/ApiResponse";
 import { getBranchId } from "../../middleware/branch.middleware";
 import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../../utils/auditLogger";
 import { getClientIp } from "../../utils/securityLogger";
+import { setPrivateSwrHeaders } from "../../utils/cacheHeaders";
 
 /**
  * Category Controller
@@ -20,6 +21,7 @@ export class CategoryController {
     findAll = catchAsync(async (req: Request, res: Response) => {
         const branchId = getBranchId(req as any);
         const categories = await this.categoryService.findAll(branchId);
+        setPrivateSwrHeaders(res);
         return ApiResponses.ok(res, categories);
     });
 
@@ -29,6 +31,7 @@ export class CategoryController {
         if (!category) {
             throw AppError.notFound("หมวดหมู่");
         }
+        setPrivateSwrHeaders(res);
         return ApiResponses.ok(res, category);
     });
 
@@ -38,6 +41,7 @@ export class CategoryController {
         if (!category) {
             throw AppError.notFound("หมวดหมู่");
         }
+        setPrivateSwrHeaders(res);
         return ApiResponses.ok(res, category);
     });
 

@@ -49,6 +49,12 @@ const port = process.env.PORT || 4000;
 const bodyLimitMb = Number(process.env.REQUEST_BODY_LIMIT_MB || 5);
 const enablePerfLogs = process.env.ENABLE_PERF_LOG === "true";
 
+const setNoStoreHeaders = (res: express.Response): void => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+};
+
 // Trust proxy for secure cookies behind proxies (e.g., Render, Nginx)
 app.set("trust proxy", 1);
 // Reduce information leakage
@@ -200,6 +206,7 @@ const csrfExcludedPaths = new Set([
 // IMPORTANT: This endpoint must always work to ensure security
 // NOTE: This endpoint is excluded from global error handler to return custom format
 app.get('/csrf-token', (req, res, next) => {
+    setNoStoreHeaders(res);
     // Wrap in try-catch to handle any unexpected errors
     try {
         // Use csrfProtection middleware to generate token
@@ -319,6 +326,7 @@ app.use((req, res, next) => {
 });
 
 app.get('/metrics', async (req, res) => {
+    setNoStoreHeaders(res);
     if (!metrics.enabled) {
         return res.status(404).json({ message: "Metrics disabled" });
     }

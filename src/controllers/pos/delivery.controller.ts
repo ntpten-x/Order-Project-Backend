@@ -6,6 +6,7 @@ import { ApiResponses } from "../../utils/ApiResponse";
 import { AppError } from "../../utils/AppError";
 import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../../utils/auditLogger";
 import { getClientIp } from "../../utils/securityLogger";
+import { setPrivateSwrHeaders } from "../../utils/cacheHeaders";
 
 export class DeliveryController {
     constructor(private deliveryService: DeliveryService) { }
@@ -18,6 +19,7 @@ export class DeliveryController {
         const branchId = getBranchId(req as any);
 
         const result = await this.deliveryService.findAll(page, limit, q, branchId);
+        setPrivateSwrHeaders(res);
         return ApiResponses.paginated(res, result.data, {
             page: result.page,
             limit,
@@ -29,6 +31,7 @@ export class DeliveryController {
         const branchId = getBranchId(req as any);
         const delivery = await this.deliveryService.findOne(req.params.id, branchId);
         if (!delivery) throw AppError.notFound("Delivery");
+        setPrivateSwrHeaders(res);
         return ApiResponses.ok(res, delivery);
     });
 
@@ -36,6 +39,7 @@ export class DeliveryController {
         const branchId = getBranchId(req as any);
         const delivery = await this.deliveryService.findOneByName(req.params.name, branchId);
         if (!delivery) throw AppError.notFound("Delivery");
+        setPrivateSwrHeaders(res);
         return ApiResponses.ok(res, delivery);
     });
 
