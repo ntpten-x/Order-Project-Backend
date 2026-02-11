@@ -22,7 +22,7 @@ export class AuthController {
     }
 
     static async login(req: Request, res: Response) {
-        this.setNoStoreHeaders(res);
+        AuthController.setNoStoreHeaders(res);
         const { username, password } = req.body;
         const userRepository = AppDataSource.getRepository(Users);
         const ip = getClientIp(req);
@@ -177,7 +177,7 @@ export class AuthController {
     }
 
     static async logout(req: Request, res: Response) {
-        this.setNoStoreHeaders(res);
+        AuthController.setNoStoreHeaders(res);
         let userId: string | undefined;
         let jti: string | undefined;
 
@@ -237,7 +237,7 @@ export class AuthController {
     }
 
     static async getMe(req: AuthRequest, res: Response) {
-        this.setNoStoreHeaders(res);
+        AuthController.setNoStoreHeaders(res);
         if (!req.user) {
             return ApiResponses.unauthorized(res, "ไม่พบข้อมูลผู้ใช้");
         }
@@ -269,7 +269,7 @@ export class AuthController {
      * - branch_id = null/undefined: clear selection (admin sees all branches)
      */
     static async switchBranch(req: AuthRequest, res: Response) {
-        this.setNoStoreHeaders(res);
+        AuthController.setNoStoreHeaders(res);
         if (!req.user) {
             return ApiResponses.unauthorized(res, "Authentication required");
         }
