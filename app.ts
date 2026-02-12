@@ -38,6 +38,7 @@ import paymentAccountPosRouter from "./src/routes/pos/paymentAccount.routes";
 import dashboardRouter from "./src/routes/pos/dashboard.route";
 import branchRouter from "./src/routes/branch.route";
 import orderQueueRouter from "./src/routes/pos/orderQueue.route";
+import permissionsRouter from "./src/routes/permissions.route";
 import { globalErrorHandler } from "./src/middleware/error.middleware";
 import { AppError } from "./src/utils/AppError";
 import { performanceMonitoring, errorTracking } from "./src/middleware/monitoring.middleware";
@@ -367,6 +368,7 @@ app.use("/pos/payment-accounts", paymentAccountPosRouter);
 app.use("/pos/dashboard", dashboardRouter);
 app.use("/pos/queue", orderQueueRouter);
 app.use("/branches", branchRouter);
+app.use("/permissions", permissionsRouter);
 
 // Handle Unhandled Routes
 app.use((req, res, next) => {

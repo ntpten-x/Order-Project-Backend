@@ -6,12 +6,14 @@ import { Branch } from "../entity/Branch";
 import { securityLogger, getClientIp } from "../utils/securityLogger";
 import { getRepository, runWithDbContext } from "../database/dbContext";
 import { ApiResponses } from "../utils/ApiResponse";
-import { getRedisClient, getSessionKey } from "../lib/redisClient";
+import { getRedisClient, getSessionKey, isRedisConfigured } from "../lib/redisClient";
 import { normalizeRoleName } from "../utils/role";
+import type { RequestPermission } from "./permission.middleware";
 
 export interface AuthRequest extends Request {
     user?: Users;
     tokenExpiry?: number;
+    permission?: RequestPermission;
 }
 
 // Session timeout in milliseconds (default: 8 hours)
@@ -71,7 +73,7 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
             }
             // Sliding expiration: refresh TTL to session timeout
             await redis.pExpire(sessionKey, SESSION_TIMEOUT);
-        } else if (process.env.REDIS_URL) {
+        } else if (isRedisConfigured()) {
             // If Redis URL is configured but client unavailable, fail closed
             return ApiResponses.internalError(res, "Session store unavailable");
         }

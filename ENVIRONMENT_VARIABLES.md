@@ -53,6 +53,9 @@
 - `REDIS_TLS_REJECT_UNAUTHORIZED` - Optional override to reject unauthorized TLS certs (`true`/`false`)
 - `REDIS_TLS_AUTO_FALLBACK` - If `true`, retries with TLS disabled on `ERR_SSL_WRONG_VERSION_NUMBER` (defaults to `true` in non-production)
 - `REDIS_CONNECT_TIMEOUT_MS` - Optional Redis connect timeout in ms (default: 5000)
+- `PERMISSION_CACHE_TTL_MS` - TTL for permission decision cache in milliseconds (default: 300000)
+- `PERMISSION_CACHE_TTL_SECONDS` - TTL for permission decision cache in seconds (used when `PERMISSION_CACHE_TTL_MS` is not set)
+- `PERMISSION_CACHE_SCAN_COUNT` - Redis scan batch size when invalidating permission decision keys (default: 200)
 - `SOCKET_REDIS_ADAPTER_ENABLED` - Enable Socket.IO Redis adapter for multi-instance realtime fan-out (`true`/`false`)
 
 ### Rate Limiting (Redis)
@@ -75,6 +78,9 @@
 ### Metrics (Prometheus)
 - `METRICS_ENABLED` - Set to `true` to expose `/metrics`
 - `METRICS_API_KEY` - Optional. If set, requests to `/metrics` must include header `x-metrics-key`
+
+### Permission Access Review
+- `ACCESS_REVIEW_MAX_STALE` - Default max stale override items allowed when running access review with enforcement (default: `0`)
 
 ### Data Retention (Orders)
 - `ORDER_RETENTION_ENABLED` - Must be `true` to allow deletes (otherwise the job runs in dry-run mode)

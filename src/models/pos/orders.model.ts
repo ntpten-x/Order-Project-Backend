@@ -6,9 +6,15 @@ import { OrderType } from "../../entity/pos/OrderEnums";
 import { EntityManager, In } from "typeorm";
 import { getDbManager, getRepository, runInTransaction } from "../../database/dbContext";
 import { executeProfiledQuery } from "../../utils/queryProfiler";
+import { PermissionScope } from "../../middleware/permission.middleware";
+
+type AccessContext = {
+    scope?: PermissionScope;
+    actorUserId?: string;
+};
 
 export class OrdersModels {
-    async findAll(page: number = 1, limit: number = 50, statuses?: string[], orderType?: string, searchTerm?: string, branchId?: string): Promise<{ data: SalesOrder[], total: number, page: number, limit: number }> {
+    async findAll(page: number = 1, limit: number = 50, statuses?: string[], orderType?: string, searchTerm?: string, branchId?: string, access?: AccessContext): Promise<{ data: SalesOrder[], total: number, page: number, limit: number }> {
         try {
             const skip = (page - 1) * limit;
             const ordersRepository = getRepository(SalesOrder);
@@ -43,6 +49,12 @@ export class OrdersModels {
                     { search }
                 );
             }
+            if (access?.scope === "none") {
+                qb.andWhere("1=0");
+            }
+            if (access?.scope === "own" && access.actorUserId) {
+                qb.andWhere("order.created_by_id = :actorUserId", { actorUserId: access.actorUserId });
+            }
 
             const [data, total] = await qb.getManyAndCount();
 
@@ -63,7 +75,8 @@ export class OrdersModels {
         statuses?: string[],
         orderType?: string,
         query?: string,
-        branchId?: string
+        branchId?: string,
+        access?: AccessContext
     ): Promise<{ data: any[], total: number, page: number, limit: number }> {
         try {
             const whereClauses: string[] = [];
@@ -93,6 +106,13 @@ export class OrdersModels {
             if (branchId) {
                 params.push(branchId);
                 whereClauses.push(`o.branch_id = $${params.length}`);
+            }
+            if (access?.scope === "none") {
+                whereClauses.push(`1=0`);
+            }
+            if (access?.scope === "own" && access.actorUserId) {
+                params.push(access.actorUserId);
+                whereClauses.push(`o.created_by_id = $${params.length}`);
             }
 
             const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
@@ -207,7 +227,7 @@ export class OrdersModels {
         }
     }
 
-    async getStats(statuses: string[], branchId?: string): Promise<{ dineIn: number, takeaway: number, delivery: number, total: number }> {
+    async getStats(statuses: string[], branchId?: string, access?: AccessContext): Promise<{ dineIn: number, takeaway: number, delivery: number, total: number }> {
         try {
             const stats = await getRepository(SalesOrder)
                 .createQueryBuilder("order")
@@ -217,6 +237,12 @@ export class OrdersModels {
 
             if (branchId) {
                 stats.andWhere("order.branch_id = :branchId", { branchId });
+            }
+            if (access?.scope === "none") {
+                stats.andWhere("1=0");
+            }
+            if (access?.scope === "own" && access.actorUserId) {
+                stats.andWhere("order.created_by_id = :actorUserId", { actorUserId: access.actorUserId });
             }
 
             const resultStats = await stats.groupBy("order.order_type").getRawMany();
@@ -246,13 +272,22 @@ export class OrdersModels {
         status?: any,
         page: number = 1,
         limit: number = 100,
-        branchId?: string
+        branchId?: string,
+        access?: AccessContext
     ): Promise<{ data: SalesOrderItem[]; total: number; page: number; limit: number }> {
         try {
             // Need simple find with relations
             const where: any = {};
             if (status) where.status = status;
-            if (branchId) where.order = { branch_id: branchId };
+            if (branchId || (access?.scope === "own" && access.actorUserId)) {
+                where.order = {
+                    ...(branchId ? { branch_id: branchId } : {}),
+                    ...(access?.scope === "own" && access.actorUserId ? { created_by_id: access.actorUserId } : {}),
+                };
+            }
+            if (access?.scope === "none") {
+                where.id = "__none__";
+            }
 
             const repo = getRepository(SalesOrderItem);
             const [data, total] = await repo.findAndCount({
@@ -272,11 +307,14 @@ export class OrdersModels {
         }
     }
 
-    async findOne(id: string, branchId?: string): Promise<SalesOrder | null> {
+    async findOne(id: string, branchId?: string, access?: AccessContext): Promise<SalesOrder | null> {
         try {
             const where: any = { id };
             if (branchId) {
                 where.branch_id = branchId;
+            }
+            if (access?.scope === "own" && access.actorUserId) {
+                where.created_by_id = access.actorUserId;
             }
 
             return getRepository(SalesOrder).findOne({

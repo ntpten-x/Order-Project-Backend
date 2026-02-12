@@ -1,9 +1,15 @@
 import { Users } from "../entity/Users";
-import { getDbContext, getRepository } from "../database/dbContext";
+import { getDbContext, getDbManager, getRepository } from "../database/dbContext";
 import { Brackets } from "typeorm";
+import { PermissionScope } from "../middleware/permission.middleware";
+
+type AccessContext = {
+    scope?: PermissionScope;
+    actorUserId?: string;
+};
 
 export class UsersModels {
-    async findAll(filters?: { role?: string }): Promise<Users[]> {
+    async findAll(filters?: { role?: string }, access?: AccessContext): Promise<Users[]> {
         try {
             const usersRepository = getRepository(Users);
             const ctx = getDbContext();
@@ -34,13 +40,21 @@ export class UsersModels {
                 );
             }
 
+            if (access?.scope === "none") {
+                query.andWhere("1=0");
+            }
+
+            if (access?.scope === "own" && access.actorUserId) {
+                query.andWhere("users.id = :actorUserId", { actorUserId: access.actorUserId });
+            }
+
             return await query.getMany();
         } catch (error) {
             throw error
         }
     }
 
-    async findOne(id: string): Promise<Users | null> {
+    async findOne(id: string, access?: AccessContext): Promise<Users | null> {
         try {
             const ctx = getDbContext();
             const query = getRepository(Users).createQueryBuilder("users")
@@ -61,6 +75,14 @@ export class UsersModels {
                         }
                     })
                 );
+            }
+
+            if (access?.scope === "none") {
+                query.andWhere("1=0");
+            }
+
+            if (access?.scope === "own" && access.actorUserId) {
+                query.andWhere("users.id = :actorUserId", { actorUserId: access.actorUserId });
             }
 
             return await query.getOne();
@@ -131,5 +153,52 @@ export class UsersModels {
         } catch (error) {
             throw error
         }
+    }
+
+    async revokeUserPermissionOverrides(userId: string, actorUserId?: string): Promise<number> {
+        const manager = getDbManager();
+        return manager.transaction(async (tx) => {
+            const beforeRows = await tx.query(
+                `
+                    SELECT COUNT(*)::int AS total
+                    FROM user_permissions
+                    WHERE user_id = $1
+                `,
+                [userId]
+            );
+            const beforeTotal = Number(beforeRows?.[0]?.total ?? 0);
+
+            if (beforeTotal <= 0) {
+                return 0;
+            }
+
+            await tx.query(`DELETE FROM user_permissions WHERE user_id = $1`, [userId]);
+
+            if (actorUserId) {
+                await tx.query(
+                    `
+                        INSERT INTO permission_audits (
+                            actor_user_id,
+                            target_type,
+                            target_id,
+                            action_type,
+                            payload_before,
+                            payload_after,
+                            reason
+                        )
+                        VALUES ($1, 'user', $2, 'offboarding_revoke', $3::jsonb, $4::jsonb, $5)
+                    `,
+                    [
+                        actorUserId,
+                        userId,
+                        JSON.stringify({ overrides_count: beforeTotal }),
+                        JSON.stringify({ overrides_count: 0 }),
+                        "Automatic revoke on user disable/offboarding",
+                    ]
+                );
+            }
+
+            return beforeTotal;
+        });
     }
 }

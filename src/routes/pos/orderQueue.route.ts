@@ -1,21 +1,21 @@
 import { Router } from "express";
 import { OrderQueueController } from "../../controllers/pos/orderQueue.controller";
-import { authenticateToken, authorizeRole } from "../../middleware/auth.middleware";
+import { authenticateToken } from "../../middleware/auth.middleware";
 import { requireBranch } from "../../middleware/branch.middleware";
+import { authorizePermission } from "../../middleware/permission.middleware";
 
 const router = Router();
 const orderQueueController = new OrderQueueController();
 
 // Protect all routes
 router.use(authenticateToken);
-router.use(authorizeRole(["Admin", "Manager", "Employee"]));
 router.use(requireBranch);
 
 // Routes
-router.post("/", orderQueueController.addToQueue);
-router.get("/", orderQueueController.getQueue);
-router.patch("/:id/status", orderQueueController.updateStatus);
-router.delete("/:id", orderQueueController.removeFromQueue);
-router.post("/reorder", orderQueueController.reorderQueue);
+router.post("/", authorizePermission("queue.page", "create"), orderQueueController.addToQueue);
+router.get("/", authorizePermission("queue.page", "view"), orderQueueController.getQueue);
+router.patch("/:id/status", authorizePermission("queue.page", "update"), orderQueueController.updateStatus);
+router.delete("/:id", authorizePermission("queue.page", "delete"), orderQueueController.removeFromQueue);
+router.post("/reorder", authorizePermission("queue.page", "update"), orderQueueController.reorderQueue);
 
 export default router;

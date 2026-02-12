@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import { Response } from "express";
 import { OrdersService } from "../../services/pos/orders.service";
 import { catchAsync } from "../../utils/catchAsync";
 import { AppError } from "../../utils/AppError";
@@ -7,6 +7,7 @@ import { getClientIp } from "../../utils/securityLogger";
 import { ApiResponses } from "../../utils/ApiResponse";
 import { getBranchId } from "../../middleware/branch.middleware";
 import { parseStatusQuery } from "../../utils/statusQuery";
+import { AuthRequest } from "../../middleware/auth.middleware";
 
 export class OrdersController {
     constructor(private ordersService: OrdersService) { }
@@ -16,7 +17,7 @@ export class OrdersController {
         res.setHeader("Expires", "0");
     }
 
-    findAll = catchAsync(async (req: Request, res: Response) => {
+    findAll = catchAsync(async (req: AuthRequest, res: Response) => {
         const page = Math.max(parseInt(req.query.page as string) || 1, 1);
         const limitRaw = parseInt(req.query.limit as string) || 50;
         const limit = Math.min(Math.max(limitRaw, 1), 200); // cap to prevent huge payloads
@@ -25,7 +26,10 @@ export class OrdersController {
         const query = req.query.q as string | undefined;
         const branchId = getBranchId(req as any);
 
-        const result = await this.ordersService.findAll(page, limit, statuses, type, query, branchId);
+        const result = await this.ordersService.findAll(page, limit, statuses, type, query, branchId, {
+            scope: req.permission?.scope,
+            actorUserId: req.user?.id,
+        });
         return ApiResponses.paginated(res, result.data, {
             page: result.page,
             limit: result.limit,
@@ -33,7 +37,7 @@ export class OrdersController {
         });
     })
 
-    findSummary = catchAsync(async (req: Request, res: Response) => {
+    findSummary = catchAsync(async (req: AuthRequest, res: Response) => {
         const page = Math.max(parseInt(req.query.page as string) || 1, 1);
         const limitRaw = parseInt(req.query.limit as string) || 50;
         const limit = Math.min(Math.max(limitRaw, 1), 200);
@@ -42,7 +46,16 @@ export class OrdersController {
         const query = req.query.q as string | undefined;
         const branchId = getBranchId(req as any);
 
-        const result = await this.ordersService.findAllSummary(page, limit, statuses, type, query, branchId, { bypassCache: true });
+        const result = await this.ordersService.findAllSummary(
+            page,
+            limit,
+            statuses,
+            type,
+            query,
+            branchId,
+            { scope: req.permission?.scope, actorUserId: req.user?.id },
+            { bypassCache: true }
+        );
         this.setNoStoreHeaders(res);
         return ApiResponses.paginated(res, result.data, {
             page: result.page,
@@ -51,21 +64,28 @@ export class OrdersController {
         });
     })
 
-    getStats = catchAsync(async (req: Request, res: Response) => {
+    getStats = catchAsync(async (req: AuthRequest, res: Response) => {
         const branchId = getBranchId(req as any);
-        const stats = await this.ordersService.getStats(branchId, { bypassCache: true });
+        const stats = await this.ordersService.getStats(
+            branchId,
+            { scope: req.permission?.scope, actorUserId: req.user?.id },
+            { bypassCache: true }
+        );
         this.setNoStoreHeaders(res);
         return ApiResponses.ok(res, stats);
     })
 
-    findAllItems = catchAsync(async (req: Request, res: Response) => {
+    findAllItems = catchAsync(async (req: AuthRequest, res: Response) => {
         const status = req.query.status as string;
         const page = Math.max(parseInt(req.query.page as string) || 1, 1);
         const limitRaw = parseInt(req.query.limit as string) || 100;
         const limit = Math.min(Math.max(limitRaw, 1), 200); // cap to prevent huge payloads
         const branchId = getBranchId(req as any);
 
-        const result = await this.ordersService.findAllItems(status, page, limit, branchId);
+        const result = await this.ordersService.findAllItems(status, page, limit, branchId, {
+            scope: req.permission?.scope,
+            actorUserId: req.user?.id,
+        });
         this.setNoStoreHeaders(res);
         return ApiResponses.paginated(res, result.data, {
             page: result.page,
@@ -74,9 +94,12 @@ export class OrdersController {
         });
     })
 
-    findOne = catchAsync(async (req: Request, res: Response) => {
+    findOne = catchAsync(async (req: AuthRequest, res: Response) => {
         const branchId = getBranchId(req as any);
-        const order = await this.ordersService.findOne(req.params.id, branchId)
+        const order = await this.ordersService.findOne(req.params.id, branchId, {
+            scope: req.permission?.scope,
+            actorUserId: req.user?.id,
+        })
         if (!order) {
             throw new AppError("ไม่พบข้อมูลออเดอร์", 404);
         }
@@ -84,7 +107,7 @@ export class OrdersController {
         return ApiResponses.ok(res, order);
     })
 
-    create = catchAsync(async (req: Request, res: Response) => {
+    create = catchAsync(async (req: AuthRequest, res: Response) => {
         const user = (req as any).user;
         const branchId = getBranchId(req as any);
         if (user?.id) {
@@ -121,7 +144,7 @@ export class OrdersController {
         return ApiResponses.created(res, order);
     })
 
-    update = catchAsync(async (req: Request, res: Response) => {
+    update = catchAsync(async (req: AuthRequest, res: Response) => {
         const user = (req as any).user;
         const branchId = getBranchId(req as any);
         if (branchId) {
@@ -171,7 +194,7 @@ export class OrdersController {
         return ApiResponses.ok(res, order);
     })
 
-    delete = catchAsync(async (req: Request, res: Response) => {
+    delete = catchAsync(async (req: AuthRequest, res: Response) => {
         const user = (req as any).user;
         const branchId = getBranchId(req as any);
         const oldOrder = await this.ordersService.findOne(req.params.id, branchId);
@@ -196,7 +219,7 @@ export class OrdersController {
         return ApiResponses.ok(res, { message: "ลบข้อมูลออเดอร์สำเร็จ" });
     })
 
-    updateItemStatus = catchAsync(async (req: Request, res: Response) => {
+    updateItemStatus = catchAsync(async (req: AuthRequest, res: Response) => {
         const branchId = getBranchId(req as any);
         const { status } = req.body
         if (!status) {
@@ -206,7 +229,7 @@ export class OrdersController {
         return ApiResponses.ok(res, { message: "อัปเดตสถานะสำเร็จ" });
     })
 
-    addItem = catchAsync(async (req: Request, res: Response) => {
+    addItem = catchAsync(async (req: AuthRequest, res: Response) => {
         const user = (req as any).user;
         const branchId = getBranchId(req as any);
         const order = await this.ordersService.addItem(req.params.id, req.body, branchId);
@@ -230,7 +253,7 @@ export class OrdersController {
         return ApiResponses.created(res, order);
     })
 
-    updateItem = catchAsync(async (req: Request, res: Response) => {
+    updateItem = catchAsync(async (req: AuthRequest, res: Response) => {
         const user = (req as any).user;
         const branchId = getBranchId(req as any);
         const order = await this.ordersService.updateItemDetails(req.params.itemId, req.body, branchId);
@@ -253,7 +276,7 @@ export class OrdersController {
         return ApiResponses.ok(res, order);
     })
 
-    deleteItem = catchAsync(async (req: Request, res: Response) => {
+    deleteItem = catchAsync(async (req: AuthRequest, res: Response) => {
         const user = (req as any).user;
         const branchId = getBranchId(req as any);
         const order = await this.ordersService.deleteItem(req.params.itemId, branchId);

@@ -2,9 +2,10 @@ import { Router } from "express";
 import { DeliveryModels } from "../../models/pos/delivery.model";
 import { DeliveryService } from "../../services/pos/delivery.service";
 import { DeliveryController } from "../../controllers/pos/delivery.controller";
-import { authenticateToken, authorizeRole } from "../../middleware/auth.middleware";
+import { authenticateToken } from "../../middleware/auth.middleware";
 import { validate } from "../../middleware/validate.middleware";
 import { requireBranch } from "../../middleware/branch.middleware";
+import { authorizePermission } from "../../middleware/permission.middleware";
 import { paginationQuerySchema } from "../../utils/schemas/common.schema";
 import {
     createDeliverySchema,
@@ -20,18 +21,14 @@ const deliveryService = new DeliveryService(deliveryModel)
 const deliveryController = new DeliveryController(deliveryService)
 
 router.use(authenticateToken)
-router.use(authorizeRole(["Admin", "Manager", "Employee"]))
 router.use(requireBranch)
-// Authorization: 
-// Admin/Manager can Manage
-// Employee can View
 
-router.get("/", authorizeRole(["Admin", "Manager", "Employee"]), validate(paginationQuerySchema), deliveryController.findAll)
-router.get("/:id", authorizeRole(["Admin", "Manager", "Employee"]), validate(deliveryIdParamSchema), deliveryController.findOne)
-router.get("/getByName/:name", authorizeRole(["Admin", "Manager", "Employee"]), validate(deliveryNameParamSchema), deliveryController.findByName)
+router.get("/", authorizePermission("delivery.page", "view"), validate(paginationQuerySchema), deliveryController.findAll)
+router.get("/:id", authorizePermission("delivery.page", "view"), validate(deliveryIdParamSchema), deliveryController.findOne)
+router.get("/getByName/:name", authorizePermission("delivery.page", "view"), validate(deliveryNameParamSchema), deliveryController.findByName)
 
-router.post("/", authorizeRole(["Admin", "Manager"]), validate(createDeliverySchema), deliveryController.create)
-router.put("/:id", authorizeRole(["Admin", "Manager"]), validate(updateDeliverySchema), deliveryController.update)
-router.delete("/:id", authorizeRole(["Admin", "Manager"]), validate(deliveryIdParamSchema), deliveryController.delete)
+router.post("/", authorizePermission("delivery.page", "create"), validate(createDeliverySchema), deliveryController.create)
+router.put("/:id", authorizePermission("delivery.page", "update"), validate(updateDeliverySchema), deliveryController.update)
+router.delete("/:id", authorizePermission("delivery.page", "delete"), validate(deliveryIdParamSchema), deliveryController.delete)
 
 export default router

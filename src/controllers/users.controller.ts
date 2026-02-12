@@ -1,11 +1,12 @@
 import { UsersService } from "../services/users.service";
-import { Request, Response } from "express";
+import { Response } from "express";
 import { catchAsync } from "../utils/catchAsync";
 import { ApiResponses } from "../utils/ApiResponse";
 import { AppError } from "../utils/AppError";
 import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../utils/auditLogger";
 import { getClientIp } from "../utils/securityLogger";
 import { setNoStoreHeaders } from "../utils/cacheHeaders";
+import { AuthRequest } from "../middleware/auth.middleware";
 
 export class UsersController {
     constructor(private usersService: UsersService) { }
@@ -16,15 +17,21 @@ export class UsersController {
         return rest;
     }
 
-    findAll = catchAsync(async (req: Request, res: Response) => {
+    findAll = catchAsync(async (req: AuthRequest, res: Response) => {
         const role = req.query.role as string;
-        const users = await this.usersService.findAll(role ? { role } : undefined);
+        const users = await this.usersService.findAll(
+            role ? { role } : undefined,
+            { scope: req.permission?.scope, actorUserId: req.user?.id }
+        );
         setNoStoreHeaders(res);
         return ApiResponses.ok(res, users);
     })
 
-    findOne = catchAsync(async (req: Request, res: Response) => {
-        const user = await this.usersService.findOne(req.params.id);
+    findOne = catchAsync(async (req: AuthRequest, res: Response) => {
+        const user = await this.usersService.findOne(req.params.id, {
+            scope: req.permission?.scope,
+            actorUserId: req.user?.id,
+        });
         if (!user) {
             throw AppError.notFound("User");
         }
@@ -32,7 +39,7 @@ export class UsersController {
         return ApiResponses.ok(res, user);
     })
 
-    create = catchAsync(async (req: Request, res: Response) => {
+    create = catchAsync(async (req: AuthRequest, res: Response) => {
         const user = await this.usersService.create(req.body);
 
         const userInfo = getUserInfoFromRequest(req as any);
@@ -53,9 +60,9 @@ export class UsersController {
         return ApiResponses.created(res, user);
     })
 
-    update = catchAsync(async (req: Request, res: Response) => {
+    update = catchAsync(async (req: AuthRequest, res: Response) => {
         const oldUser = await this.usersService.findOne(req.params.id);
-        const user = await this.usersService.update(req.params.id, req.body);
+        const user = await this.usersService.update(req.params.id, req.body, req.user?.id);
 
         const userInfo = getUserInfoFromRequest(req as any);
         await auditLogger.log({
@@ -76,7 +83,7 @@ export class UsersController {
         return ApiResponses.ok(res, user);
     })
 
-    delete = catchAsync(async (req: Request, res: Response) => {
+    delete = catchAsync(async (req: AuthRequest, res: Response) => {
         const oldUser = await this.usersService.findOne(req.params.id);
         await this.usersService.delete(req.params.id);
 
