@@ -1,0 +1,14 @@
+node_modules
+dist
+npm-debug.log
+.env
+.git
+.gitignore
+Dockerfile
+docker-compose.yml
+.tsbuildinfo.fast
+logs
+*.md
+scripts
+query-plans
+load-tests
