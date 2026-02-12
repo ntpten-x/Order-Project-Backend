@@ -14,8 +14,15 @@ import { getRedisClient, getSessionKey } from "../lib/redisClient";
 import { normalizeRoleName } from "../utils/role";
 
 export class AuthController {
+    private static setNoStoreHeaders(res: Response): void {
+        res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+        res.setHeader("Pragma", "no-cache");
+        res.setHeader("Expires", "0");
+        res.setHeader("Vary", "Authorization, Cookie");
+    }
 
     static async login(req: Request, res: Response) {
+        AuthController.setNoStoreHeaders(res);
         const { username, password } = req.body;
         const userRepository = AppDataSource.getRepository(Users);
         const ip = getClientIp(req);
@@ -170,6 +177,7 @@ export class AuthController {
     }
 
     static async logout(req: Request, res: Response) {
+        AuthController.setNoStoreHeaders(res);
         let userId: string | undefined;
         let jti: string | undefined;
 
@@ -229,6 +237,7 @@ export class AuthController {
     }
 
     static async getMe(req: AuthRequest, res: Response) {
+        AuthController.setNoStoreHeaders(res);
         if (!req.user) {
             return ApiResponses.unauthorized(res, "ไม่พบข้อมูลผู้ใช้");
         }
@@ -260,6 +269,7 @@ export class AuthController {
      * - branch_id = null/undefined: clear selection (admin sees all branches)
      */
     static async switchBranch(req: AuthRequest, res: Response) {
+        AuthController.setNoStoreHeaders(res);
         if (!req.user) {
             return ApiResponses.unauthorized(res, "Authentication required");
         }

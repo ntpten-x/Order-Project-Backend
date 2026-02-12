@@ -19,6 +19,12 @@ interface CacheOptions {
     defaultTtl?: number; // Time to live in milliseconds
 }
 
+interface CacheTelemetryHooks {
+    onHit?: (source: "memory" | "redis") => void;
+    onMiss?: () => void;
+    onStore?: () => void;
+}
+
 /**
  * LRU Cache with TTL support
  */
@@ -205,23 +211,28 @@ export async function withCache<T>(
     key: string,
     fetcher: () => Promise<T>,
     ttl?: number,
-    cache: LRUCache<T> = queryCache as LRUCache<T>
+    cache: LRUCache<T> = queryCache as LRUCache<T>,
+    hooks?: CacheTelemetryHooks
 ): Promise<T> {
     const effectiveTtl = ttl ?? cache.getDefaultTtl();
     const cached = cache.get(key);
     if (cached !== undefined) {
+        hooks?.onHit?.("memory");
         return cached;
     }
 
     const redisCached = await readFromRedisCache<T>(key);
     if (redisCached !== undefined) {
+        hooks?.onHit?.("redis");
         cache.set(key, redisCached, effectiveTtl);
         return redisCached;
     }
 
+    hooks?.onMiss?.();
     const value = await fetcher();
     cache.set(key, value, effectiveTtl);
     await writeToRedisCache(key, value, effectiveTtl);
+    hooks?.onStore?.();
     return value;
 }
 

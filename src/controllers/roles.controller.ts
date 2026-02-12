@@ -5,11 +5,13 @@ import { ApiResponses } from "../utils/ApiResponse"
 import { AppError } from "../utils/AppError"
 import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../utils/auditLogger"
 import { getClientIp } from "../utils/securityLogger"
+import { setNoStoreHeaders } from "../utils/cacheHeaders"
 
 export class RolesController {
     constructor(private rolesService: RolesService) { }
     findAll = catchAsync(async (_req: Request, res: Response) => {
         const roles = await this.rolesService.findAll()
+        setNoStoreHeaders(res)
         return ApiResponses.ok(res, roles)
     })
 
@@ -18,6 +20,7 @@ export class RolesController {
         if (!role) {
             throw AppError.notFound("Role")
         }
+        setNoStoreHeaders(res)
         return ApiResponses.ok(res, role)
     })
 

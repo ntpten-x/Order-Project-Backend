@@ -351,6 +351,8 @@ export const orderCreateLimiter = rateLimit({
     standardHeaders: true,
     legacyHeaders: false,
     message: "Too many order creation attempts, please slow down",
+    // Protect write-heavy order mutations, but do not throttle read endpoints such as /pos/orders/summary.
+    skip: (req) => !["POST", "PUT", "PATCH", "DELETE"].includes(req.method.toUpperCase()),
     ...(orderStore ? { store: orderStore } : {}),
     handler: (req: Request, res: Response) => {
         res.status(429).json({

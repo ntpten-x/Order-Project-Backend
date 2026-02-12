@@ -4,6 +4,7 @@ import { catchAsync } from "../utils/catchAsync";
 import { ApiResponses } from "../utils/ApiResponse";
 import { AppError } from "../utils/AppError";
 import { AuthRequest } from "../middleware/auth.middleware";
+import { setNoStoreHeaders } from "../utils/cacheHeaders";
 
 export class AuditController {
     private auditService = new AuditService();
@@ -38,6 +39,7 @@ export class AuditController {
 
         const { logs, total } = await this.auditService.getLogs(filters);
 
+        setNoStoreHeaders(res);
         return ApiResponses.paginated(res, logs, {
             page: filters.page || 1,
             limit: filters.limit || 20,
@@ -57,6 +59,7 @@ export class AuditController {
             return ApiResponses.forbidden(res, "Access denied");
         }
 
+        setNoStoreHeaders(res);
         return ApiResponses.ok(res, log);
     });
 }

@@ -5,6 +5,7 @@ import { ApiResponses } from "../utils/ApiResponse";
 import { AppError } from "../utils/AppError";
 import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../utils/auditLogger";
 import { getClientIp } from "../utils/securityLogger";
+import { setNoStoreHeaders } from "../utils/cacheHeaders";
 
 export class UsersController {
     constructor(private usersService: UsersService) { }
@@ -18,6 +19,7 @@ export class UsersController {
     findAll = catchAsync(async (req: Request, res: Response) => {
         const role = req.query.role as string;
         const users = await this.usersService.findAll(role ? { role } : undefined);
+        setNoStoreHeaders(res);
         return ApiResponses.ok(res, users);
     })
 
@@ -26,6 +28,7 @@ export class UsersController {
         if (!user) {
             throw AppError.notFound("User");
         }
+        setNoStoreHeaders(res);
         return ApiResponses.ok(res, user);
     })
 

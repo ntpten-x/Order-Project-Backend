@@ -6,6 +6,7 @@ import { ApiResponses } from "../../utils/ApiResponse";
 import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../../utils/auditLogger";
 import { getClientIp } from "../../utils/securityLogger";
 import { getBranchId } from "../../middleware/branch.middleware";
+import { setPrivateSwrHeaders } from "../../utils/cacheHeaders";
 
 /**
  * Tables Controller
@@ -28,13 +29,15 @@ export class TablesController {
         
         // Check if result has pagination structure
         if (result.data && result.total !== undefined) {
+            setPrivateSwrHeaders(res);
             return ApiResponses.paginated(res, result.data, {
                 page: result.page || page,
                 limit: limit,
                 total: result.total,
             });
         }
-        
+
+        setPrivateSwrHeaders(res);
         return ApiResponses.ok(res, result);
     });
 
@@ -44,6 +47,7 @@ export class TablesController {
         if (!table) {
             throw AppError.notFound("โต๊ะ");
         }
+        setPrivateSwrHeaders(res);
         return ApiResponses.ok(res, table);
     });
 
@@ -53,6 +57,7 @@ export class TablesController {
         if (!table) {
             throw AppError.notFound("โต๊ะ");
         }
+        setPrivateSwrHeaders(res);
         return ApiResponses.ok(res, table);
     });
 

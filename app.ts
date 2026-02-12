@@ -9,7 +9,6 @@ import { Server } from "socket.io";
 import { SocketService } from "./src/services/socket.service";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
-import rateLimit from "express-rate-limit";
 import csurf from "csurf";
 import compression from "compression";
 import { randomBytes } from "crypto";
@@ -48,12 +47,23 @@ const app = express();
 const httpServer = createServer(app); // Wrap express with HTTP server
 const port = process.env.PORT || 4000;
 const bodyLimitMb = Number(process.env.REQUEST_BODY_LIMIT_MB || 5);
-const enablePerfLogs = process.env.ENABLE_PERF_LOG === "true" || process.env.NODE_ENV !== "production";
+const enablePerfLogs = process.env.ENABLE_PERF_LOG === "true";
+
+const setNoStoreHeaders = (res: express.Response): void => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+};
 
 // Trust proxy for secure cookies behind proxies (e.g., Render, Nginx)
 app.set("trust proxy", 1);
 // Reduce information leakage
 app.disable("x-powered-by");
+
+// Keep health check out of heavy middleware stack (rate-limit/csurf/sanitize/etc.)
+app.get('/health', (_req, res) => {
+    res.status(200).json({ status: 'ok', uptime: process.uptime() });
+});
 
 // Performance monitoring (always enabled)
 app.use(performanceMonitoring);
@@ -117,24 +127,29 @@ app.use(express.json({ limit: `${bodyLimitMb}mb` }));
 app.use(express.urlencoded({ limit: `${bodyLimitMb}mb`, extended: true }));
 
 // Input Sanitization Middleware
+const sanitizeSkipPaths = new Set(["/health", "/metrics", "/csrf-token"]);
 app.use((req, res, next) => {
-    // Sanitize request body
-    if (req.body && typeof req.body === 'object') {
+    if (sanitizeSkipPaths.has(req.path)) {
+        return next();
+    }
+
+    const shouldSanitizeBody = req.method === "POST" || req.method === "PUT" || req.method === "PATCH";
+    const hasBody = req.body && typeof req.body === "object" && Object.keys(req.body).length > 0;
+
+    if (shouldSanitizeBody && hasBody) {
         req.body = sanitizeObject(req.body);
     }
-    // Sanitize query parameters
-    // NOTE: req.query is read-only, so we sanitize in-place
-    if (req.query && typeof req.query === 'object') {
+
+    const hasQuery = req.query && typeof req.query === "object" && Object.keys(req.query).length > 0;
+    if (hasQuery) {
         const query = req.query as Record<string, any>;
         for (const key in query) {
             if (Object.prototype.hasOwnProperty.call(query, key)) {
-                if (typeof query[key] === 'string') {
-                    // Sanitize string values in query
+                if (typeof query[key] === "string") {
                     (query as any)[key] = sanitizeString(query[key]);
                 } else if (Array.isArray(query[key])) {
-                    // Sanitize array values
                     (query as any)[key] = query[key].map((item: any) =>
-                        typeof item === 'string' ? sanitizeString(item) : item
+                        typeof item === "string" ? sanitizeString(item) : item
                     );
                 }
             }
@@ -191,6 +206,7 @@ const csrfExcludedPaths = new Set([
 // IMPORTANT: This endpoint must always work to ensure security
 // NOTE: This endpoint is excluded from global error handler to return custom format
 app.get('/csrf-token', (req, res, next) => {
+    setNoStoreHeaders(res);
     // Wrap in try-catch to handle any unexpected errors
     try {
         // Use csrfProtection middleware to generate token
@@ -300,26 +316,17 @@ app.use((req, res, next) => {
                 return next();
             });
         }
-        // For GET requests, still initialize CSRF but don't enforce
-        // This allows CSRF token generation for subsequent requests
-        return csrfProtection(req, res, (err) => {
-            if (err && err.code !== 'EBADCSRFTOKEN') {
-                return next(err);
-            }
-            // Allow GET requests even if CSRF token is missing
-            return next();
-        });
+        // For non state-changing methods, skip CSRF middleware.
+        // Clients can fetch a fresh token from /csrf-token when needed.
+        return next();
     }
 
     // No authentication - allow through
     return next();
 });
 
-app.get('/health', (req, res) => {
-    res.status(200).json({ status: 'ok', uptime: process.uptime() });
-});
-
 app.get('/metrics', async (req, res) => {
+    setNoStoreHeaders(res);
     if (!metrics.enabled) {
         return res.status(404).json({ message: "Metrics disabled" });
     }

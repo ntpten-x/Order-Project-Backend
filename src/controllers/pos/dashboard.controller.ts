@@ -6,6 +6,18 @@ import { ApiResponses } from "../../utils/ApiResponse";
 
 export class DashboardController {
     constructor(private dashboardService: DashboardService) { }
+    private readonly responseMaxAgeSec = Number(process.env.DASHBOARD_RESPONSE_CACHE_MAX_AGE_SEC || 15);
+    private readonly responseStaleSec = Number(process.env.DASHBOARD_RESPONSE_CACHE_STALE_SEC || 30);
+    private readonly responseCachePublic = process.env.DASHBOARD_RESPONSE_CACHE_PUBLIC === "true";
+
+    private setCacheHeaders(res: Response): void {
+        const visibility = this.responseCachePublic ? "public" : "private";
+        res.setHeader(
+            "Cache-Control",
+            `${visibility}, max-age=0, s-maxage=${this.responseMaxAgeSec}, stale-while-revalidate=${this.responseStaleSec}`
+        );
+        res.setHeader("Vary", "Authorization, Cookie");
+    }
 
     getSalesSummary = catchAsync(async (req: Request, res: Response) => {
         const { startDate, endDate } = req.query;
@@ -15,6 +27,7 @@ export class DashboardController {
             endDate as string,
             branchId
         );
+        this.setCacheHeaders(res);
         return ApiResponses.ok(res, result);
     });
 
@@ -22,6 +35,7 @@ export class DashboardController {
         const limit = parseInt(req.query.limit as string) || 10;
         const branchId = getBranchId(req as any);
         const result = await this.dashboardService.getTopSellingItems(limit, branchId);
+        this.setCacheHeaders(res);
         return ApiResponses.ok(res, result);
     });
 }

@@ -1,6 +1,6 @@
 import { OrdersModels } from "../../models/pos/orders.model";
 import { SocketService } from "../socket.service";
-import { withCache, cacheKey, queryCache } from "../../utils/cache";
+import { withCache, cacheKey, queryCache, invalidateCache } from "../../utils/cache";
 import { SalesOrder } from "../../entity/pos/SalesOrder";
 import { Tables, TableStatus } from "../../entity/pos/Tables";
 import { Delivery } from "../../entity/pos/Delivery";
@@ -20,15 +20,16 @@ import { getClientIp } from "../../utils/securityLogger";
 import { getDbContext, getRepository, runInTransaction } from "../../database/dbContext";
 import { RealtimeEvents } from "../../utils/realtimeEvents";
 import { normalizeOrderStatus } from "../../utils/orderStatus";
+import { metrics } from "../../utils/metrics";
 
 export class OrdersService {
     private socketService = SocketService.getInstance();
     private shiftsService = new ShiftsService();
     private queueService = new OrderQueueService();
     private readonly SUMMARY_CACHE_PREFIX = "orders:summary";
-    private readonly SUMMARY_CACHE_TTL = 3 * 1000; // 3 seconds
+    private readonly SUMMARY_CACHE_TTL = Number(process.env.ORDERS_SUMMARY_CACHE_TTL_MS || 10000);
     private readonly STATS_CACHE_PREFIX = "orders:stats";
-    private readonly STATS_CACHE_TTL = 3 * 1000; // 3 seconds
+    private readonly STATS_CACHE_TTL = Number(process.env.ORDERS_STATS_CACHE_TTL_MS || 10000);
 
     constructor(private ordersModel: OrdersModels) { }
 
@@ -38,6 +39,26 @@ export class OrdersService {
         if (effectiveBranchId) return ["branch", effectiveBranchId];
         if (ctx?.isAdmin) return ["admin"];
         return ["public"];
+    }
+
+    private observeCache(operation: string, result: "hit" | "miss", source?: "memory" | "redis"): void {
+        metrics.observeCache({
+            cache: "query",
+            operation,
+            result,
+            source: source ?? "none",
+        });
+    }
+
+    private invalidateReadCaches(branchId?: string): void {
+        const scope = this.getCacheScopeParts(branchId);
+        const patterns = [
+            cacheKey(this.SUMMARY_CACHE_PREFIX, ...scope),
+            cacheKey(this.STATS_CACHE_PREFIX, ...scope),
+            cacheKey("dashboard:sales", ...scope),
+            cacheKey("dashboard:top-items", ...scope),
+        ];
+        invalidateCache(patterns);
     }
 
     private async ensureActiveShift(branchId?: string): Promise<void> {
@@ -166,13 +187,21 @@ export class OrdersService {
         }
     }
 
-    async findAllSummary(page: number, limit: number, statuses?: string[], type?: string, query?: string, branchId?: string): Promise<{ data: any[], total: number, page: number, limit: number }> {
+    async findAllSummary(
+        page: number,
+        limit: number,
+        statuses?: string[],
+        type?: string,
+        query?: string,
+        branchId?: string,
+        options?: { bypassCache?: boolean }
+    ): Promise<{ data: any[], total: number, page: number, limit: number }> {
         const statusKey = statuses?.length ? statuses.join(",") : "all";
         const typeKey = type || "all";
         const scope = this.getCacheScopeParts(branchId);
         const key = cacheKey(this.SUMMARY_CACHE_PREFIX, ...scope, "list", page, limit, statusKey, typeKey);
 
-        if (query?.trim() || page > 1) {
+        if (options?.bypassCache || query?.trim() || page > 1) {
             return this.ordersModel.findAllSummary(page, limit, statuses, type, query, branchId);
         }
 
@@ -180,17 +209,25 @@ export class OrdersService {
             key,
             () => this.ordersModel.findAllSummary(page, limit, statuses, type, query, branchId),
             this.SUMMARY_CACHE_TTL,
-            queryCache as any
+            queryCache as any,
+            {
+                onHit: (source) => this.observeCache("orders.summary.list", "hit", source),
+                onMiss: () => this.observeCache("orders.summary.list", "miss"),
+            }
         );
     }
 
-    async getStats(branchId?: string): Promise<{ dineIn: number, takeaway: number, delivery: number, total: number }> {
+    async getStats(branchId?: string, options?: { bypassCache?: boolean }): Promise<{ dineIn: number, takeaway: number, delivery: number, total: number }> {
         const activeStatuses = [
             OrderStatus.Pending,
             OrderStatus.Cooking,
             OrderStatus.Served,
             OrderStatus.WaitingForPayment,
         ];
+
+        if (options?.bypassCache) {
+            return this.ordersModel.getStats(activeStatuses, branchId);
+        }
 
         const scope = this.getCacheScopeParts(branchId);
         const key = cacheKey(this.STATS_CACHE_PREFIX, ...scope, "active");
@@ -199,7 +236,11 @@ export class OrdersService {
             key,
             () => this.ordersModel.getStats(activeStatuses, branchId),
             this.STATS_CACHE_TTL,
-            queryCache as any
+            queryCache as any,
+            {
+                onHit: (source) => this.observeCache("orders.stats.active", "hit", source),
+                onMiss: () => this.observeCache("orders.stats.active", "miss"),
+            }
         );
     }
 
@@ -266,6 +307,7 @@ export class OrdersService {
                 throw error
             }
         }).then(async (createdOrder) => {
+            this.invalidateReadCaches(createdOrder.branch_id || branchId);
             // Post-transaction Side Effects
             const effectiveBranchId = createdOrder.branch_id || branchId;
             if (effectiveBranchId) {
@@ -371,6 +413,7 @@ export class OrdersService {
         }).then(async (savedOrder) => {
             const fullOrder = await this.ordersModel.findOne(savedOrder.id, branchId);
             if (fullOrder) {
+                this.invalidateReadCaches(fullOrder.branch_id || branchId);
                 const effectiveBranchId = fullOrder.branch_id || branchId;
                 if (effectiveBranchId) {
                     this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.create, fullOrder);
@@ -491,6 +534,7 @@ export class OrdersService {
             }
 
             const emitBranchId = result.branch_id || branchId;
+            this.invalidateReadCaches(emitBranchId);
             if (emitBranchId) {
                 this.socketService.emitToBranch(emitBranchId, RealtimeEvents.orders.update, result);
             }
@@ -519,6 +563,7 @@ export class OrdersService {
             }
             await this.ordersModel.delete(id, undefined, branchId)
             const effectiveBranchId = order?.branch_id || branchId;
+            this.invalidateReadCaches(effectiveBranchId);
             if (effectiveBranchId) {
                 this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.delete, { id });
             }
@@ -540,6 +585,7 @@ export class OrdersService {
             if (!updatedOrder) return;
 
             const effectiveBranchId = updatedOrder.branch_id || branchId;
+            this.invalidateReadCaches(effectiveBranchId);
             if (effectiveBranchId) {
                 this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.update, updatedOrder);
             }
@@ -579,6 +625,7 @@ export class OrdersService {
         }).then((updatedOrder) => {
             if (updatedOrder) {
                 const effectiveBranchId = updatedOrder.branch_id || branchId;
+                this.invalidateReadCaches(effectiveBranchId);
                 if (effectiveBranchId) {
                     this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.update, updatedOrder);
                 }
@@ -647,6 +694,7 @@ export class OrdersService {
         }).then((updatedOrder) => {
             if (updatedOrder) {
                 const effectiveBranchId = updatedOrder.branch_id || branchId;
+                this.invalidateReadCaches(effectiveBranchId);
                 if (effectiveBranchId) {
                     this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.update, updatedOrder);
                 }
@@ -674,6 +722,7 @@ export class OrdersService {
         }).then((updatedOrder) => {
             if (updatedOrder) {
                 const effectiveBranchId = updatedOrder.branch_id || branchId;
+                this.invalidateReadCaches(effectiveBranchId);
                 if (effectiveBranchId) {
                     this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.update, updatedOrder);
                 }

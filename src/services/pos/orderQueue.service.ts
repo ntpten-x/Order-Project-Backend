@@ -99,7 +99,26 @@ export class OrderQueueService {
     /**
      * Get queue list
      */
-    async getQueue(branchId?: string, status?: QueueStatus): Promise<OrderQueue[]> {
+    async getQueue(branchId?: string, status?: QueueStatus, options?: { bypassCache?: boolean }): Promise<OrderQueue[]> {
+        if (options?.bypassCache) {
+            const queueRepository = getRepository(OrderQueue);
+            const query = queueRepository
+                .createQueryBuilder('queue')
+                .leftJoinAndSelect('queue.order', 'order')
+                .orderBy('queue.priority', 'DESC')
+                .addOrderBy('queue.queue_position', 'ASC');
+
+            if (branchId) {
+                query.where('queue.branch_id = :branchId', { branchId });
+            }
+
+            if (status) {
+                query.andWhere('queue.status = :status', { status });
+            }
+
+            return query.getMany();
+        }
+
         const scope = this.getCacheScopeParts(branchId);
         const key = cacheKey(this.CACHE_PREFIX, ...scope, "list", status || "all");
 

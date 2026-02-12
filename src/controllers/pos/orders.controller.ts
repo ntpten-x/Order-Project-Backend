@@ -10,6 +10,11 @@ import { parseStatusQuery } from "../../utils/statusQuery";
 
 export class OrdersController {
     constructor(private ordersService: OrdersService) { }
+    private setNoStoreHeaders(res: Response): void {
+        res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+        res.setHeader("Pragma", "no-cache");
+        res.setHeader("Expires", "0");
+    }
 
     findAll = catchAsync(async (req: Request, res: Response) => {
         const page = Math.max(parseInt(req.query.page as string) || 1, 1);
@@ -37,7 +42,8 @@ export class OrdersController {
         const query = req.query.q as string | undefined;
         const branchId = getBranchId(req as any);
 
-        const result = await this.ordersService.findAllSummary(page, limit, statuses, type, query, branchId);
+        const result = await this.ordersService.findAllSummary(page, limit, statuses, type, query, branchId, { bypassCache: true });
+        this.setNoStoreHeaders(res);
         return ApiResponses.paginated(res, result.data, {
             page: result.page,
             limit: result.limit,
@@ -47,7 +53,8 @@ export class OrdersController {
 
     getStats = catchAsync(async (req: Request, res: Response) => {
         const branchId = getBranchId(req as any);
-        const stats = await this.ordersService.getStats(branchId);
+        const stats = await this.ordersService.getStats(branchId, { bypassCache: true });
+        this.setNoStoreHeaders(res);
         return ApiResponses.ok(res, stats);
     })
 
@@ -59,6 +66,7 @@ export class OrdersController {
         const branchId = getBranchId(req as any);
 
         const result = await this.ordersService.findAllItems(status, page, limit, branchId);
+        this.setNoStoreHeaders(res);
         return ApiResponses.paginated(res, result.data, {
             page: result.page,
             limit: result.limit,
@@ -72,6 +80,7 @@ export class OrdersController {
         if (!order) {
             throw new AppError("ไม่พบข้อมูลออเดอร์", 404);
         }
+        this.setNoStoreHeaders(res);
         return ApiResponses.ok(res, order);
     })
 
