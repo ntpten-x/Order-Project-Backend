@@ -6,6 +6,7 @@ import { authenticateToken } from "../../middleware/auth.middleware";
 import { validate } from "../../middleware/validate.middleware";
 import { requireBranch } from "../../middleware/branch.middleware";
 import { authorizePermission } from "../../middleware/permission.middleware";
+import { paginationQuerySchema } from "../../utils/schemas/common.schema";
 import {
     createProductsUnitSchema,
     productsUnitIdParamSchema,
@@ -22,7 +23,7 @@ const productsUnitController = new ProductsUnitController(productsUnitService)
 router.use(authenticateToken)
 router.use(requireBranch)
 
-router.get("/", authorizePermission("products.page", "view"), productsUnitController.findAll)
+router.get("/", authorizePermission("products.page", "view"), validate(paginationQuerySchema), productsUnitController.findAll)
 router.get("/:id", authorizePermission("products.page", "view"), validate(productsUnitIdParamSchema), productsUnitController.findOne)
 router.get("/name/:unit_name", authorizePermission("products.page", "view"), validate(productsUnitNameParamSchema), productsUnitController.findOneByName)
 

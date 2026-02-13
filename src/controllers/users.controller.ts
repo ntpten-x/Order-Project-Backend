@@ -19,12 +19,24 @@ export class UsersController {
 
     findAll = catchAsync(async (req: AuthRequest, res: Response) => {
         const role = req.query.role as string;
-        const users = await this.usersService.findAll(
-            role ? { role } : undefined,
+        const q = (req.query.q as string | undefined) || undefined;
+        const statusRaw = (req.query.status as string | undefined) || undefined;
+        const status = statusRaw === "active" || statusRaw === "inactive" ? statusRaw : undefined;
+        const page = Math.max(parseInt(req.query.page as string) || 1, 1);
+        const limitRaw = parseInt(req.query.limit as string) || 50;
+        const limit = Math.min(Math.max(limitRaw, 1), 200);
+        const users = await this.usersService.findAllPaginated(
+            { ...(role ? { role } : {}), ...(q ? { q } : {}), ...(status ? { status } : {}) },
+            page,
+            limit,
             { scope: req.permission?.scope, actorUserId: req.user?.id }
         );
         setNoStoreHeaders(res);
-        return ApiResponses.ok(res, users);
+        return ApiResponses.paginated(res, users.data, {
+            page: users.page,
+            limit: users.limit,
+            total: users.total,
+        });
     })
 
     findOne = catchAsync(async (req: AuthRequest, res: Response) => {

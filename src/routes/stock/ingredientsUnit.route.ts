@@ -6,6 +6,7 @@ import { authenticateToken } from "../../middleware/auth.middleware";
 import { requireBranch } from "../../middleware/branch.middleware";
 import { validate } from "../../middleware/validate.middleware";
 import { authorizePermission } from "../../middleware/permission.middleware";
+import { paginationQuerySchema } from "../../utils/schemas/common.schema";
 import {
     createIngredientUnitSchema,
     ingredientUnitIdParamSchema,
@@ -23,7 +24,7 @@ const ingredientsUnitController = new IngredientsUnitController(ingredientsUnitS
 router.use(authenticateToken)
 router.use(requireBranch)
 
-router.get("/", authorizePermission("stock.ingredients_unit.page", "view"), ingredientsUnitController.findAll)
+router.get("/", authorizePermission("stock.ingredients_unit.page", "view"), validate(paginationQuerySchema), ingredientsUnitController.findAll)
 router.get("/:id", authorizePermission("stock.ingredients_unit.page", "view"), validate(ingredientUnitIdParamSchema), ingredientsUnitController.findOne)
 router.get("/unit_name/:unit_name", authorizePermission("stock.ingredients_unit.page", "view"), validate(ingredientUnitNameParamSchema), ingredientsUnitController.findOneByUnitName)
 router.post("/", authorizePermission("stock.ingredients_unit.page", "create"), validate(createIngredientUnitSchema), ingredientsUnitController.create)

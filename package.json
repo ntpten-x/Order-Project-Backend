@@ -14,6 +14,7 @@
     "policy:cache:guard": "node scripts/policy-cache-guard.mjs",
     "route:guard": "node scripts/permission-route-guard.mjs",
     "scope:audit": "node scripts/security/audit-permission-scope.mjs",
+    "security:rbac:bootstrap": "ts-node --files scripts/security/bootstrap-rbac-defaults.ts",
     "security:db-role:bootstrap": "node scripts/security/bootstrap-app-db-role.mjs",
     "security:db-role:check": "node scripts/security/enforce-db-role-rls.mjs",
     "security:db-role:fix-bypassrls": "node scripts/security/enforce-db-role-rls.mjs --fix",

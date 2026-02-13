@@ -6,6 +6,7 @@ import { authenticateToken } from "../../middleware/auth.middleware";
 import { validate } from "../../middleware/validate.middleware";
 import { requireBranch } from "../../middleware/branch.middleware";
 import { authorizePermission } from "../../middleware/permission.middleware";
+import { paginationQuerySchema } from "../../utils/schemas/common.schema";
 import {
     createDiscountSchema,
     discountIdParamSchema,
@@ -22,7 +23,7 @@ const discountsController = new DiscountsController(discountsService)
 router.use(authenticateToken)
 router.use(requireBranch)
 
-router.get("/", authorizePermission("discounts.page", "view"), discountsController.findAll)
+router.get("/", authorizePermission("discounts.page", "view"), validate(paginationQuerySchema), discountsController.findAll)
 router.get("/:id", authorizePermission("discounts.page", "view"), validate(discountIdParamSchema), discountsController.findOne)
 router.get("/getByName/:name", authorizePermission("discounts.page", "view"), validate(discountNameParamSchema), discountsController.findByName)
 

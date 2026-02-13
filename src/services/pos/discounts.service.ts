@@ -16,6 +16,19 @@ export class DiscountsService {
         }
     }
 
+    async findAllPaginated(
+        page: number,
+        limit: number,
+        filters?: { q?: string; status?: "active" | "inactive"; type?: string },
+        branchId?: string
+    ): Promise<{ data: Discounts[]; total: number; page: number; limit: number; last_page: number }> {
+        try {
+            return this.discountsModel.findAllPaginated(page, limit, filters, branchId);
+        } catch (error) {
+            throw error;
+        }
+    }
+
     async findOne(id: string, branchId?: string): Promise<Discounts | null> {
         try {
             return this.discountsModel.findOne(id, branchId)
