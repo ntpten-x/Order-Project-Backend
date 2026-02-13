@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { AuditController } from "../controllers/audit.controller";
 import { authenticateToken } from "../middleware/auth.middleware";
-import { authorizePermission } from "../middleware/permission.middleware";
+import { authorizePermission, enforceAuditLogTargetScope } from "../middleware/permission.middleware";
 import { validate } from "../middleware/validate.middleware";
 import { auditIdParamSchema, auditQuerySchema } from "../utils/schemas/audit.schema";
 
@@ -20,6 +20,7 @@ router.get(
     "/logs/:id",
     authenticateToken,
     authorizePermission("audit.page", "view"),
+    enforceAuditLogTargetScope("id"),
     validate(auditIdParamSchema),
     controller.getById
 );

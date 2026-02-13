@@ -216,3 +216,81 @@ export const enforceOrderItemTargetScope = (paramName: string = "itemId") => {
         next();
     };
 };
+
+export const enforceBranchTargetScope = (paramName: string = "id") => {
+    return (req: AuthRequest, res: Response, next: NextFunction) => {
+        const scope = req.permission?.scope;
+        if (!scope || scope === "none") {
+            return ApiResponses.forbidden(res, "Access denied: Data scope is none");
+        }
+
+        if (scope === "all") {
+            return next();
+        }
+
+        const actorBranchId = req.user?.branch_id;
+        const targetBranchId = req.params?.[paramName];
+        if (!actorBranchId || !targetBranchId || targetBranchId !== actorBranchId) {
+            return ApiResponses.forbidden(res, "Access denied: Branch scope only");
+        }
+
+        next();
+    };
+};
+
+export const enforceAuditLogTargetScope = (paramName: string = "id") => {
+    return async (req: AuthRequest, res: Response, next: NextFunction) => {
+        const scope = req.permission?.scope;
+        if (!scope || scope === "none") {
+            return ApiResponses.forbidden(res, "Access denied: Data scope is none");
+        }
+
+        if (scope === "all") {
+            return next();
+        }
+
+        const auditId = req.params?.[paramName];
+        if (!auditId) {
+            return ApiResponses.badRequest(res, "Audit log id is required");
+        }
+
+        const rows = await getDbManager().query(
+            `SELECT user_id, branch_id FROM audit_logs WHERE id = $1 LIMIT 1`,
+            [auditId]
+        );
+
+        const log = rows?.[0];
+        if (!log) {
+            return ApiResponses.notFound(res, "Audit log");
+        }
+
+        if (scope === "own") {
+            if (!log.user_id || log.user_id !== req.user?.id) {
+                return ApiResponses.forbidden(res, "Access denied: Own scope only");
+            }
+            return next();
+        }
+
+        const actorBranchId = req.user?.branch_id;
+        if (!actorBranchId || !log.branch_id || log.branch_id !== actorBranchId) {
+            return ApiResponses.forbidden(res, "Access denied: Branch scope only");
+        }
+
+        next();
+    };
+};
+
+export const enforceAllScopeOnly = () => {
+    return (req: AuthRequest, res: Response, next: NextFunction) => {
+        const scope = req.permission?.scope;
+        if (!scope || scope === "none") {
+            return ApiResponses.forbidden(res, "Access denied: Data scope is none");
+        }
+
+        if (scope !== "all") {
+            return ApiResponses.forbidden(res, "Access denied: All scope required");
+        }
+
+        next();
+    };
+};
