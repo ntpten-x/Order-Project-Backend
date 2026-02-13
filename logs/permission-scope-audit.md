@@ -1,6 +1,6 @@
 # Permission Scope Audit
 
-Generated: 2026-02-13T03:17:36.146Z
+Generated: 2026-02-13T03:38:53.985Z
 
 ## Critical Rules Coverage
 
