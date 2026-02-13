@@ -15,6 +15,9 @@ let httpRequestDuration: any = null;
 let httpRequestTotal: any = null;
 let errorTotal: any = null;
 let cacheRequestTotal: any = null;
+let permissionDecisionTotal: any = null;
+let permissionCheckDuration: any = null;
+let privilegeEventTotal: any = null;
 
 if (metricsEnabled) {
     registry = new client.Registry();
@@ -45,10 +48,32 @@ if (metricsEnabled) {
         labelNames: ["cache", "operation", "result", "source"],
     });
 
+    permissionDecisionTotal = new client.Counter({
+        name: "permission_decisions_total",
+        help: "Total permission check decisions by resource/action/scope",
+        labelNames: ["resource", "action", "decision", "scope"],
+    });
+
+    permissionCheckDuration = new client.Histogram({
+        name: "permission_check_duration_ms",
+        help: "Permission check duration in milliseconds",
+        labelNames: ["resource", "action", "decision"],
+        buckets: [1, 2, 5, 10, 25, 50, 100, 250, 500],
+    });
+
+    privilegeEventTotal = new client.Counter({
+        name: "privilege_events_total",
+        help: "Privilege-sensitive events such as offboarding cleanup",
+        labelNames: ["event", "result"],
+    });
+
     registry.registerMetric(httpRequestDuration);
     registry.registerMetric(httpRequestTotal);
     registry.registerMetric(errorTotal);
     registry.registerMetric(cacheRequestTotal);
+    registry.registerMetric(permissionDecisionTotal);
+    registry.registerMetric(permissionCheckDuration);
+    registry.registerMetric(privilegeEventTotal);
 }
 
 export const metrics = {
@@ -78,6 +103,28 @@ export const metrics = {
                 params.source ?? "none"
             )
             .inc();
+    },
+    observePermissionCheck: (params: {
+        resource: string;
+        action: string;
+        decision: "allow" | "deny";
+        scope: string;
+        durationMs: number;
+    }) => {
+        if (!metricsEnabled || !permissionDecisionTotal || !permissionCheckDuration) return;
+        permissionDecisionTotal
+            .labels(params.resource, params.action, params.decision, params.scope)
+            .inc();
+        permissionCheckDuration
+            .labels(params.resource, params.action, params.decision)
+            .observe(params.durationMs);
+    },
+    countPrivilegeEvent: (params: {
+        event: "override_update" | "override_revoke_offboarding" | "access_review";
+        result: "success" | "error";
+    }) => {
+        if (!metricsEnabled || !privilegeEventTotal) return;
+        privilegeEventTotal.labels(params.event, params.result).inc();
     },
     getMetrics: async () => (metricsEnabled && registry ? registry.metrics() : ""),
 };

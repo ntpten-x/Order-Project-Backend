@@ -9,7 +9,7 @@ import { SocketService } from "../socket.service";
 import { getRepository, runInTransaction } from "../../database/dbContext";
 import { RealtimeEvents } from "../../utils/realtimeEvents";
 import { isCancelledStatus } from "../../utils/orderStatus";
-import { filterSuccessfulPayments, sumPaymentAmount } from "./shiftSummary.utils";
+import { filterSuccessfulPayments, sumCashPaymentAmount, sumPaymentAmount } from "./shiftSummary.utils";
 
 export class ShiftsService {
     private get shiftsRepo() {
@@ -104,11 +104,12 @@ export class ShiftsService {
         }
 
         const payments = await this.paymentsRepo.find({
-            where: { shift_id: activeShift.id, status: PaymentStatus.Success }
+            where: { shift_id: activeShift.id, status: PaymentStatus.Success },
+            relations: ["payment_method"]
         });
 
-        const totalSales = Math.round(sumPaymentAmount(payments) * 100) / 100;
-        const expectedAmount = Math.round((Number(activeShift.start_amount) + totalSales) * 100) / 100;
+        const cashSales = Math.round(sumCashPaymentAmount(payments) * 100) / 100;
+        const expectedAmount = Math.round((Number(activeShift.start_amount) + cashSales) * 100) / 100;
 
         activeShift.end_amount = endAmount;
         activeShift.expected_amount = expectedAmount;
@@ -137,6 +138,7 @@ export class ShiftsService {
         const payments = filterSuccessfulPayments(shift.payments || []);
 
         const totalSales = Math.round(sumPaymentAmount(payments) * 100) / 100;
+        const cashSales = Math.round(sumCashPaymentAmount(payments) * 100) / 100;
 
         let totalCost = 0;
         const categoryCounts: Record<string, number> = {};
@@ -209,9 +211,12 @@ export class ShiftsService {
                 open_time: shift.open_time,
                 close_time: shift.close_time,
                 start_amount: Number(shift.start_amount),
-                end_amount: shift.end_amount ? Number(shift.end_amount) : null,
-                expected_amount: shift.expected_amount ? Math.round(Number(shift.expected_amount) * 100) / 100 : Math.round((Number(shift.start_amount) + totalSales) * 100) / 100,
-                diff_amount: shift.diff_amount ? Number(shift.diff_amount) : null,
+                end_amount: shift.end_amount !== undefined && shift.end_amount !== null ? Number(shift.end_amount) : null,
+                expected_amount:
+                    shift.expected_amount !== undefined && shift.expected_amount !== null
+                        ? Math.round(Number(shift.expected_amount) * 100) / 100
+                        : Math.round((Number(shift.start_amount) + cashSales) * 100) / 100,
+                diff_amount: shift.diff_amount !== undefined && shift.diff_amount !== null ? Number(shift.diff_amount) : null,
             },
             summary: {
                 total_sales: totalSales,

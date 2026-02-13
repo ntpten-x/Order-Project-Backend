@@ -10,7 +10,7 @@ import { ApiResponses } from "../utils/ApiResponse";
 import { getRepository, runWithDbContext } from "../database/dbContext";
 import { RealtimeEvents } from "../utils/realtimeEvents";
 import { v4 as uuidv4 } from "uuid";
-import { getRedisClient, getSessionKey } from "../lib/redisClient";
+import { getRedisClient, getSessionKey, isRedisConfigured } from "../lib/redisClient";
 import { normalizeRoleName } from "../utils/role";
 
 export class AuthController {
@@ -129,7 +129,7 @@ export class AuthController {
                 await redis.set(sessionKey, JSON.stringify({ userId: user.id, role, branchId: user.branch_id, createdAt: Date.now() }), {
                     PX: ttl,
                 });
-            } else if (process.env.REDIS_URL) {
+            } else if (isRedisConfigured()) {
                 return ApiResponses.internalError(res, "Session store unavailable");
             }
 

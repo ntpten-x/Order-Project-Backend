@@ -21,6 +21,12 @@ import { getDbContext, getRepository, runInTransaction } from "../../database/db
 import { RealtimeEvents } from "../../utils/realtimeEvents";
 import { normalizeOrderStatus } from "../../utils/orderStatus";
 import { metrics } from "../../utils/metrics";
+import { PermissionScope } from "../../middleware/permission.middleware";
+
+type AccessContext = {
+    scope?: PermissionScope;
+    actorUserId?: string;
+};
 
 export class OrdersService {
     private socketService = SocketService.getInstance();
@@ -179,9 +185,9 @@ export class OrdersService {
         }
     }
 
-    async findAll(page: number, limit: number, statuses?: string[], type?: string, query?: string, branchId?: string): Promise<{ data: SalesOrder[], total: number, page: number, limit: number }> {
+    async findAll(page: number, limit: number, statuses?: string[], type?: string, query?: string, branchId?: string, access?: AccessContext): Promise<{ data: SalesOrder[], total: number, page: number, limit: number }> {
         try {
-            return this.ordersModel.findAll(page, limit, statuses, type, query, branchId)
+            return this.ordersModel.findAll(page, limit, statuses, type, query, branchId, access)
         } catch (error) {
             throw error
         }
@@ -194,6 +200,7 @@ export class OrdersService {
         type?: string,
         query?: string,
         branchId?: string,
+        access?: AccessContext,
         options?: { bypassCache?: boolean }
     ): Promise<{ data: any[], total: number, page: number, limit: number }> {
         const statusKey = statuses?.length ? statuses.join(",") : "all";
@@ -202,12 +209,12 @@ export class OrdersService {
         const key = cacheKey(this.SUMMARY_CACHE_PREFIX, ...scope, "list", page, limit, statusKey, typeKey);
 
         if (options?.bypassCache || query?.trim() || page > 1) {
-            return this.ordersModel.findAllSummary(page, limit, statuses, type, query, branchId);
+            return this.ordersModel.findAllSummary(page, limit, statuses, type, query, branchId, access);
         }
 
         return withCache(
             key,
-            () => this.ordersModel.findAllSummary(page, limit, statuses, type, query, branchId),
+            () => this.ordersModel.findAllSummary(page, limit, statuses, type, query, branchId, access),
             this.SUMMARY_CACHE_TTL,
             queryCache as any,
             {
@@ -217,7 +224,7 @@ export class OrdersService {
         );
     }
 
-    async getStats(branchId?: string, options?: { bypassCache?: boolean }): Promise<{ dineIn: number, takeaway: number, delivery: number, total: number }> {
+    async getStats(branchId?: string, access?: AccessContext, options?: { bypassCache?: boolean }): Promise<{ dineIn: number, takeaway: number, delivery: number, total: number }> {
         const activeStatuses = [
             OrderStatus.Pending,
             OrderStatus.Cooking,
@@ -226,7 +233,7 @@ export class OrdersService {
         ];
 
         if (options?.bypassCache) {
-            return this.ordersModel.getStats(activeStatuses, branchId);
+            return this.ordersModel.getStats(activeStatuses, branchId, access);
         }
 
         const scope = this.getCacheScopeParts(branchId);
@@ -234,7 +241,7 @@ export class OrdersService {
 
         return withCache(
             key,
-            () => this.ordersModel.getStats(activeStatuses, branchId),
+            () => this.ordersModel.getStats(activeStatuses, branchId, access),
             this.STATS_CACHE_TTL,
             queryCache as any,
             {
@@ -248,14 +255,15 @@ export class OrdersService {
         status?: string,
         page: number = 1,
         limit: number = 100,
-        branchId?: string
+        branchId?: string,
+        access?: AccessContext
     ): Promise<{ data: SalesOrderItem[]; total: number; page: number; limit: number }> {
-        return this.ordersModel.findAllItems(status, page, limit, branchId);
+        return this.ordersModel.findAllItems(status, page, limit, branchId, access);
     }
 
-    async findOne(id: string, branchId?: string): Promise<SalesOrder | null> {
+    async findOne(id: string, branchId?: string, access?: AccessContext): Promise<SalesOrder | null> {
         try {
-            return this.ordersModel.findOne(id, branchId)
+            return this.ordersModel.findOne(id, branchId, access)
         } catch (error) {
             throw error
         }

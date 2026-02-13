@@ -1,0 +1,57 @@
+name: Quarterly Access Review
+
+on:
+  schedule:
+    # 03:00 UTC on Jan/Apr/Jul/Oct 1st
+    - cron: "0 3 1 1,4,7,10 *"
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "Review window in days"
+        required: false
+        default: "90"
+      max_stale:
+        description: "Maximum allowed stale overrides"
+        required: false
+        default: "0"
+
+jobs:
+  access-review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Generate quarterly report with stale policy
+        run: |
+          DAYS="${{ github.event.inputs.days || '90' }}"
+          MAX_STALE="${{ github.event.inputs.max_stale || '0' }}"
+          REPORT_PATH="logs/permission-access-review-${{ github.run_id }}.md"
+          npm run security:access-review -- --days="${DAYS}" --output="${REPORT_PATH}" --fail-on-stale --max-stale="${MAX_STALE}"
+        env:
+          DATABASE_HOST: ${{ secrets.DATABASE_HOST }}
+          DATABASE_PORT: ${{ secrets.DATABASE_PORT }}
+          DATABASE_USER: ${{ secrets.DATABASE_USER }}
+          DATABASE_PASSWORD: ${{ secrets.DATABASE_PASSWORD }}
+          DATABASE_NAME: ${{ secrets.DATABASE_NAME }}
+          DATABASE_SSL: ${{ secrets.DATABASE_SSL }}
+          DATABASE_SSL_REJECT_UNAUTHORIZED: ${{ secrets.DATABASE_SSL_REJECT_UNAUTHORIZED }}
+          ACCESS_REVIEW_MAX_STALE: ${{ github.event.inputs.max_stale || '0' }}
+
+      - name: Upload access review artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: permission-access-review-${{ github.run_id }}
+          path: logs/permission-access-review-*.md
+          if-no-files-found: warn
+

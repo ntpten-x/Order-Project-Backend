@@ -6,7 +6,8 @@ type AnyRedisClient = RedisClientType<any, any, any>;
 let client: AnyRedisClient | null = null;
 let initializing: Promise<AnyRedisClient | null> | null = null;
 
-const REDIS_URL = process.env.REDIS_URL;
+const REDIS_DISABLED = process.env.REDIS_DISABLED === "true";
+const REDIS_URL = REDIS_DISABLED ? undefined : process.env.REDIS_URL?.trim();
 const DEFAULT_REDIS_PREFIX = process.env.REDIS_PREFIX || "order-app";
 
 const parseBoolean = (value: string | undefined): boolean | undefined => {
@@ -58,6 +59,7 @@ export function resolveRedisConfig(url?: string): {
     rejectUnauthorized: boolean;
     config: ReturnType<typeof buildRedisConfig>;
 } | null {
+    if (REDIS_DISABLED) return null;
     const rawUrl = (url ?? REDIS_URL)?.trim();
     if (!rawUrl) return null;
 
@@ -78,8 +80,12 @@ export function getRedisPrefix(namespace: string): string {
     return `${DEFAULT_REDIS_PREFIX}:${namespace}:`;
 }
 
+export function isRedisConfigured(): boolean {
+    return !REDIS_DISABLED && Boolean(REDIS_URL);
+}
+
 export async function getRedisClient(): Promise<AnyRedisClient | null> {
-    if (!REDIS_URL) {
+    if (!isRedisConfigured()) {
         return null;
     }
 
@@ -125,7 +131,7 @@ export async function getRedisClient(): Promise<AnyRedisClient | null> {
                     }
 
                     const retryTls = false;
-                    const retryUrl = normalizeRedisScheme(REDIS_URL, retryTls);
+                    const retryUrl = normalizeRedisScheme(normalizedUrl, retryTls);
                     const retryClient = createClient(buildRedisConfig(retryUrl, retryTls, rejectUnauthorized));
                     retryClient.on("error", (e) => console.error("[Redis] Client error:", e));
                     await retryClient.connect();

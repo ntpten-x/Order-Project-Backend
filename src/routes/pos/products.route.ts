@@ -2,8 +2,9 @@ import { Router } from "express";
 import { ProductsModels } from "../../models/pos/products.model";
 import { ProductsService } from "../../services/pos/products.service";
 import { ProductsController } from "../../controllers/pos/products.controller";
-import { authenticateToken, authorizeRole } from "../../middleware/auth.middleware";
+import { authenticateToken } from "../../middleware/auth.middleware";
 import { requireBranch } from "../../middleware/branch.middleware";
+import { authorizePermission } from "../../middleware/permission.middleware";
 import { validate } from "../../middleware/validate.middleware";
 import {
     createProductSchema,
@@ -20,15 +21,14 @@ const productsService = new ProductsService(productsModel)
 const productsController = new ProductsController(productsService)
 
 router.use(authenticateToken)
-router.use(authorizeRole(["Admin", "Manager", "Employee"]))
 router.use(requireBranch)
 
-router.get("/", validate(paginationQuerySchema), productsController.findAll)
-router.get("/:id", validate(productIdParamSchema), productsController.findOne)
-router.get("/name/:product_name", validate(productNameParamSchema), productsController.findOneByName)
+router.get("/", authorizePermission("products.page", "view"), validate(paginationQuerySchema), productsController.findAll)
+router.get("/:id", authorizePermission("products.page", "view"), validate(productIdParamSchema), productsController.findOne)
+router.get("/name/:product_name", authorizePermission("products.page", "view"), validate(productNameParamSchema), productsController.findOneByName)
 
-router.post("/", authorizeRole(["Admin", "Manager"]), validate(createProductSchema), productsController.create)
-router.put("/:id", authorizeRole(["Admin", "Manager"]), validate(updateProductSchema), productsController.update)
-router.delete("/:id", authorizeRole(["Admin", "Manager"]), validate(productIdParamSchema), productsController.delete)
+router.post("/", authorizePermission("products.page", "create"), validate(createProductSchema), productsController.create)
+router.put("/:id", authorizePermission("products.page", "update"), validate(updateProductSchema), productsController.update)
+router.delete("/:id", authorizePermission("products.page", "delete"), validate(productIdParamSchema), productsController.delete)
 
 export default router

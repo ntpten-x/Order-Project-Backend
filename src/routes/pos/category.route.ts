@@ -1,6 +1,7 @@
 import { Router } from "express";
-import { authenticateToken, authorizeRole } from "../../middleware/auth.middleware";
+import { authenticateToken } from "../../middleware/auth.middleware";
 import { validate } from "../../middleware/validate.middleware";
+import { authorizePermission } from "../../middleware/permission.middleware";
 import {
     categoryIdParamSchema,
     categoryNameParamSchema,
@@ -19,15 +20,14 @@ const categoryService = new CategoryService(categoryModel)
 const categoryController = new CategoryController(categoryService)
 
 router.use(authenticateToken)
-router.use(authorizeRole(["Admin", "Manager", "Employee"]))
 router.use(requireBranch)
 
-router.get("/", categoryController.findAll)
-router.get("/:id", validate(categoryIdParamSchema), categoryController.findOne)
-router.get("/name/:category_name", validate(categoryNameParamSchema), categoryController.findOneByName)
+router.get("/", authorizePermission("category.page", "view"), categoryController.findAll)
+router.get("/:id", authorizePermission("category.page", "view"), validate(categoryIdParamSchema), categoryController.findOne)
+router.get("/name/:category_name", authorizePermission("category.page", "view"), validate(categoryNameParamSchema), categoryController.findOneByName)
 
-router.post("/", authorizeRole(["Admin", "Manager"]), validate(createCategorySchema), categoryController.create)
-router.put("/:id", authorizeRole(["Admin", "Manager"]), validate(updateCategorySchema), categoryController.update)
-router.delete("/:id", authorizeRole(["Admin", "Manager"]), validate(categoryIdParamSchema), categoryController.delete)
+router.post("/", authorizePermission("category.page", "create"), validate(createCategorySchema), categoryController.create)
+router.put("/:id", authorizePermission("category.page", "update"), validate(updateCategorySchema), categoryController.update)
+router.delete("/:id", authorizePermission("category.page", "delete"), validate(categoryIdParamSchema), categoryController.delete)
 
 export default router

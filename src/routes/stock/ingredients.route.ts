@@ -2,9 +2,10 @@ import { Router } from "express";
 import { IngredientsModel } from "../../models/stock/ingredients.model";
 import { IngredientsService } from "../../services/stock/ingredients.service";
 import { IngredientsController } from "../../controllers/stock/ingredients.controller";
-import { authenticateToken, authorizeRole } from "../../middleware/auth.middleware";
+import { authenticateToken } from "../../middleware/auth.middleware";
 import { requireBranch } from "../../middleware/branch.middleware";
 import { validate } from "../../middleware/validate.middleware";
+import { authorizePermission } from "../../middleware/permission.middleware";
 import {
     createIngredientSchema,
     ingredientIdParamSchema,
@@ -20,17 +21,16 @@ const ingredientsController = new IngredientsController(ingredientsService)
 
 // Protect all routes
 router.use(authenticateToken)
-router.use(authorizeRole(["Admin", "Manager"]))
 router.use(requireBranch)
 
 // Public-ish routes (All authenticated roles)
-router.get("/", ingredientsController.findAll)
-router.get("/:id", validate(ingredientIdParamSchema), ingredientsController.findOne)
-router.get("/name/:ingredient_name", validate(ingredientNameParamSchema), ingredientsController.findOneByName)
+router.get("/", authorizePermission("stock.ingredients.page", "view"), ingredientsController.findAll)
+router.get("/:id", authorizePermission("stock.ingredients.page", "view"), validate(ingredientIdParamSchema), ingredientsController.findOne)
+router.get("/name/:ingredient_name", authorizePermission("stock.ingredients.page", "view"), validate(ingredientNameParamSchema), ingredientsController.findOneByName)
 
 // Admin/Manager routes for management
-router.post("/", authorizeRole(["Admin", "Manager"]), validate(createIngredientSchema), ingredientsController.create)
-router.put("/:id", authorizeRole(["Admin", "Manager"]), validate(updateIngredientSchema), ingredientsController.update)
-router.delete("/:id", authorizeRole(["Admin", "Manager"]), validate(ingredientIdParamSchema), ingredientsController.delete)
+router.post("/", authorizePermission("stock.ingredients.page", "create"), validate(createIngredientSchema), ingredientsController.create)
+router.put("/:id", authorizePermission("stock.ingredients.page", "update"), validate(updateIngredientSchema), ingredientsController.update)
+router.delete("/:id", authorizePermission("stock.ingredients.page", "delete"), validate(ingredientIdParamSchema), ingredientsController.delete)
 
 export default router

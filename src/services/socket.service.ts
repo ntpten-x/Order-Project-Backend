@@ -5,7 +5,7 @@ import { createClient } from "redis";
 import { AppDataSource } from "../database/database";
 import { Users } from "../entity/Users";
 import { RealtimeEvents } from "../utils/realtimeEvents";
-import { getRedisClient, getSessionKey, resolveRedisConfig } from "../lib/redisClient";
+import { getRedisClient, getSessionKey, isRedisConfigured, resolveRedisConfig } from "../lib/redisClient";
 const parseCookies = (cookieHeader: string | undefined): { [key: string]: string } => {
     const list: { [key: string]: string } = {};
     if (!cookieHeader) return list;
@@ -72,7 +72,7 @@ export class SocketService {
                         return next(new Error("Authentication error: Session expired"));
                     }
                     await redis.pExpire(sessionKey, Number(process.env.SESSION_TIMEOUT_MS) || 8 * 60 * 60 * 1000);
-                } else if (process.env.REDIS_URL) {
+                } else if (isRedisConfigured()) {
                     return next(new Error("Authentication error: Session store unavailable"));
                 }
 

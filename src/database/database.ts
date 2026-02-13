@@ -31,6 +31,12 @@ import { TopSellingItemsView } from "../entity/pos/views/TopSellingItemsView"
 import { Shifts } from "../entity/pos/Shifts"
 import { OrderQueue } from "../entity/pos/OrderQueue"
 import { AuditLog } from "../entity/AuditLog"
+import { PermissionResource } from "../entity/PermissionResource"
+import { PermissionAction } from "../entity/PermissionAction"
+import { RolePermission } from "../entity/RolePermission"
+import { UserPermission } from "../entity/UserPermission"
+import { PermissionAudit } from "../entity/PermissionAudit"
+import { PermissionOverrideApproval } from "../entity/PermissionOverrideApproval"
 import * as dotenv from "dotenv"
 dotenv.config()
 const isProd = process.env.NODE_ENV === "production"
@@ -60,7 +66,7 @@ export const AppDataSource = new DataSource({
     username: process.env.DATABASE_USER,
     password: process.env.DATABASE_PASSWORD,
     database: process.env.DATABASE_NAME,
-    entities: [Users, Roles, Branch, IngredientsUnit, Ingredients, PurchaseOrder, StockOrdersItem, StockOrdersDetail, SalesOrder, SalesOrderItem, SalesOrderDetail, Category, Products, ProductsUnit, Tables, Delivery, Discounts, Payments, PaymentMethod, Shifts, ShopProfile, ShopPaymentAccount, SalesSummaryView, TopSellingItemsView, OrderQueue, AuditLog],
+    entities: [Users, Roles, Branch, IngredientsUnit, Ingredients, PurchaseOrder, StockOrdersItem, StockOrdersDetail, SalesOrder, SalesOrderItem, SalesOrderDetail, Category, Products, ProductsUnit, Tables, Delivery, Discounts, Payments, PaymentMethod, Shifts, ShopProfile, ShopPaymentAccount, SalesSummaryView, TopSellingItemsView, OrderQueue, AuditLog, PermissionResource, PermissionAction, RolePermission, UserPermission, PermissionAudit, PermissionOverrideApproval],
     synchronize: synchronize as boolean,
     logging: isProd ? ["error"] : true,
     ssl: sslOptions,
