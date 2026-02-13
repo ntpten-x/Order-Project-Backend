@@ -5,6 +5,7 @@ import { ApiResponses } from "../utils/ApiResponse";
 import { AppError } from "../utils/AppError";
 import { AuthRequest } from "../middleware/auth.middleware";
 import { setNoStoreHeaders } from "../utils/cacheHeaders";
+import { parseCreatedSort } from "../utils/sortCreated";
 
 export class AuditController {
     private auditService = new AuditService();
@@ -15,6 +16,7 @@ export class AuditController {
 
         const page = query.page ? Number(query.page) : 1;
         const limit = query.limit ? Number(query.limit) : 20;
+        const sortCreated = parseCreatedSort(query.sort_created);
 
         const requestedBranch = query.branch_id as string | undefined;
         const effectiveBranchId = isAdmin ? requestedBranch : req.user?.branch_id;
@@ -35,6 +37,7 @@ export class AuditController {
             start_date: query.start_date ? new Date(String(query.start_date)) : undefined,
             end_date: query.end_date ? new Date(String(query.end_date)) : undefined,
             search: query.search as string | undefined,
+            sort_created: sortCreated,
         };
 
         const { logs, total } = await this.auditService.getLogs(filters);

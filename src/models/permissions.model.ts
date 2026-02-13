@@ -1,5 +1,6 @@
 import { getDbManager } from "../database/dbContext";
 import { EntityManager } from "typeorm";
+import { CreatedSort, createdSortToOrder } from "../utils/sortCreated";
 
 export type RolePermissionMatrixRecord = {
     resource_key: string;
@@ -197,6 +198,7 @@ export class PermissionsModel {
         to?: string;
         limit: number;
         offset: number;
+        sortCreated?: CreatedSort;
     }): Promise<{ rows: PermissionAuditRecord[]; total: number }> {
         const clauses: string[] = [];
         const params: Array<string | number> = [];
@@ -251,7 +253,7 @@ export class PermissionsModel {
                     created_at
                 FROM permission_audits
                 ${whereSql}
-                ORDER BY created_at DESC
+                ORDER BY created_at ${createdSortToOrder(filters.sortCreated ?? "old")}
                 LIMIT $${limitIndex}
                 OFFSET $${offsetIndex}
             `,
@@ -378,6 +380,7 @@ export class PermissionsModel {
         requestedByUserId?: string;
         page: number;
         limit: number;
+        sortCreated?: CreatedSort;
     }): Promise<{ rows: PermissionOverrideApprovalRecord[]; total: number }> {
         const clauses: string[] = [];
         const params: Array<string | number> = [];
@@ -423,7 +426,7 @@ export class PermissionsModel {
                     reviewed_at
                 FROM permission_override_approvals
                 ${whereSql}
-                ORDER BY created_at DESC
+                ORDER BY created_at ${createdSortToOrder(filters.sortCreated ?? "old")}
                 LIMIT $${limitIndex}
                 OFFSET $${offsetIndex}
             `,

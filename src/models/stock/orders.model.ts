@@ -2,6 +2,7 @@ import { PurchaseOrder, PurchaseOrderStatus } from "../../entity/stock/PurchaseO
 import { StockOrdersItem } from "../../entity/stock/OrdersItem";
 import { StockOrdersDetail } from "../../entity/stock/OrdersDetail";
 import { getRepository, runInTransaction } from "../../database/dbContext";
+import { CreatedSort, createdSortToOrder } from "../../utils/sortCreated";
 
 export class StockOrdersModel {
     // Creates an order and its items in a transaction
@@ -31,7 +32,13 @@ export class StockOrdersModel {
         });
     }
 
-    async findAll(filters?: { status?: PurchaseOrderStatus | PurchaseOrderStatus[] }, page: number = 1, limit: number = 50, branchId?: string): Promise<{ data: PurchaseOrder[], total: number, page: number, limit: number }> {
+    async findAll(
+        filters?: { status?: PurchaseOrderStatus | PurchaseOrderStatus[] },
+        page: number = 1,
+        limit: number = 50,
+        branchId?: string,
+        sortCreated: CreatedSort = "old"
+    ): Promise<{ data: PurchaseOrder[], total: number, page: number, limit: number }> {
         // Use QueryBuilder for better control and optimization
         const { In } = require("typeorm");
         
@@ -42,7 +49,7 @@ export class StockOrdersModel {
             .leftJoinAndSelect("ordersItems.ingredient", "ingredient")
             .leftJoinAndSelect("ingredient.unit", "unit")
             .leftJoinAndSelect("ordersItems.ordersDetail", "ordersDetail")
-            .orderBy("order.create_date", "DESC");
+            .orderBy("order.create_date", createdSortToOrder(sortCreated));
 
         // Apply filters using dbHelpers pattern
         if (filters?.status) {

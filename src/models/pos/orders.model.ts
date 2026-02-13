@@ -7,6 +7,7 @@ import { EntityManager, In } from "typeorm";
 import { getDbManager, getRepository, runInTransaction } from "../../database/dbContext";
 import { executeProfiledQuery } from "../../utils/queryProfiler";
 import { PermissionScope } from "../../middleware/permission.middleware";
+import { CreatedSort, createdSortToOrder } from "../../utils/sortCreated";
 
 type AccessContext = {
     scope?: PermissionScope;
@@ -14,7 +15,16 @@ type AccessContext = {
 };
 
 export class OrdersModels {
-    async findAll(page: number = 1, limit: number = 50, statuses?: string[], orderType?: string, searchTerm?: string, branchId?: string, access?: AccessContext): Promise<{ data: SalesOrder[], total: number, page: number, limit: number }> {
+    async findAll(
+        page: number = 1,
+        limit: number = 50,
+        statuses?: string[],
+        orderType?: string,
+        searchTerm?: string,
+        branchId?: string,
+        access?: AccessContext,
+        sortCreated: CreatedSort = "old"
+    ): Promise<{ data: SalesOrder[], total: number, page: number, limit: number }> {
         try {
             const skip = (page - 1) * limit;
             const ordersRepository = getRepository(SalesOrder);
@@ -26,7 +36,7 @@ export class OrdersModels {
                 .leftJoinAndSelect("order.items", "items")
                 .leftJoinAndSelect("items.product", "product")
                 .leftJoinAndSelect("product.category", "category")
-                .orderBy("order.create_date", "DESC")
+                .orderBy("order.create_date", createdSortToOrder(sortCreated))
                 .skip(skip)
                 .take(limit);
 
@@ -76,7 +86,8 @@ export class OrdersModels {
         orderType?: string,
         query?: string,
         branchId?: string,
-        access?: AccessContext
+        access?: AccessContext,
+        sortCreated: CreatedSort = "old"
     ): Promise<{ data: any[], total: number, page: number, limit: number }> {
         try {
             const whereClauses: string[] = [];
@@ -153,7 +164,7 @@ export class OrdersModels {
                     LEFT JOIN tables t ON t.id = o.table_id
                     LEFT JOIN delivery d ON d.id = o.delivery_id
                     ${whereSql}
-                    ORDER BY o.create_date DESC
+                    ORDER BY o.create_date ${createdSortToOrder(sortCreated)}
                     LIMIT $${limitIndex} OFFSET $${offsetIndex}
                 ),
                 item_agg_raw AS (
@@ -192,7 +203,7 @@ export class OrdersModels {
                     COALESCE(ia.items_count, 0) AS items_count
                 FROM base_orders bo
                 LEFT JOIN item_agg ia ON ia.order_id = bo.id
-                ORDER BY bo.create_date DESC
+                ORDER BY bo.create_date ${createdSortToOrder(sortCreated)}
             `;
 
             const rows = await executeProfiledQuery<any>(
@@ -273,7 +284,8 @@ export class OrdersModels {
         page: number = 1,
         limit: number = 100,
         branchId?: string,
-        access?: AccessContext
+        access?: AccessContext,
+        sortCreated: CreatedSort = "old"
     ): Promise<{ data: SalesOrderItem[]; total: number; page: number; limit: number }> {
         try {
             // Need simple find with relations
@@ -295,7 +307,7 @@ export class OrdersModels {
                 relations: ["product", "product.category", "order", "order.table"], // order.table for monitoring
                 order: {
                     order: {
-                        create_date: 'ASC'
+                        create_date: createdSortToOrder(sortCreated)
                     }
                 },
                 take: limit,

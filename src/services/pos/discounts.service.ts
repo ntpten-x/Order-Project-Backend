@@ -2,15 +2,16 @@ import { DiscountsModels } from "../../models/pos/discounts.model";
 import { SocketService } from "../socket.service";
 import { Discounts } from "../../entity/pos/Discounts";
 import { RealtimeEvents } from "../../utils/realtimeEvents";
+import { CreatedSort } from "../../utils/sortCreated";
 
 export class DiscountsService {
     private socketService = SocketService.getInstance();
 
     constructor(private discountsModel: DiscountsModels) { }
 
-    async findAll(q?: string, branchId?: string): Promise<Discounts[]> {
+    async findAll(q?: string, branchId?: string, sortCreated: CreatedSort = "old"): Promise<Discounts[]> {
         try {
-            return this.discountsModel.findAll(q, branchId)
+            return this.discountsModel.findAll(q, branchId, sortCreated)
         } catch (error) {
             throw error
         }
@@ -20,10 +21,11 @@ export class DiscountsService {
         page: number,
         limit: number,
         filters?: { q?: string; status?: "active" | "inactive"; type?: string },
-        branchId?: string
+        branchId?: string,
+        sortCreated: CreatedSort = "old"
     ): Promise<{ data: Discounts[]; total: number; page: number; limit: number; last_page: number }> {
         try {
-            return this.discountsModel.findAllPaginated(page, limit, filters, branchId);
+            return this.discountsModel.findAllPaginated(page, limit, filters, branchId, sortCreated);
         } catch (error) {
             throw error;
         }

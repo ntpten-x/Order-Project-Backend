@@ -1,6 +1,7 @@
 import { Ingredients } from "../../entity/stock/Ingredients";
 import { addBooleanFilter } from "../../utils/dbHelpers";
 import { getRepository } from "../../database/dbContext";
+import { CreatedSort, createdSortToOrder } from "../../utils/sortCreated";
 
 /**
  * Ingredients Model
@@ -14,14 +15,15 @@ export class IngredientsModel {
         page: number,
         limit: number,
         filters?: { is_active?: boolean; q?: string },
-        branchId?: string
+        branchId?: string,
+        sortCreated: CreatedSort = "old"
     ): Promise<{ data: Ingredients[]; total: number; page: number; limit: number; last_page: number }> {
         const safePage = Math.max(page, 1);
         const safeLimit = Math.min(Math.max(limit, 1), 200);
         const ingredientsRepository = getRepository(Ingredients);
         let query = ingredientsRepository.createQueryBuilder("ingredients")
             .leftJoinAndSelect("ingredients.unit", "unit")
-            .orderBy("ingredients.create_date", "ASC");
+            .orderBy("ingredients.create_date", createdSortToOrder(sortCreated));
 
         if (branchId) {
             query.andWhere("ingredients.branch_id = :branchId", { branchId });
@@ -43,11 +45,15 @@ export class IngredientsModel {
         return { data, total, page: safePage, limit: safeLimit, last_page };
     }
 
-    async findAll(filters?: { is_active?: boolean }, branchId?: string): Promise<Ingredients[]> {
+    async findAll(
+        filters?: { is_active?: boolean },
+        branchId?: string,
+        sortCreated: CreatedSort = "old"
+    ): Promise<Ingredients[]> {
         const ingredientsRepository = getRepository(Ingredients);
         let query = ingredientsRepository.createQueryBuilder("ingredients")
             .leftJoinAndSelect("ingredients.unit", "unit")
-            .orderBy("ingredients.create_date", "ASC");
+            .orderBy("ingredients.create_date", createdSortToOrder(sortCreated));
 
         // Filter by branch for data isolation
         if (branchId) {

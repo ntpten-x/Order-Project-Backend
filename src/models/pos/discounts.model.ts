@@ -1,19 +1,21 @@
 import { Discounts } from "../../entity/pos/Discounts";
 import { getRepository } from "../../database/dbContext";
+import { CreatedSort, createdSortToOrder } from "../../utils/sortCreated";
 
 export class DiscountsModels {
     async findAllPaginated(
         page: number,
         limit: number,
         filters?: { q?: string; status?: "active" | "inactive"; type?: string },
-        branchId?: string
+        branchId?: string,
+        sortCreated: CreatedSort = "old"
     ): Promise<{ data: Discounts[]; total: number; page: number; limit: number; last_page: number }> {
         try {
             const safePage = Math.max(page, 1);
             const safeLimit = Math.min(Math.max(limit, 1), 200);
             const discountsRepository = getRepository(Discounts);
             const query = discountsRepository.createQueryBuilder("discounts")
-                .orderBy("discounts.create_date", "ASC");
+                .orderBy("discounts.create_date", createdSortToOrder(sortCreated));
 
             if (branchId) {
                 query.andWhere("discounts.branch_id = :branchId", { branchId });
@@ -46,11 +48,11 @@ export class DiscountsModels {
         }
     }
 
-    async findAll(q?: string, branchId?: string): Promise<Discounts[]> {
+    async findAll(q?: string, branchId?: string, sortCreated: CreatedSort = "old"): Promise<Discounts[]> {
         try {
             const discountsRepository = getRepository(Discounts);
             const query = discountsRepository.createQueryBuilder("discounts")
-                .orderBy("discounts.create_date", "ASC");
+                .orderBy("discounts.create_date", createdSortToOrder(sortCreated));
 
             if (branchId) {
                 query.andWhere("discounts.branch_id = :branchId", { branchId });

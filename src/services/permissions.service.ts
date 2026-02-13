@@ -10,6 +10,7 @@ import { metrics } from "../utils/metrics";
 import { invalidatePermissionDecisionCacheByUser, resolvePermissionDecisionWithCache } from "../utils/permissionCache";
 import { normalizeRoleName } from "../utils/role";
 import { runInTransaction } from "../database/dbContext";
+import { CreatedSort } from "../utils/sortCreated";
 
 type Scope = "none" | "own" | "branch" | "all";
 
@@ -258,6 +259,7 @@ export class PermissionsService {
         requestedByUserId?: string;
         page: number;
         limit: number;
+        sortCreated?: CreatedSort;
     }): Promise<{ rows: any[]; total: number; page: number; limit: number }> {
         const page = Math.max(params.page, 1);
         const limit = Math.min(Math.max(params.limit, 1), 100);
@@ -268,6 +270,7 @@ export class PermissionsService {
             requestedByUserId: params.requestedByUserId,
             page,
             limit,
+            sortCreated: params.sortCreated,
         });
 
         return {
@@ -451,6 +454,7 @@ export class PermissionsService {
         to?: string;
         page: number;
         limit: number;
+        sortCreated?: CreatedSort;
     }): Promise<{ rows: any[]; total: number; page: number; limit: number }> {
         const page = Math.max(params.page, 1);
         const limit = Math.min(Math.max(params.limit, 1), 100);
@@ -465,6 +469,7 @@ export class PermissionsService {
             to: params.to,
             limit,
             offset,
+            sortCreated: params.sortCreated,
         });
 
         return {

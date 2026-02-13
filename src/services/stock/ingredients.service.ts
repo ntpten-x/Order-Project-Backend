@@ -4,6 +4,7 @@ import { SocketService } from "../socket.service";
 import { withCache, cacheKey, invalidateCache, metadataCache } from "../../utils/cache";
 import { getDbContext } from "../../database/dbContext";
 import { RealtimeEvents } from "../../utils/realtimeEvents";
+import { CreatedSort } from "../../utils/sortCreated";
 
 /**
  * Ingredients Service with Caching
@@ -25,13 +26,17 @@ export class IngredientsService {
         return ["public"];
     }
 
-    async findAll(filters?: { is_active?: boolean }, branchId?: string): Promise<Ingredients[]> {
+    async findAll(
+        filters?: { is_active?: boolean },
+        branchId?: string,
+        sortCreated: CreatedSort = "old"
+    ): Promise<Ingredients[]> {
         const scope = this.getCacheScopeParts(branchId);
-        const key = cacheKey(this.CACHE_PREFIX, ...scope, 'list', JSON.stringify(filters || {}));
+        const key = cacheKey(this.CACHE_PREFIX, ...scope, 'list', sortCreated, JSON.stringify(filters || {}));
         
         return withCache(
             key,
-            () => this.ingredientsModel.findAll(filters, branchId),
+            () => this.ingredientsModel.findAll(filters, branchId, sortCreated),
             this.CACHE_TTL,
             metadataCache as any
         );
@@ -41,14 +46,15 @@ export class IngredientsService {
         page: number,
         limit: number,
         filters?: { is_active?: boolean; q?: string },
-        branchId?: string
+        branchId?: string,
+        sortCreated: CreatedSort = "old"
     ): Promise<{ data: Ingredients[]; total: number; page: number; limit: number; last_page: number }> {
         const scope = this.getCacheScopeParts(branchId);
-        const key = cacheKey(this.CACHE_PREFIX, ...scope, "list_page", page, limit, JSON.stringify(filters || {}));
+        const key = cacheKey(this.CACHE_PREFIX, ...scope, "list_page", page, limit, sortCreated, JSON.stringify(filters || {}));
 
         return withCache(
             key,
-            () => this.ingredientsModel.findAllPaginated(page, limit, filters, branchId),
+            () => this.ingredientsModel.findAllPaginated(page, limit, filters, branchId, sortCreated),
             this.CACHE_TTL,
             metadataCache as any
         );

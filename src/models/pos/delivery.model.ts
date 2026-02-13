@@ -1,13 +1,20 @@
 import { Delivery } from "../../entity/pos/Delivery";
 import { getRepository } from "../../database/dbContext";
+import { CreatedSort, createdSortToOrder } from "../../utils/sortCreated";
 
 export class DeliveryModels {
-    async findAll(page: number = 1, limit: number = 50, q?: string, branchId?: string): Promise<{ data: Delivery[], total: number, page: number, last_page: number }> {
+    async findAll(
+        page: number = 1,
+        limit: number = 50,
+        q?: string,
+        branchId?: string,
+        sortCreated: CreatedSort = "old"
+    ): Promise<{ data: Delivery[], total: number, page: number, last_page: number }> {
         try {
             const skip = (page - 1) * limit;
             const deliveryRepository = getRepository(Delivery);
             const query = deliveryRepository.createQueryBuilder("delivery")
-                .orderBy("delivery.create_date", "ASC");
+                .orderBy("delivery.create_date", createdSortToOrder(sortCreated));
 
             if (branchId) {
                 query.andWhere("delivery.branch_id = :branchId", { branchId });

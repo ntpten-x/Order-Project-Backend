@@ -10,6 +10,7 @@ import { getRepository, runInTransaction } from "../../database/dbContext";
 import { RealtimeEvents } from "../../utils/realtimeEvents";
 import { isCancelledStatus } from "../../utils/orderStatus";
 import { filterSuccessfulPayments, sumCashPaymentAmount, sumPaymentAmount } from "./shiftSummary.utils";
+import { CreatedSort, createdSortToOrder } from "../../utils/sortCreated";
 
 export class ShiftsService {
     private get shiftsRepo() {
@@ -239,6 +240,7 @@ export class ShiftsService {
         status?: ShiftStatus;
         dateFrom?: Date;
         dateTo?: Date;
+        sortCreated?: CreatedSort;
     }) {
         const {
             branchId,
@@ -247,7 +249,8 @@ export class ShiftsService {
             q,
             status,
             dateFrom,
-            dateTo
+            dateTo,
+            sortCreated = "old"
         } = options;
 
         const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
@@ -285,7 +288,7 @@ export class ShiftsService {
         applyFilters(historyQuery);
 
         const [rows, total] = await historyQuery
-            .orderBy("shift.open_time", "DESC")
+            .orderBy("shift.open_time", createdSortToOrder(sortCreated))
             .skip((safePage - 1) * safeLimit)
             .take(safeLimit)
             .getManyAndCount();

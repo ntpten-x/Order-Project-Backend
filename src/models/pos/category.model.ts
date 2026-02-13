@@ -1,19 +1,21 @@
 import { Category } from "../../entity/pos/Category";
 import { getRepository } from "../../database/dbContext";
+import { CreatedSort, createdSortToOrder } from "../../utils/sortCreated";
 
 export class CategoryModels {
     async findAllPaginated(
         page: number,
         limit: number,
         filters?: { q?: string; status?: "active" | "inactive" },
-        branchId?: string
+        branchId?: string,
+        sortCreated: CreatedSort = "old"
     ): Promise<{ data: Category[]; total: number; page: number; limit: number; last_page: number }> {
         try {
             const safePage = Math.max(page, 1);
             const safeLimit = Math.min(Math.max(limit, 1), 200);
             const categoryRepository = getRepository(Category);
             const query = categoryRepository.createQueryBuilder("category")
-                .orderBy("category.create_date", "ASC");
+                .orderBy("category.create_date", createdSortToOrder(sortCreated));
 
             if (branchId) {
                 query.andWhere("category.branch_id = :branchId", { branchId });
@@ -42,11 +44,11 @@ export class CategoryModels {
         }
     }
 
-    async findAll(branchId?: string): Promise<Category[]> {
+    async findAll(branchId?: string, sortCreated: CreatedSort = "old"): Promise<Category[]> {
         try {
             const categoryRepository = getRepository(Category);
             const query = categoryRepository.createQueryBuilder("category")
-                .orderBy("category.create_date", "ASC");
+                .orderBy("category.create_date", createdSortToOrder(sortCreated));
             
             if (branchId) {
                 query.andWhere("category.branch_id = :branchId", { branchId });

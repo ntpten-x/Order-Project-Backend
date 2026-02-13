@@ -8,6 +8,7 @@ import { ApiResponses } from "../../utils/ApiResponse";
 import { getBranchId } from "../../middleware/branch.middleware";
 import { parseStatusQuery } from "../../utils/statusQuery";
 import { AuthRequest } from "../../middleware/auth.middleware";
+import { parseCreatedSort } from "../../utils/sortCreated";
 
 export class OrdersController {
     constructor(private ordersService: OrdersService) { }
@@ -24,12 +25,13 @@ export class OrdersController {
         const statuses = parseStatusQuery(req.query.status as string | undefined);
         const type = req.query.type as string;
         const query = req.query.q as string | undefined;
+        const sortCreated = parseCreatedSort(req.query.sort_created);
         const branchId = getBranchId(req as any);
 
         const result = await this.ordersService.findAll(page, limit, statuses, type, query, branchId, {
             scope: req.permission?.scope,
             actorUserId: req.user?.id,
-        });
+        }, sortCreated);
         return ApiResponses.paginated(res, result.data, {
             page: result.page,
             limit: result.limit,
@@ -44,6 +46,7 @@ export class OrdersController {
         const statuses = parseStatusQuery(req.query.status as string | undefined);
         const type = req.query.type as string;
         const query = req.query.q as string | undefined;
+        const sortCreated = parseCreatedSort(req.query.sort_created);
         const branchId = getBranchId(req as any);
 
         const result = await this.ordersService.findAllSummary(
@@ -54,7 +57,8 @@ export class OrdersController {
             query,
             branchId,
             { scope: req.permission?.scope, actorUserId: req.user?.id },
-            { bypassCache: true }
+            { bypassCache: true },
+            sortCreated
         );
         this.setNoStoreHeaders(res);
         return ApiResponses.paginated(res, result.data, {
@@ -80,12 +84,13 @@ export class OrdersController {
         const page = Math.max(parseInt(req.query.page as string) || 1, 1);
         const limitRaw = parseInt(req.query.limit as string) || 100;
         const limit = Math.min(Math.max(limitRaw, 1), 200); // cap to prevent huge payloads
+        const sortCreated = parseCreatedSort(req.query.sort_created);
         const branchId = getBranchId(req as any);
 
         const result = await this.ordersService.findAllItems(status, page, limit, branchId, {
             scope: req.permission?.scope,
             actorUserId: req.user?.id,
-        });
+        }, sortCreated);
         this.setNoStoreHeaders(res);
         return ApiResponses.paginated(res, result.data, {
             page: result.page,

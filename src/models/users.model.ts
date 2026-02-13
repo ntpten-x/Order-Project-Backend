@@ -2,6 +2,7 @@ import { Users } from "../entity/Users";
 import { getDbContext, getDbManager, getRepository } from "../database/dbContext";
 import { Brackets } from "typeorm";
 import { PermissionScope } from "../middleware/permission.middleware";
+import { CreatedSort, createdSortToOrder } from "../utils/sortCreated";
 
 type AccessContext = {
     scope?: PermissionScope;
@@ -9,14 +10,18 @@ type AccessContext = {
 };
 
 export class UsersModels {
-    private buildFindAllQuery(filters?: { role?: string; q?: string; status?: "active" | "inactive" }, access?: AccessContext) {
+    private buildFindAllQuery(
+        filters?: { role?: string; q?: string; status?: "active" | "inactive" },
+        access?: AccessContext,
+        sortCreated: CreatedSort = "old"
+    ) {
         const usersRepository = getRepository(Users);
         const ctx = getDbContext();
         const query = usersRepository.createQueryBuilder("users")
             .leftJoinAndSelect("users.roles", "roles")
             .leftJoinAndSelect("users.branch", "branch")
             .orderBy("users.is_active", "DESC")
-            .addOrderBy("users.create_date", "ASC");
+            .addOrderBy("users.create_date", createdSortToOrder(sortCreated));
 
         if (filters?.role) {
             query.where("roles.roles_name = :role", { role: filters.role });
@@ -66,9 +71,13 @@ export class UsersModels {
         return query;
     }
 
-    async findAll(filters?: { role?: string; q?: string; status?: "active" | "inactive" }, access?: AccessContext): Promise<Users[]> {
+    async findAll(
+        filters?: { role?: string; q?: string; status?: "active" | "inactive" },
+        access?: AccessContext,
+        sortCreated: CreatedSort = "old"
+    ): Promise<Users[]> {
         try {
-            const query = this.buildFindAllQuery(filters, access);
+            const query = this.buildFindAllQuery(filters, access, sortCreated);
             return await query.getMany();
         } catch (error) {
             throw error
@@ -79,12 +88,13 @@ export class UsersModels {
         filters: { role?: string; q?: string; status?: "active" | "inactive" } | undefined,
         page: number,
         limit: number,
-        access?: AccessContext
+        access?: AccessContext,
+        sortCreated: CreatedSort = "old"
     ): Promise<{ data: Users[]; total: number; page: number; limit: number; last_page: number }> {
         try {
             const safePage = Math.max(page, 1);
             const safeLimit = Math.min(Math.max(limit, 1), 200);
-            const query = this.buildFindAllQuery(filters, access);
+            const query = this.buildFindAllQuery(filters, access, sortCreated);
             query.skip((safePage - 1) * safeLimit).take(safeLimit);
             const [data, total] = await query.getManyAndCount();
             const last_page = Math.max(Math.ceil(total / safeLimit), 1);

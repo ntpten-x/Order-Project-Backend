@@ -5,6 +5,7 @@ import { PermissionsService } from "../services/permissions.service";
 import { setNoStoreHeaders } from "../utils/cacheHeaders";
 import { AppError } from "../utils/AppError";
 import { AuthRequest } from "../middleware/auth.middleware";
+import { parseCreatedSort } from "../utils/sortCreated";
 
 export class PermissionsController {
     constructor(private permissionsService: PermissionsService) { }
@@ -78,6 +79,7 @@ export class PermissionsController {
         const actorUserId = query.actorUserId;
         const from = query.from;
         const to = query.to;
+        const sortCreated = parseCreatedSort(query.sort_created);
 
         const result = await this.permissionsService.getPermissionAudits({
             page,
@@ -88,6 +90,7 @@ export class PermissionsController {
             actorUserId,
             from,
             to,
+            sortCreated,
         });
 
         setNoStoreHeaders(res);
@@ -102,6 +105,7 @@ export class PermissionsController {
         const query = req.query as Record<string, string | undefined>;
         const page = query.page ? Number(query.page) : 1;
         const limit = query.limit ? Number(query.limit) : 20;
+        const sortCreated = parseCreatedSort(query.sort_created);
 
         const result = await this.permissionsService.getOverrideApprovals({
             page,
@@ -109,6 +113,7 @@ export class PermissionsController {
             status: query.status as "pending" | "approved" | "rejected" | undefined,
             targetUserId: query.targetUserId,
             requestedByUserId: query.requestedByUserId,
+            sortCreated,
         });
 
         setNoStoreHeaders(res);

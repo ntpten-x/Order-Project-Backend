@@ -8,6 +8,7 @@ import { ApiResponses } from "../../utils/ApiResponse";
 import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../../utils/auditLogger";
 import { getClientIp } from "../../utils/securityLogger";
 import { getBranchId } from "../../middleware/branch.middleware";
+import { parseCreatedSort } from "../../utils/sortCreated";
 
 /**
  * Stock Orders Controller
@@ -53,6 +54,7 @@ export class OrdersController {
         const statusParam = req.query.status as string;
         const page = Math.max(parseInt(req.query.page as string) || 1, 1);
         const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 50, 1), 200);
+        const sortCreated = parseCreatedSort(req.query.sort_created);
         
         let statusFilter: PurchaseOrderStatus | PurchaseOrderStatus[] | undefined;
 
@@ -71,7 +73,8 @@ export class OrdersController {
             statusFilter ? { status: statusFilter } : undefined, 
             page, 
             limit, 
-            branch_id
+            branch_id,
+            sortCreated
         );
         
         return ApiResponses.paginated(res, result.data, {

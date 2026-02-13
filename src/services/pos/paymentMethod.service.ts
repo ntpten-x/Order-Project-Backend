@@ -2,15 +2,22 @@ import { PaymentMethodModels } from "../../models/pos/paymentMethod.model";
 import { SocketService } from "../socket.service";
 import { PaymentMethod } from "../../entity/pos/PaymentMethod";
 import { RealtimeEvents } from "../../utils/realtimeEvents";
+import { CreatedSort } from "../../utils/sortCreated";
 
 export class PaymentMethodService {
     private socketService = SocketService.getInstance();
 
     constructor(private paymentMethodModel: PaymentMethodModels) { }
 
-    async findAll(page: number, limit: number, q?: string, branchId?: string): Promise<{ data: PaymentMethod[], total: number, page: number, last_page: number }> {
+    async findAll(
+        page: number,
+        limit: number,
+        q?: string,
+        branchId?: string,
+        sortCreated: CreatedSort = "old"
+    ): Promise<{ data: PaymentMethod[], total: number, page: number, last_page: number }> {
         try {
-            return this.paymentMethodModel.findAll(page, limit, q, branchId)
+            return this.paymentMethodModel.findAll(page, limit, q, branchId, sortCreated)
         } catch (error) {
             throw error
         }
