@@ -15,6 +15,19 @@ export class CategoryService {
         }
     }
 
+    async findAllPaginated(
+        page: number,
+        limit: number,
+        filters?: { q?: string; status?: "active" | "inactive" },
+        branchId?: string
+    ): Promise<{ data: Category[]; total: number; page: number; limit: number; last_page: number }> {
+        try {
+            return this.categoryModel.findAllPaginated(page, limit, filters, branchId);
+        } catch (error) {
+            throw error;
+        }
+    }
+
     async findOne(id: string, branchId?: string): Promise<Category | null> {
         try {
             return this.categoryModel.findOne(id, branchId)

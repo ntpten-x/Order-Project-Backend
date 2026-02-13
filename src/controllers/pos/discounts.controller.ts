@@ -12,11 +12,26 @@ export class DiscountsController {
     constructor(private discountsService: DiscountsService) { }
 
     findAll = catchAsync(async (req: Request, res: Response) => {
+        const page = Math.max(parseInt(req.query.page as string) || 1, 1);
+        const limitRaw = parseInt(req.query.limit as string) || 50;
+        const limit = Math.min(Math.max(limitRaw, 1), 200);
         const q = (req.query.q as string | undefined) || undefined;
+        const statusRaw = (req.query.status as string | undefined) || undefined;
+        const status = statusRaw === "active" || statusRaw === "inactive" ? statusRaw : undefined;
+        const type = (req.query.type as string | undefined) || undefined;
         const branchId = getBranchId(req as any);
-        const discounts = await this.discountsService.findAll(q, branchId);
+        const discounts = await this.discountsService.findAllPaginated(
+            page,
+            limit,
+            { ...(q ? { q } : {}), ...(status ? { status } : {}), ...(type ? { type } : {}) },
+            branchId
+        );
         setPrivateSwrHeaders(res);
-        return ApiResponses.ok(res, discounts);
+        return ApiResponses.paginated(res, discounts.data, {
+            page: discounts.page,
+            limit: discounts.limit,
+            total: discounts.total,
+        });
     });
 
     findOne = catchAsync(async (req: Request, res: Response) => {

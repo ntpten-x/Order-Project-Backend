@@ -2,6 +2,45 @@ import { IngredientsUnit } from "../../entity/stock/IngredientsUnit";
 import { getRepository } from "../../database/dbContext";
 
 export class IngredientsUnitModel {
+    async findAllPaginated(
+        page: number,
+        limit: number,
+        filters?: { is_active?: boolean; q?: string },
+        branchId?: string
+    ): Promise<{ data: IngredientsUnit[]; total: number; page: number; limit: number; last_page: number }> {
+        try {
+            const safePage = Math.max(page, 1);
+            const safeLimit = Math.min(Math.max(limit, 1), 200);
+            const ingredientsUnitRepository = getRepository(IngredientsUnit);
+            const query = ingredientsUnitRepository.createQueryBuilder("ingredientsUnit")
+                .orderBy("ingredientsUnit.create_date", "ASC");
+
+            if (branchId) {
+                query.andWhere("ingredientsUnit.branch_id = :branchId", { branchId });
+            }
+
+            if (filters?.is_active !== undefined) {
+                query.andWhere("ingredientsUnit.is_active = :is_active", { is_active: filters.is_active });
+            }
+
+            if (filters?.q?.trim()) {
+                const q = `%${filters.q.trim().toLowerCase()}%`;
+                query.andWhere(
+                    "(LOWER(ingredientsUnit.display_name) LIKE :q OR LOWER(ingredientsUnit.unit_name) LIKE :q)",
+                    { q }
+                );
+            }
+
+            query.addOrderBy("ingredientsUnit.is_active", "DESC");
+            query.skip((safePage - 1) * safeLimit).take(safeLimit);
+            const [data, total] = await query.getManyAndCount();
+            const last_page = Math.max(Math.ceil(total / safeLimit), 1);
+            return { data, total, page: safePage, limit: safeLimit, last_page };
+        } catch (error) {
+            throw error;
+        }
+    }
+
     async findAll(filters?: { is_active?: boolean }, branchId?: string): Promise<IngredientsUnit[]> {
         try {
             const ingredientsUnitRepository = getRepository(IngredientsUnit);

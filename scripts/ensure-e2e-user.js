@@ -52,6 +52,12 @@ async function main() {
   await client.connect();
 
   try {
+    // Ensure bootstrap script can see branch rows under RLS-protected tables.
+    await client.query(`SELECT set_config('app.branch_id', '', false)`);
+    await client.query(`SELECT set_config('app.user_id', '', false)`);
+    await client.query(`SELECT set_config('app.user_role', 'Admin', false)`);
+    await client.query(`SELECT set_config('app.is_admin', 'true', false)`);
+
     const roleRes = await client.query(
       `SELECT id, roles_name FROM roles WHERE lower(roles_name) = lower($1) LIMIT 1`,
       [roleName]
@@ -114,6 +120,12 @@ async function main() {
     console.log(`[e2e-user] role=${resolvedRoleName}`);
     console.log("[e2e-user] password is set from E2E_PASSWORD or default");
   } finally {
+    try {
+      await client.query(`SELECT set_config('app.branch_id', '', false)`);
+      await client.query(`SELECT set_config('app.user_id', '', false)`);
+      await client.query(`SELECT set_config('app.user_role', '', false)`);
+      await client.query(`SELECT set_config('app.is_admin', 'false', false)`);
+    } catch (_) {}
     await client.end();
   }
 }

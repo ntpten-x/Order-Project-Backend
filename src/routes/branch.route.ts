@@ -3,6 +3,7 @@ import { BranchController } from "../controllers/branch.controller";
 import { authenticateToken } from "../middleware/auth.middleware";
 import { validate } from "../middleware/validate.middleware";
 import { authorizePermission, enforceBranchTargetScope } from "../middleware/permission.middleware";
+import { paginationQuerySchema } from "../utils/schemas/common.schema";
 import { branchIdParamSchema, createBranchSchema, updateBranchSchema } from "../utils/schemas/branch.schema";
 
 const branchRouter = Router();
@@ -12,7 +13,7 @@ const branchController = new BranchController();
 branchRouter.use(authenticateToken);
 
 // Get all branches (Admin, Manager)
-branchRouter.get("/", authorizePermission("branches.page", "view"), branchController.getAll);
+branchRouter.get("/", authorizePermission("branches.page", "view"), validate(paginationQuerySchema), branchController.getAll);
 
 // Get one branch
 branchRouter.get("/:id", authorizePermission("branches.page", "view"), enforceBranchTargetScope("id"), validate(branchIdParamSchema), branchController.getOne);

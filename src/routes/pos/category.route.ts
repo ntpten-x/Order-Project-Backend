@@ -12,6 +12,7 @@ import { CategoryController } from "../../controllers/pos/category.controller";
 import { CategoryService } from "../../services/pos/category.service";
 import { CategoryModels } from "../../models/pos/category.model";
 import { requireBranch } from "../../middleware/branch.middleware";
+import { paginationQuerySchema } from "../../utils/schemas/common.schema";
 
 const router = Router()
 
@@ -22,7 +23,7 @@ const categoryController = new CategoryController(categoryService)
 router.use(authenticateToken)
 router.use(requireBranch)
 
-router.get("/", authorizePermission("category.page", "view"), categoryController.findAll)
+router.get("/", authorizePermission("category.page", "view"), validate(paginationQuerySchema), categoryController.findAll)
 router.get("/:id", authorizePermission("category.page", "view"), validate(categoryIdParamSchema), categoryController.findOne)
 router.get("/name/:category_name", authorizePermission("category.page", "view"), validate(categoryNameParamSchema), categoryController.findOneByName)
 

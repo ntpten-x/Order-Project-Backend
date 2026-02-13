@@ -9,48 +9,88 @@ type AccessContext = {
 };
 
 export class UsersModels {
-    async findAll(filters?: { role?: string }, access?: AccessContext): Promise<Users[]> {
+    private buildFindAllQuery(filters?: { role?: string; q?: string; status?: "active" | "inactive" }, access?: AccessContext) {
+        const usersRepository = getRepository(Users);
+        const ctx = getDbContext();
+        const query = usersRepository.createQueryBuilder("users")
+            .leftJoinAndSelect("users.roles", "roles")
+            .leftJoinAndSelect("users.branch", "branch")
+            .orderBy("users.is_active", "DESC")
+            .addOrderBy("users.create_date", "ASC");
+
+        if (filters?.role) {
+            query.where("roles.roles_name = :role", { role: filters.role });
+        }
+
+        if (filters?.status === "active") {
+            query.andWhere("users.is_active = true");
+        } else if (filters?.status === "inactive") {
+            query.andWhere("users.is_active = false");
+        }
+
+        if (filters?.q?.trim()) {
+            const q = `%${filters.q.trim().toLowerCase()}%`;
+            query.andWhere(
+                new Brackets((qb) => {
+                    qb.where("LOWER(users.username) LIKE :q", { q })
+                        .orWhere("LOWER(COALESCE(users.name, '')) LIKE :q", { q })
+                        .orWhere("LOWER(COALESCE(roles.display_name, roles.roles_name, '')) LIKE :q", { q })
+                        .orWhere("LOWER(COALESCE(branch.branch_name, '')) LIKE :q", { q });
+                })
+            );
+        }
+
+        if (ctx?.branchId) {
+            query.andWhere("users.branch_id = :branchId", { branchId: ctx.branchId });
+        }
+
+        if (ctx?.role === "Manager" && !ctx?.isAdmin) {
+            query.andWhere(
+                new Brackets((qb) => {
+                    qb.where("roles.roles_name = :employeeRole", { employeeRole: "Employee" });
+                    if (ctx.userId) {
+                        qb.orWhere("users.id = :selfId", { selfId: ctx.userId });
+                    }
+                })
+            );
+        }
+
+        if (access?.scope === "none") {
+            query.andWhere("1=0");
+        }
+
+        if (access?.scope === "own" && access.actorUserId) {
+            query.andWhere("users.id = :actorUserId", { actorUserId: access.actorUserId });
+        }
+
+        return query;
+    }
+
+    async findAll(filters?: { role?: string; q?: string; status?: "active" | "inactive" }, access?: AccessContext): Promise<Users[]> {
         try {
-            const usersRepository = getRepository(Users);
-            const ctx = getDbContext();
-            const query = usersRepository.createQueryBuilder("users")
-                .leftJoinAndSelect("users.roles", "roles")
-                .leftJoinAndSelect("users.branch", "branch")
-                .orderBy("users.is_active", "DESC")
-                .addOrderBy("users.create_date", "ASC");
-
-            if (filters?.role) {
-                query.where("roles.roles_name = :role", { role: filters.role });
-            }
-
-            // Respect active branch context (e.g. Admin switching branch) when present.
-            if (ctx?.branchId) {
-                query.andWhere("users.branch_id = :branchId", { branchId: ctx.branchId });
-            }
-
-            // Managers can only view/manage Employee users in their own branch, plus themselves.
-            if (ctx?.role === "Manager" && !ctx?.isAdmin) {
-                query.andWhere(
-                    new Brackets((qb) => {
-                        qb.where("roles.roles_name = :employeeRole", { employeeRole: "Employee" });
-                        if (ctx.userId) {
-                            qb.orWhere("users.id = :selfId", { selfId: ctx.userId });
-                        }
-                    })
-                );
-            }
-
-            if (access?.scope === "none") {
-                query.andWhere("1=0");
-            }
-
-            if (access?.scope === "own" && access.actorUserId) {
-                query.andWhere("users.id = :actorUserId", { actorUserId: access.actorUserId });
-            }
-
+            const query = this.buildFindAllQuery(filters, access);
             return await query.getMany();
         } catch (error) {
             throw error
+        }
+    }
+
+    async findAllPaginated(
+        filters: { role?: string; q?: string; status?: "active" | "inactive" } | undefined,
+        page: number,
+        limit: number,
+        access?: AccessContext
+    ): Promise<{ data: Users[]; total: number; page: number; limit: number; last_page: number }> {
+        try {
+            const safePage = Math.max(page, 1);
+            const safeLimit = Math.min(Math.max(limit, 1), 200);
+            const query = this.buildFindAllQuery(filters, access);
+            query.skip((safePage - 1) * safeLimit).take(safeLimit);
+            const [data, total] = await query.getManyAndCount();
+            const last_page = Math.max(Math.ceil(total / safeLimit), 1);
+            return { data, total, page: safePage, limit: safeLimit, last_page };
+        } catch (error) {
+            throw error;
         }
     }
 

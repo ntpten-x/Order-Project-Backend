@@ -28,9 +28,22 @@ export class UsersService {
         }
     }
 
-    async findAll(filters?: { role?: string }, access?: AccessContext): Promise<Users[]> {
+    async findAll(filters?: { role?: string; q?: string; status?: "active" | "inactive" }, access?: AccessContext): Promise<Users[]> {
         try {
             return this.usersModel.findAll(filters, access);
+        } catch (error) {
+            throw error;
+        }
+    }
+
+    async findAllPaginated(
+        filters: { role?: string; q?: string; status?: "active" | "inactive" } | undefined,
+        page: number,
+        limit: number,
+        access?: AccessContext
+    ): Promise<{ data: Users[]; total: number; page: number; limit: number; last_page: number }> {
+        try {
+            return this.usersModel.findAllPaginated(filters, page, limit, access);
         } catch (error) {
             throw error;
         }

@@ -6,6 +6,7 @@ import { authenticateToken } from "../../middleware/auth.middleware";
 import { requireBranch } from "../../middleware/branch.middleware";
 import { validate } from "../../middleware/validate.middleware";
 import { authorizePermission } from "../../middleware/permission.middleware";
+import { paginationQuerySchema } from "../../utils/schemas/common.schema";
 import {
     createIngredientSchema,
     ingredientIdParamSchema,
@@ -24,7 +25,7 @@ router.use(authenticateToken)
 router.use(requireBranch)
 
 // Public-ish routes (All authenticated roles)
-router.get("/", authorizePermission("stock.ingredients.page", "view"), ingredientsController.findAll)
+router.get("/", authorizePermission("stock.ingredients.page", "view"), validate(paginationQuerySchema), ingredientsController.findAll)
 router.get("/:id", authorizePermission("stock.ingredients.page", "view"), validate(ingredientIdParamSchema), ingredientsController.findOne)
 router.get("/name/:ingredient_name", authorizePermission("stock.ingredients.page", "view"), validate(ingredientNameParamSchema), ingredientsController.findOneByName)
 

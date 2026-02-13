@@ -12,10 +12,25 @@ export class ProductsUnitController {
     constructor(private productsUnitService: ProductsUnitService) { }
 
     findAll = catchAsync(async (req: Request, res: Response) => {
+        const page = Math.max(parseInt(req.query.page as string) || 1, 1);
+        const limitRaw = parseInt(req.query.limit as string) || 50;
+        const limit = Math.min(Math.max(limitRaw, 1), 200);
+        const q = (req.query.q as string | undefined) || undefined;
+        const statusRaw = (req.query.status as string | undefined) || undefined;
+        const status = statusRaw === "active" || statusRaw === "inactive" ? statusRaw : undefined;
         const branchId = getBranchId(req as any);
-        const productsUnits = await this.productsUnitService.findAll(branchId);
+        const productsUnits = await this.productsUnitService.findAllPaginated(
+            page,
+            limit,
+            { ...(q ? { q } : {}), ...(status ? { status } : {}) },
+            branchId
+        );
         setPrivateSwrHeaders(res);
-        return ApiResponses.ok(res, productsUnits);
+        return ApiResponses.paginated(res, productsUnits.data, {
+            page: productsUnits.page,
+            limit: productsUnits.limit,
+            total: productsUnits.total,
+        });
     });
 
     findOne = catchAsync(async (req: Request, res: Response) => {

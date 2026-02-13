@@ -10,10 +10,20 @@ import { setNoStoreHeaders } from "../utils/cacheHeaders";
 export class BranchController {
     private branchService = new BranchService();
 
-    getAll = catchAsync(async (_req: Request, res: Response) => {
-        const branches = await this.branchService.findAll();
+    getAll = catchAsync(async (req: Request, res: Response) => {
+        const page = Math.max(parseInt(req.query.page as string) || 1, 1);
+        const limitRaw = parseInt(req.query.limit as string) || 50;
+        const limit = Math.min(Math.max(limitRaw, 1), 200);
+        const activeRaw = req.query.active as string | undefined;
+        const isActive = activeRaw === "true" ? true : activeRaw === "false" ? false : undefined;
+        const q = (req.query.q as string | undefined) || undefined;
+        const branches = await this.branchService.findAllPaginated(page, limit, isActive, q);
         setNoStoreHeaders(res);
-        return ApiResponses.ok(res, branches);
+        return ApiResponses.paginated(res, branches.data, {
+            page: branches.page,
+            limit: branches.limit,
+            total: branches.total,
+        });
     });
 
     getOne = catchAsync(async (req: Request, res: Response) => {

@@ -37,6 +37,23 @@ export class IngredientsService {
         );
     }
 
+    async findAllPaginated(
+        page: number,
+        limit: number,
+        filters?: { is_active?: boolean; q?: string },
+        branchId?: string
+    ): Promise<{ data: Ingredients[]; total: number; page: number; limit: number; last_page: number }> {
+        const scope = this.getCacheScopeParts(branchId);
+        const key = cacheKey(this.CACHE_PREFIX, ...scope, "list_page", page, limit, JSON.stringify(filters || {}));
+
+        return withCache(
+            key,
+            () => this.ingredientsModel.findAllPaginated(page, limit, filters, branchId),
+            this.CACHE_TTL,
+            metadataCache as any
+        );
+    }
+
     async findOne(id: string, branchId?: string): Promise<Ingredients | null> {
         const scope = this.getCacheScopeParts(branchId);
         const key = cacheKey(this.CACHE_PREFIX, ...scope, 'single', id);

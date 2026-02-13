@@ -18,13 +18,28 @@ export class IngredientsUnitController {
     constructor(private ingredientsUnitService: IngredientsUnitService) { }
 
     findAll = catchAsync(async (req: Request, res: Response) => {
+        const page = Math.max(parseInt(req.query.page as string) || 1, 1);
+        const limitRaw = parseInt(req.query.limit as string) || 50;
+        const limit = Math.min(Math.max(limitRaw, 1), 200);
         const active = req.query.active === 'true' ? true : req.query.active === 'false' ? false : undefined;
+        const statusRaw = (req.query.status as string | undefined) || undefined;
+        const statusActive = statusRaw === "active" ? true : statusRaw === "inactive" ? false : undefined;
+        const q = (req.query.q as string | undefined) || undefined;
         const branchId = getBranchId(req as any);
-        const ingredientsUnit = await this.ingredientsUnitService.findAll(
-            active !== undefined ? { is_active: active } : undefined,
+        const ingredientsUnit = await this.ingredientsUnitService.findAllPaginated(
+            page,
+            limit,
+            {
+                ...(typeof (statusActive ?? active) === "boolean" ? { is_active: (statusActive ?? active) as boolean } : {}),
+                ...(q ? { q } : {}),
+            },
             branchId
         );
-        return ApiResponses.ok(res, ingredientsUnit);
+        return ApiResponses.paginated(res, ingredientsUnit.data, {
+            page: ingredientsUnit.page,
+            limit: ingredientsUnit.limit,
+            total: ingredientsUnit.total,
+        });
     });
 
     findOne = catchAsync(async (req: Request, res: Response) => {
