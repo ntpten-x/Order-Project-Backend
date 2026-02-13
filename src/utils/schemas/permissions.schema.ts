@@ -34,6 +34,26 @@ export const updateUserPermissionsSchema = z.object({
     }),
 });
 
+export const updateRolePermissionsSchema = z.object({
+    params: z.object({
+        id: z.string().uuid(),
+    }),
+    body: z.object({
+        permissions: z.array(
+            z.object({
+                resourceKey: z.string().min(1).max(120),
+                canAccess: z.boolean(),
+                canView: z.boolean(),
+                canCreate: z.boolean(),
+                canUpdate: z.boolean(),
+                canDelete: z.boolean(),
+                dataScope: scopeEnum,
+            })
+        ),
+        reason: z.string().min(3).max(500).optional(),
+    }),
+});
+
 export const simulatePermissionSchema = z.object({
     body: z.object({
         userId: z.string().uuid(),

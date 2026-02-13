@@ -55,6 +55,33 @@ export class PermissionsController {
         return ApiResponses.ok(res, result);
     });
 
+    updateRolePermissions = catchAsync(async (req: AuthRequest, res: Response) => {
+        const payload = req.body as {
+            permissions: Array<{
+                resourceKey: string;
+                canAccess: boolean;
+                canView: boolean;
+                canCreate: boolean;
+                canUpdate: boolean;
+                canDelete: boolean;
+                dataScope: "none" | "own" | "branch" | "all";
+            }>;
+            reason?: string;
+        };
+        if (!req.user?.id) {
+            return ApiResponses.unauthorized(res, "Authentication required");
+        }
+
+        await this.permissionsService.replaceRolePermissions(
+            req.params.id,
+            payload.permissions,
+            req.user.id,
+            payload.reason
+        );
+
+        return ApiResponses.ok(res, { updated: true });
+    });
+
     simulate = catchAsync(async (req: Request, res: Response) => {
         const payload = req.body as {
             userId: string;

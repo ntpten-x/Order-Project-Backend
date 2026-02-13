@@ -129,6 +129,30 @@ export const authorizePermission = (resourceKey: string, actionKey: string) => {
     };
 };
 
+export const authorizePermissionOrSelf = (
+    resourceKey: string,
+    actionKey: string,
+    paramName: string = "id"
+) => {
+    return async (req: AuthRequest, res: Response, next: NextFunction) => {
+        if (!req.user?.id || !req.user?.roles_id) {
+            return ApiResponses.unauthorized(res, "Authentication required");
+        }
+
+        const targetId = req.params?.[paramName];
+        if (targetId && targetId === req.user.id) {
+            req.permission = {
+                resourceKey,
+                actionKey,
+                scope: "own",
+            };
+            return next();
+        }
+
+        return authorizePermission(resourceKey, actionKey)(req, res, next);
+    };
+};
+
 export const enforceUserTargetScope = (paramName: string = "id") => {
     return (req: AuthRequest, res: Response, next: NextFunction) => {
         const scope = req.permission?.scope;

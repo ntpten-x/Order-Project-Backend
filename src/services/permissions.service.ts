@@ -7,7 +7,11 @@ import {
 import { UsersModels } from "../models/users.model";
 import { AppError } from "../utils/AppError";
 import { metrics } from "../utils/metrics";
-import { invalidatePermissionDecisionCacheByUser, resolvePermissionDecisionWithCache } from "../utils/permissionCache";
+import {
+    invalidateAllPermissionDecisionCache,
+    invalidatePermissionDecisionCacheByUser,
+    resolvePermissionDecisionWithCache,
+} from "../utils/permissionCache";
 import { normalizeRoleName } from "../utils/role";
 import { runInTransaction } from "../database/dbContext";
 import { CreatedSort } from "../utils/sortCreated";
@@ -184,6 +188,26 @@ export class PermissionsService {
             });
             throw error;
         }
+    }
+
+    async replaceRolePermissions(roleId: string, permissions: PermissionUpsertRow[], actorUserId: string, reason?: string): Promise<void> {
+        const role = await this.rolesModel.findOne(roleId);
+        if (!role) throw AppError.notFound("Role");
+
+        const before = await this.getEffectiveByRoleId(roleId);
+        await this.permissionsModel.replaceRolePermissions(roleId, permissions);
+        await invalidateAllPermissionDecisionCache();
+        const after = await this.getEffectiveByRoleId(roleId);
+
+        await this.permissionsModel.createPermissionAudit({
+            actorUserId,
+            targetType: "role",
+            targetId: roleId,
+            actionType: "update_role_permissions",
+            payloadBefore: before ? { permissions: before.permissions } : undefined,
+            payloadAfter: after ? { permissions: after.permissions } : undefined,
+            reason,
+        });
     }
 
     async submitUserOverrideUpdate(input: {

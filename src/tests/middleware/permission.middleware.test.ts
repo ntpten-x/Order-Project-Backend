@@ -19,7 +19,7 @@ vi.mock("../../utils/metrics", () => ({
     },
 }));
 
-import { authorizePermission } from "../../middleware/permission.middleware";
+import { authorizePermission, authorizePermissionOrSelf } from "../../middleware/permission.middleware";
 import { clearPermissionDecisionMemoryCache } from "../../utils/permissionCache";
 
 function makeRes() {
@@ -93,5 +93,24 @@ describe("permission middleware", () => {
                 decision: "deny",
             })
         );
+    });
+
+    it("allows self target without requiring permission lookup", async () => {
+        const req: any = {
+            user: { id: "u1", roles_id: "r1" },
+            params: { id: "u1" },
+        };
+        const res = makeRes();
+        const next = vi.fn();
+
+        await authorizePermissionOrSelf("permissions.page", "view", "id")(req, res as any, next);
+
+        expect(next).toHaveBeenCalledOnce();
+        expect(queryMock).not.toHaveBeenCalled();
+        expect(req.permission).toEqual({
+            resourceKey: "permissions.page",
+            actionKey: "view",
+            scope: "own",
+        });
     });
 });

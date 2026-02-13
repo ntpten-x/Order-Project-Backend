@@ -82,7 +82,7 @@ export class PermissionsModel {
                     AND rp.role_id = $1
                 WHERE pr.is_active = true
                   AND pa.is_active = true
-                  AND pr.resource_type = 'page'
+                  AND pr.resource_type IN ('page', 'menu')
                 ORDER BY pr.sort_order ASC, pr.resource_name ASC, pa.action_key ASC
             `,
             [roleId]
@@ -105,7 +105,7 @@ export class PermissionsModel {
                     AND up.user_id = $1
                 WHERE pr.is_active = true
                   AND pa.is_active = true
-                  AND pr.resource_type = 'page'
+                  AND pr.resource_type IN ('page', 'menu')
                 ORDER BY pr.sort_order ASC, pr.resource_name ASC, pa.action_key ASC
             `,
             [userId]
@@ -450,6 +450,13 @@ export class PermissionsModel {
         });
     }
 
+    async replaceRolePermissions(roleId: string, permissions: PermissionUpsertRow[]): Promise<void> {
+        const manager = getDbManager();
+        await manager.transaction(async (tx) => {
+            await this.replaceRolePermissionsWithManager(tx, roleId, permissions);
+        });
+    }
+
     private async replaceUserOverridesWithManager(
         manager: EntityManager,
         userId: string,
@@ -485,9 +492,52 @@ export class PermissionsModel {
                            AND pa.is_active = true
                         WHERE pr.resource_key = $5
                           AND pr.is_active = true
-                          AND pr.resource_type = 'page'
+                          AND pr.resource_type IN ('page', 'menu')
                     `,
                     [userId, effect, scope, action.actionKey, row.resourceKey]
+                );
+            }
+        }
+    }
+
+    private async replaceRolePermissionsWithManager(
+        manager: EntityManager,
+        roleId: string,
+        permissions: PermissionUpsertRow[]
+    ): Promise<void> {
+        await manager.query(`DELETE FROM role_permissions WHERE role_id = $1`, [roleId]);
+
+        for (const row of permissions) {
+            const actions = [
+                { actionKey: "access", enabled: row.canAccess },
+                { actionKey: "view", enabled: row.canView },
+                { actionKey: "create", enabled: row.canCreate },
+                { actionKey: "update", enabled: row.canUpdate },
+                { actionKey: "delete", enabled: row.canDelete },
+            ];
+
+            for (const action of actions) {
+                const effect = action.enabled ? "allow" : "deny";
+                const scope = action.enabled ? row.dataScope : "none";
+
+                await manager.query(
+                    `
+                        INSERT INTO role_permissions (role_id, resource_id, action_id, effect, scope)
+                        SELECT
+                            $1,
+                            pr.id,
+                            pa.id,
+                            $2::varchar,
+                            $3::varchar
+                        FROM permission_resources pr
+                        INNER JOIN permission_actions pa
+                            ON pa.action_key = $4
+                           AND pa.is_active = true
+                        WHERE pr.resource_key = $5
+                          AND pr.is_active = true
+                          AND pr.resource_type IN ('page', 'menu')
+                    `,
+                    [roleId, effect, scope, action.actionKey, row.resourceKey]
                 );
             }
         }
