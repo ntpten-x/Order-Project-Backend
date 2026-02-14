@@ -13,6 +13,9 @@ export const DEFAULT_CLOSED_ORDER_STATUSES = [
 ];
 export const DEFAULT_ORDER_QUEUE_RETENTION_DAYS = 7;
 export const DEFAULT_QUEUE_CLOSED_STATUSES = ["Completed", "Cancelled", "completed", "cancelled"];
+export const DEFAULT_STOCK_ORDER_RETENTION_DAYS = 7;
+export const DEFAULT_STOCK_COMPLETED_STATUSES = ["completed"];
+export const DEFAULT_AUDIT_LOG_RETENTION_DAYS = 7;
 
 export type OrderRetentionCleanupOptions = {
     retentionDays?: number;
@@ -41,6 +44,41 @@ export type QueueCleanupResult = {
     dryRun: boolean;
     deleted: number;
     candidateCount: number;
+};
+
+export type StockOrderRetentionCleanupOptions = {
+    retentionDays?: number;
+    statuses?: string[];
+    batchSize?: number;
+    maxBatches?: number;
+    dryRun?: boolean;
+};
+
+export type StockOrderRetentionCleanupResult = {
+    cutoffDate: Date;
+    dryRun: boolean;
+    batchesProcessed: number;
+    candidateOrders: number;
+    deleted: {
+        orders: number;
+        items: number;
+        details: number;
+    };
+};
+
+export type AuditLogCleanupOptions = {
+    retentionDays?: number;
+    batchSize?: number;
+    maxBatches?: number;
+    dryRun?: boolean;
+};
+
+export type AuditLogCleanupResult = {
+    cutoffDate: Date;
+    dryRun: boolean;
+    batchesProcessed: number;
+    candidateCount: number;
+    deleted: number;
 };
 
 function toInt(value: unknown): number | undefined {
@@ -263,4 +301,230 @@ export async function cleanupOrderQueueOlderThan(options: {
     );
     const deleted = Number(result?.length ?? 0);
     return { cutoffDate, dryRun: false, deleted, candidateCount: candidateIds.length };
+}
+
+async function countStockOrderCandidates(params: { cutoffDate: Date; statuses: string[] }): Promise<number> {
+    const db = getDbManager();
+    const rows = await db.query(
+        `
+            SELECT COUNT(*)::int AS count
+            FROM stock_orders o
+            WHERE o.status::text = ANY($1::text[])
+              AND o.create_date < $2
+        `,
+        [params.statuses, params.cutoffDate]
+    );
+    return Number(rows?.[0]?.count ?? 0);
+}
+
+async function fetchStockOrderCandidateIds(params: {
+    cutoffDate: Date;
+    statuses: string[];
+    limit: number;
+}): Promise<string[]> {
+    const db = getDbManager();
+    const rows = await db.query(
+        `
+            SELECT o.id
+            FROM stock_orders o
+            WHERE o.status::text = ANY($1::text[])
+              AND o.create_date < $2
+            ORDER BY o.create_date ASC
+            LIMIT $3
+        `,
+        [params.statuses, params.cutoffDate, params.limit]
+    );
+    return (rows ?? []).map((r: any) => String(r.id));
+}
+
+async function deleteStockOrdersByIds(orderIds: string[]): Promise<{
+    orders: number;
+    items: number;
+    details: number;
+}> {
+    if (orderIds.length === 0) {
+        return { orders: 0, items: 0, details: 0 };
+    }
+
+    return await runInTransaction(async (manager) => {
+        const idsParam = [orderIds];
+
+        const detailsRows = await manager.query(
+            `
+                WITH deleted AS (
+                    DELETE FROM stock_orders_detail d
+                    USING stock_orders_item i
+                    WHERE d.orders_item_id = i.id
+                      AND i.orders_id = ANY($1::uuid[])
+                    RETURNING 1
+                )
+                SELECT COUNT(*)::int AS count FROM deleted
+            `,
+            idsParam
+        );
+        const details = Number(detailsRows?.[0]?.count ?? 0);
+
+        const itemsRows = await manager.query(
+            `
+                WITH deleted AS (
+                    DELETE FROM stock_orders_item
+                    WHERE orders_id = ANY($1::uuid[])
+                    RETURNING 1
+                )
+                SELECT COUNT(*)::int AS count FROM deleted
+            `,
+            idsParam
+        );
+        const items = Number(itemsRows?.[0]?.count ?? 0);
+
+        const ordersRows = await manager.query(
+            `
+                WITH deleted AS (
+                    DELETE FROM stock_orders
+                    WHERE id = ANY($1::uuid[])
+                    RETURNING 1
+                )
+                SELECT COUNT(*)::int AS count FROM deleted
+            `,
+            idsParam
+        );
+        const orders = Number(ordersRows?.[0]?.count ?? 0);
+
+        return { orders, items, details };
+    });
+}
+
+export async function cleanupCompletedStockOrdersOlderThan(
+    options: StockOrderRetentionCleanupOptions = {}
+): Promise<StockOrderRetentionCleanupResult> {
+    const retentionDays = clampInt(options.retentionDays, DEFAULT_STOCK_ORDER_RETENTION_DAYS, 1, 3650);
+    const batchSize = clampInt(options.batchSize, 500, 1, 5000);
+    const maxBatches = clampInt(options.maxBatches, 50, 1, 10_000);
+    const dryRun = Boolean(options.dryRun);
+    const statuses = normalizeStatuses(options.statuses ?? DEFAULT_STOCK_COMPLETED_STATUSES);
+    const cutoffDate = new Date(Date.now() - retentionDays * MS_PER_DAY);
+
+    return await runWithDbContext({ isAdmin: true }, async () => {
+        const candidateOrders = await countStockOrderCandidates({ cutoffDate, statuses });
+
+        if (dryRun || candidateOrders === 0) {
+            return {
+                cutoffDate,
+                dryRun,
+                batchesProcessed: 0,
+                candidateOrders,
+                deleted: { orders: 0, items: 0, details: 0 },
+            };
+        }
+
+        let batchesProcessed = 0;
+        const deleted = { orders: 0, items: 0, details: 0 };
+
+        for (let i = 0; i < maxBatches; i++) {
+            const ids = await fetchStockOrderCandidateIds({ cutoffDate, statuses, limit: batchSize });
+            if (ids.length === 0) break;
+
+            const batchDeleted = await deleteStockOrdersByIds(ids);
+            deleted.orders += batchDeleted.orders;
+            deleted.items += batchDeleted.items;
+            deleted.details += batchDeleted.details;
+            batchesProcessed += 1;
+        }
+
+        return {
+            cutoffDate,
+            dryRun,
+            batchesProcessed,
+            candidateOrders,
+            deleted,
+        };
+    });
+}
+
+async function countAuditLogCandidates(cutoffDate: Date): Promise<number> {
+    const db = getDbManager();
+    const rows = await db.query(
+        `
+            SELECT COUNT(*)::int AS count
+            FROM audit_logs
+            WHERE created_at < $1
+        `,
+        [cutoffDate]
+    );
+    return Number(rows?.[0]?.count ?? 0);
+}
+
+async function fetchAuditLogCandidateIds(params: { cutoffDate: Date; limit: number }): Promise<string[]> {
+    const db = getDbManager();
+    const rows = await db.query(
+        `
+            SELECT id
+            FROM audit_logs
+            WHERE created_at < $1
+            ORDER BY created_at ASC
+            LIMIT $2
+        `,
+        [params.cutoffDate, params.limit]
+    );
+    return (rows ?? []).map((r: any) => String(r.id));
+}
+
+async function deleteAuditLogsByIds(ids: string[]): Promise<number> {
+    if (ids.length === 0) {
+        return 0;
+    }
+
+    const db = getDbManager();
+    const rows = await db.query(
+        `
+            WITH deleted AS (
+                DELETE FROM audit_logs
+                WHERE id = ANY($1::uuid[])
+                RETURNING 1
+            )
+            SELECT COUNT(*)::int AS count FROM deleted
+        `,
+        [ids]
+    );
+    return Number(rows?.[0]?.count ?? 0);
+}
+
+export async function cleanupAuditLogsOlderThan(options: AuditLogCleanupOptions = {}): Promise<AuditLogCleanupResult> {
+    const retentionDays = clampInt(options.retentionDays, DEFAULT_AUDIT_LOG_RETENTION_DAYS, 1, 3650);
+    const batchSize = clampInt(options.batchSize, 1000, 1, 10_000);
+    const maxBatches = clampInt(options.maxBatches, 100, 1, 10_000);
+    const dryRun = Boolean(options.dryRun);
+    const cutoffDate = new Date(Date.now() - retentionDays * MS_PER_DAY);
+
+    return await runWithDbContext({ isAdmin: true }, async () => {
+        const candidateCount = await countAuditLogCandidates(cutoffDate);
+        if (dryRun || candidateCount === 0) {
+            return {
+                cutoffDate,
+                dryRun,
+                batchesProcessed: 0,
+                candidateCount,
+                deleted: 0,
+            };
+        }
+
+        let batchesProcessed = 0;
+        let deleted = 0;
+
+        for (let i = 0; i < maxBatches; i++) {
+            const ids = await fetchAuditLogCandidateIds({ cutoffDate, limit: batchSize });
+            if (ids.length === 0) break;
+
+            deleted += await deleteAuditLogsByIds(ids);
+            batchesProcessed += 1;
+        }
+
+        return {
+            cutoffDate,
+            dryRun: false,
+            batchesProcessed,
+            candidateCount,
+            deleted,
+        };
+    });
 }

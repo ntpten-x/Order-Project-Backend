@@ -31,6 +31,22 @@ export class DashboardController {
         return ApiResponses.ok(res, result);
     });
 
+    getOverview = catchAsync(async (req: Request, res: Response) => {
+        const { startDate, endDate } = req.query;
+        const topLimit = parseInt(req.query.topLimit as string, 10) || 7;
+        const recentLimit = parseInt(req.query.recentLimit as string, 10) || 8;
+        const branchId = getBranchId(req as any);
+        const result = await this.dashboardService.getOverview(
+            startDate as string | undefined,
+            endDate as string | undefined,
+            branchId,
+            topLimit,
+            recentLimit
+        );
+        this.setCacheHeaders(res);
+        return ApiResponses.ok(res, result);
+    });
+
     getTopSellingItems = catchAsync(async (req: Request, res: Response) => {
         const limit = parseInt(req.query.limit as string) || 10;
         const branchId = getBranchId(req as any);
