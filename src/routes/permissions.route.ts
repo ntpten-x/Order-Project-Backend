@@ -1,7 +1,12 @@
 import { Router } from "express";
 import { authenticateToken } from "../middleware/auth.middleware";
 import { validate } from "../middleware/validate.middleware";
-import { authorizePermission, enforceAllScopeOnly, enforceUserTargetScope } from "../middleware/permission.middleware";
+import {
+    authorizePermission,
+    authorizePermissionOrSelf,
+    enforceAllScopeOnly,
+    enforceUserTargetScope,
+} from "../middleware/permission.middleware";
 import { PermissionsModel } from "../models/permissions.model";
 import { RolesModels } from "../models/roles.model";
 import { UsersModels } from "../models/users.model";
@@ -15,6 +20,7 @@ import {
     reviewApprovalSchema,
     reviewRejectApprovalSchema,
     simulatePermissionSchema,
+    updateRolePermissionsSchema,
     updateUserPermissionsSchema,
 } from "../utils/schemas/permissions.schema";
 
@@ -37,10 +43,17 @@ router.get(
 );
 router.get(
     "/users/:id/effective",
-    authorizePermission("permissions.page", "view"),
+    authorizePermissionOrSelf("permissions.page", "view", "id"),
     enforceUserTargetScope("id"),
     validate(permissionUserIdParamSchema),
     permissionsController.getUserEffective
+);
+router.put(
+    "/roles/:id",
+    authorizePermission("permissions.page", "update"),
+    enforceAllScopeOnly(),
+    validate(updateRolePermissionsSchema),
+    permissionsController.updateRolePermissions
 );
 router.put(
     "/users/:id",

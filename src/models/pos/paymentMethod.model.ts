@@ -1,13 +1,20 @@
 import { PaymentMethod } from "../../entity/pos/PaymentMethod";
 import { getRepository } from "../../database/dbContext";
+import { CreatedSort, createdSortToOrder } from "../../utils/sortCreated";
 
 export class PaymentMethodModels {
-    async findAll(page: number = 1, limit: number = 50, q?: string, branchId?: string): Promise<{ data: PaymentMethod[], total: number, page: number, last_page: number }> {
+    async findAll(
+        page: number = 1,
+        limit: number = 50,
+        q?: string,
+        branchId?: string,
+        sortCreated: CreatedSort = "old"
+    ): Promise<{ data: PaymentMethod[], total: number, page: number, last_page: number }> {
         try {
             const skip = (page - 1) * limit;
             const paymentMethodRepository = getRepository(PaymentMethod);
             const query = paymentMethodRepository.createQueryBuilder("paymentMethod")
-                .orderBy("paymentMethod.create_date", "ASC");
+                .orderBy("paymentMethod.create_date", createdSortToOrder(sortCreated));
 
             if (branchId) {
                 query.andWhere("paymentMethod.branch_id = :branchId", { branchId });

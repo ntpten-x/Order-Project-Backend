@@ -1,9 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PermissionsService } from "../../services/permissions.service";
 
-const { countPrivilegeEventMock, invalidatePermissionDecisionCacheByUserMock, runInTransactionMock } = vi.hoisted(() => ({
+const {
+    countPrivilegeEventMock,
+    invalidatePermissionDecisionCacheByUserMock,
+    invalidateAllPermissionDecisionCacheMock,
+    runInTransactionMock,
+} = vi.hoisted(() => ({
     countPrivilegeEventMock: vi.fn(),
     invalidatePermissionDecisionCacheByUserMock: vi.fn(),
+    invalidateAllPermissionDecisionCacheMock: vi.fn(),
     runInTransactionMock: vi.fn(async (fn: () => Promise<unknown>) => fn()),
 }));
 
@@ -15,6 +21,7 @@ vi.mock("../../utils/metrics", () => ({
 
 vi.mock("../../utils/permissionCache", () => ({
     invalidatePermissionDecisionCacheByUser: invalidatePermissionDecisionCacheByUserMock,
+    invalidateAllPermissionDecisionCache: invalidateAllPermissionDecisionCacheMock,
     resolvePermissionDecisionWithCache: vi.fn(),
 }));
 
@@ -117,6 +124,43 @@ describe("permissions service", () => {
         );
         expect(permissionsModel.createOverrideApprovalRequest).toHaveBeenCalledOnce();
         expect(permissionsModel.replaceUserOverrides).not.toHaveBeenCalled();
+    });
+
+    it("replaces role permissions and writes audit", async () => {
+        const permissionsModel = {
+            replaceRolePermissions: vi.fn().mockResolvedValue(undefined),
+            createPermissionAudit: vi.fn().mockResolvedValue(undefined),
+        };
+        const rolesModel = {
+            findOne: vi.fn().mockResolvedValue({
+                id: "r1",
+                roles_name: "Manager",
+                display_name: "Manager",
+            }),
+        };
+
+        const service = new PermissionsService(permissionsModel as any, rolesModel as any, {} as any);
+        vi.spyOn(service, "getEffectiveByRoleId")
+            .mockResolvedValueOnce({
+                role: { id: "r1", roles_name: "Manager", display_name: "Manager" },
+                permissions: [],
+            })
+            .mockResolvedValueOnce({
+                role: { id: "r1", roles_name: "Manager", display_name: "Manager" },
+                permissions: [],
+            });
+
+        await service.replaceRolePermissions("r1", [], "admin-1", "role-update");
+
+        expect(permissionsModel.replaceRolePermissions).toHaveBeenCalledWith("r1", []);
+        expect(invalidateAllPermissionDecisionCacheMock).toHaveBeenCalledOnce();
+        expect(permissionsModel.createPermissionAudit).toHaveBeenCalledWith(
+            expect.objectContaining({
+                targetType: "role",
+                targetId: "r1",
+                actionType: "update_role_permissions",
+            })
+        );
     });
 
     it("applies low-risk override changes immediately", async () => {

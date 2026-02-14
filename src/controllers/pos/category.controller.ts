@@ -7,6 +7,7 @@ import { getBranchId } from "../../middleware/branch.middleware";
 import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../../utils/auditLogger";
 import { getClientIp } from "../../utils/securityLogger";
 import { setPrivateSwrHeaders } from "../../utils/cacheHeaders";
+import { parseCreatedSort } from "../../utils/sortCreated";
 
 /**
  * Category Controller
@@ -26,11 +27,13 @@ export class CategoryController {
         const q = (req.query.q as string | undefined) || undefined;
         const statusRaw = (req.query.status as string | undefined) || undefined;
         const status = statusRaw === "active" || statusRaw === "inactive" ? statusRaw : undefined;
+        const sortCreated = parseCreatedSort(req.query.sort_created);
         const categories = await this.categoryService.findAllPaginated(
             page,
             limit,
             { ...(q ? { q } : {}), ...(status ? { status } : {}) },
-            branchId
+            branchId,
+            sortCreated
         );
         setPrivateSwrHeaders(res);
         return ApiResponses.paginated(res, categories.data, {

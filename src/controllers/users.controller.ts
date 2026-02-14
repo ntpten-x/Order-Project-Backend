@@ -7,6 +7,7 @@ import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../utils/a
 import { getClientIp } from "../utils/securityLogger";
 import { setNoStoreHeaders } from "../utils/cacheHeaders";
 import { AuthRequest } from "../middleware/auth.middleware";
+import { parseCreatedSort } from "../utils/sortCreated";
 
 export class UsersController {
     constructor(private usersService: UsersService) { }
@@ -22,6 +23,7 @@ export class UsersController {
         const q = (req.query.q as string | undefined) || undefined;
         const statusRaw = (req.query.status as string | undefined) || undefined;
         const status = statusRaw === "active" || statusRaw === "inactive" ? statusRaw : undefined;
+        const sortCreated = parseCreatedSort(req.query.sort_created);
         const page = Math.max(parseInt(req.query.page as string) || 1, 1);
         const limitRaw = parseInt(req.query.limit as string) || 50;
         const limit = Math.min(Math.max(limitRaw, 1), 200);
@@ -29,7 +31,8 @@ export class UsersController {
             { ...(role ? { role } : {}), ...(q ? { q } : {}), ...(status ? { status } : {}) },
             page,
             limit,
-            { scope: req.permission?.scope, actorUserId: req.user?.id }
+            { scope: req.permission?.scope, actorUserId: req.user?.id },
+            sortCreated
         );
         setNoStoreHeaders(res);
         return ApiResponses.paginated(res, users.data, {

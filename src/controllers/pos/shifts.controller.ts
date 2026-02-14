@@ -7,6 +7,7 @@ import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../../util
 import { ApiResponses } from "../../utils/ApiResponse";
 import { getClientIp } from "../../utils/securityLogger";
 import { getBranchId } from "../../middleware/branch.middleware";
+import { parseCreatedSort } from "../../utils/sortCreated";
 
 export class ShiftsController {
     constructor(private shiftsService: ShiftsService) { }
@@ -137,6 +138,7 @@ export class ShiftsController {
 
         const dateFromRaw = req.query.date_from as string | undefined;
         const dateToRaw = req.query.date_to as string | undefined;
+        const sortCreated = parseCreatedSort(req.query.sort_created);
 
         const dateFrom = dateFromRaw ? new Date(dateFromRaw) : undefined;
         const dateTo = dateToRaw ? new Date(dateToRaw) : undefined;
@@ -155,7 +157,8 @@ export class ShiftsController {
             q,
             status,
             dateFrom,
-            dateTo
+            dateTo,
+            sortCreated
         });
 
         return ApiResponses.ok(res, result);

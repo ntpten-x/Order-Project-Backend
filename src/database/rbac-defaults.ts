@@ -36,6 +36,68 @@ const CORE_ROLES: Array<{ roleName: RoleName; displayName: string }> = [
 
 const ACTION_KEYS: ActionKey[] = ["access", "view", "create", "update", "delete"];
 
+const CORE_PERMISSION_RESOURCES: Array<{
+    resourceKey: string;
+    resourceName: string;
+    routePattern: string | null;
+    resourceType: ResourceType;
+    sortOrder: number;
+}> = [
+    { resourceKey: "menu.main.home", resourceName: "Main Menu - Home", routePattern: "/", resourceType: "menu", sortOrder: 2000 },
+    { resourceKey: "menu.main.stock", resourceName: "Main Menu - Stock", routePattern: "/stock", resourceType: "menu", sortOrder: 2001 },
+    { resourceKey: "menu.main.orders", resourceName: "Main Menu - Orders", routePattern: "/stock/items", resourceType: "menu", sortOrder: 2002 },
+    { resourceKey: "menu.main.users", resourceName: "Main Menu - Users", routePattern: "/users", resourceType: "menu", sortOrder: 2003 },
+    { resourceKey: "menu.module.pos", resourceName: "Landing Module - POS", routePattern: "/pos", resourceType: "menu", sortOrder: 2010 },
+    { resourceKey: "menu.module.stock", resourceName: "Landing Module - Stock", routePattern: "/stock", resourceType: "menu", sortOrder: 2011 },
+    { resourceKey: "menu.module.users", resourceName: "Landing Module - Users", routePattern: "/users", resourceType: "menu", sortOrder: 2012 },
+    { resourceKey: "menu.module.branch", resourceName: "Landing Module - Branch", routePattern: "/branch", resourceType: "menu", sortOrder: 2013 },
+    { resourceKey: "menu.module.audit", resourceName: "Landing Module - Audit", routePattern: "/audit", resourceType: "menu", sortOrder: 2014 },
+    { resourceKey: "menu.pos.home", resourceName: "POS Menu - Home", routePattern: "/", resourceType: "menu", sortOrder: 2020 },
+    { resourceKey: "menu.pos.sell", resourceName: "POS Menu - Sell", routePattern: "/pos", resourceType: "menu", sortOrder: 2021 },
+    { resourceKey: "menu.pos.orders", resourceName: "POS Menu - Orders", routePattern: "/pos/orders", resourceType: "menu", sortOrder: 2022 },
+    { resourceKey: "menu.pos.kitchen", resourceName: "POS Menu - Kitchen", routePattern: "/pos/kitchen", resourceType: "menu", sortOrder: 2023 },
+    { resourceKey: "menu.pos.shift", resourceName: "POS Menu - Shift", routePattern: "/pos/shift", resourceType: "menu", sortOrder: 2024 },
+    { resourceKey: "menu.pos.shiftHistory", resourceName: "POS Menu - Shift History", routePattern: "/pos/shiftHistory", resourceType: "menu", sortOrder: 2025 },
+    { resourceKey: "menu.pos.dashboard", resourceName: "POS Menu - Dashboard", routePattern: "/pos/dashboard", resourceType: "menu", sortOrder: 2026 },
+    { resourceKey: "menu.pos.tables", resourceName: "POS Menu - Tables", routePattern: "/pos/tables", resourceType: "menu", sortOrder: 2027 },
+    { resourceKey: "menu.pos.delivery", resourceName: "POS Menu - Delivery", routePattern: "/pos/delivery", resourceType: "menu", sortOrder: 2028 },
+    { resourceKey: "menu.pos.category", resourceName: "POS Menu - Category", routePattern: "/pos/category", resourceType: "menu", sortOrder: 2029 },
+    { resourceKey: "menu.pos.products", resourceName: "POS Menu - Products", routePattern: "/pos/products", resourceType: "menu", sortOrder: 2030 },
+    { resourceKey: "menu.pos.productsUnit", resourceName: "POS Menu - Product Units", routePattern: "/pos/productsUnit", resourceType: "menu", sortOrder: 2031 },
+    { resourceKey: "menu.pos.discounts", resourceName: "POS Menu - Discounts", routePattern: "/pos/discounts", resourceType: "menu", sortOrder: 2032 },
+    { resourceKey: "menu.pos.payment", resourceName: "POS Menu - Payment", routePattern: "/pos/paymentMethod", resourceType: "menu", sortOrder: 2033 },
+    { resourceKey: "menu.pos.settings", resourceName: "POS Menu - Settings", routePattern: "/pos/settings", resourceType: "menu", sortOrder: 2034 },
+    { resourceKey: "menu.stock.home", resourceName: "Stock Menu - Home", routePattern: "/", resourceType: "menu", sortOrder: 2040 },
+    { resourceKey: "menu.stock.buying", resourceName: "Stock Menu - Buying", routePattern: "/stock", resourceType: "menu", sortOrder: 2041 },
+    { resourceKey: "menu.stock.orders", resourceName: "Stock Menu - Orders", routePattern: "/stock/items", resourceType: "menu", sortOrder: 2042 },
+    { resourceKey: "menu.stock.history", resourceName: "Stock Menu - History", routePattern: "/stock/history", resourceType: "menu", sortOrder: 2043 },
+    { resourceKey: "menu.stock.ingredients", resourceName: "Stock Menu - Ingredients", routePattern: "/stock/ingredients", resourceType: "menu", sortOrder: 2044 },
+    { resourceKey: "menu.stock.ingredientsUnit", resourceName: "Stock Menu - Ingredient Units", routePattern: "/stock/ingredientsUnit", resourceType: "menu", sortOrder: 2045 },
+    { resourceKey: "menu.users.home", resourceName: "Users Menu - Home", routePattern: "/", resourceType: "menu", sortOrder: 2050 },
+    { resourceKey: "menu.branch.home", resourceName: "Branch Menu - Home", routePattern: "/", resourceType: "menu", sortOrder: 2051 },
+    { resourceKey: "permissions.page", resourceName: "Permissions", routePattern: "/users/permissions", resourceType: "page", sortOrder: 10 },
+    { resourceKey: "users.page", resourceName: "Users", routePattern: "/users", resourceType: "page", sortOrder: 11 },
+    { resourceKey: "roles.page", resourceName: "Roles", routePattern: "/roles", resourceType: "page", sortOrder: 12 },
+    { resourceKey: "branches.page", resourceName: "Branches", routePattern: "/branch", resourceType: "page", sortOrder: 13 },
+    { resourceKey: "audit.page", resourceName: "Audit Logs", routePattern: "/audit", resourceType: "page", sortOrder: 14 },
+    { resourceKey: "orders.page", resourceName: "Orders", routePattern: "/pos/orders", resourceType: "page", sortOrder: 20 },
+    { resourceKey: "products.page", resourceName: "Products", routePattern: "/pos/products", resourceType: "page", sortOrder: 21 },
+    { resourceKey: "category.page", resourceName: "Category", routePattern: "/pos/category", resourceType: "page", sortOrder: 22 },
+    { resourceKey: "queue.page", resourceName: "Queue", routePattern: "/pos/queue", resourceType: "page", sortOrder: 23 },
+    { resourceKey: "payments.page", resourceName: "Payments", routePattern: "/pos/payments", resourceType: "page", sortOrder: 24 },
+    { resourceKey: "delivery.page", resourceName: "Delivery", routePattern: "/pos/delivery", resourceType: "page", sortOrder: 25 },
+    { resourceKey: "discounts.page", resourceName: "Discounts", routePattern: "/pos/discounts", resourceType: "page", sortOrder: 26 },
+    { resourceKey: "payment_method.page", resourceName: "Payment Method", routePattern: "/pos/paymentMethod", resourceType: "page", sortOrder: 27 },
+    { resourceKey: "tables.page", resourceName: "Tables", routePattern: "/pos/tables", resourceType: "page", sortOrder: 28 },
+    { resourceKey: "shop_profile.page", resourceName: "Shop Profile", routePattern: "/pos/settings", resourceType: "page", sortOrder: 29 },
+    { resourceKey: "payment_accounts.page", resourceName: "Payment Accounts", routePattern: "/pos/settings/payment-accounts", resourceType: "page", sortOrder: 30 },
+    { resourceKey: "shifts.page", resourceName: "Shifts", routePattern: "/pos/shift", resourceType: "page", sortOrder: 31 },
+    { resourceKey: "reports.sales.page", resourceName: "Sales Report", routePattern: "/pos/dashboard", resourceType: "page", sortOrder: 32 },
+    { resourceKey: "stock.ingredients.page", resourceName: "Stock Ingredients", routePattern: "/stock/ingredients", resourceType: "page", sortOrder: 40 },
+    { resourceKey: "stock.ingredients_unit.page", resourceName: "Stock Units", routePattern: "/stock/ingredientsUnit", resourceType: "page", sortOrder: 41 },
+    { resourceKey: "stock.orders.page", resourceName: "Stock Orders", routePattern: "/stock/items", resourceType: "page", sortOrder: 42 },
+];
+
 const MANAGER_RESTRICTED_RESOURCES = new Set<string>([
     "permissions.page",
     "roles.page",
@@ -199,6 +261,38 @@ async function ensurePermissionActions(queryRunner: QueryRunner): Promise<void> 
     }
 }
 
+async function ensurePermissionResources(queryRunner: QueryRunner): Promise<void> {
+    if (!(await tableExists(queryRunner, "public.permission_resources"))) {
+        return;
+    }
+
+    for (const resource of CORE_PERMISSION_RESOURCES) {
+        await queryRunner.query(
+            `
+                INSERT INTO permission_resources
+                    (resource_key, resource_name, route_pattern, resource_type, sort_order, is_active)
+                VALUES
+                    ($1, $2, $3, $4, $5, true)
+                ON CONFLICT (resource_key)
+                DO UPDATE SET
+                    resource_name = EXCLUDED.resource_name,
+                    route_pattern = EXCLUDED.route_pattern,
+                    resource_type = EXCLUDED.resource_type,
+                    sort_order = EXCLUDED.sort_order,
+                    is_active = true,
+                    updated_at = now()
+            `,
+            [
+                resource.resourceKey,
+                resource.resourceName,
+                resource.routePattern,
+                resource.resourceType,
+                resource.sortOrder,
+            ]
+        );
+    }
+}
+
 async function ensureRolePermissionDefaults(queryRunner: QueryRunner): Promise<void> {
     const hasRoles = await tableExists(queryRunner, "public.roles");
     const hasResources = await tableExists(queryRunner, "public.permission_resources");
@@ -340,6 +434,7 @@ export async function ensureRbacDefaults(dataSource: DataSource): Promise<void> 
 
         await ensureCoreRoles(queryRunner);
         await ensurePermissionActions(queryRunner);
+        await ensurePermissionResources(queryRunner);
         const defaultBranchId = await ensureDefaultBranch(queryRunner);
         await ensureRolePermissionDefaults(queryRunner);
         await ensureDefaultAdminUser(queryRunner, defaultBranchId);

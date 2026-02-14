@@ -1,8 +1,15 @@
 import { Tables } from "../../entity/pos/Tables";
 import { getRepository } from "../../database/dbContext";
+import { CreatedSort, createdSortToOrder } from "../../utils/sortCreated";
 
 export class TablesModels {
-    async findAll(page: number = 1, limit: number = 50, q?: string, branchId?: string): Promise<{ data: any[], total: number, page: number, last_page: number }> {
+    async findAll(
+        page: number = 1,
+        limit: number = 50,
+        q?: string,
+        branchId?: string,
+        sortCreated: CreatedSort = "old"
+    ): Promise<{ data: any[], total: number, page: number, last_page: number }> {
         try {
             const skip = (page - 1) * limit;
             const tablesRepository = getRepository(Tables);
@@ -15,7 +22,7 @@ export class TablesModels {
                     "so.table_id = tables.id AND so.status NOT IN (:...statuses)",
                     { statuses: ["Paid", "Cancelled", "cancelled", "Completed", "completed"] },
                 )
-                .orderBy("tables.create_date", "ASC");
+                .orderBy("tables.create_date", createdSortToOrder(sortCreated));
 
             if (q && q.trim()) {
                 query.andWhere("tables.table_name ILIKE :q", { q: `%${q.trim()}%` });

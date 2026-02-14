@@ -3,6 +3,7 @@ import { AppError } from "../utils/AppError";
 import { SocketService } from "./socket.service";
 import { RealtimeEvents } from "../utils/realtimeEvents";
 import { getRepository } from "../database/dbContext";
+import { CreatedSort, createdSortToOrder } from "../utils/sortCreated";
 
 export class BranchService {
     private get branchRepo() {
@@ -21,13 +22,14 @@ export class BranchService {
         page: number,
         limit: number,
         isActive?: boolean,
-        q?: string
+        q?: string,
+        sortCreated: CreatedSort = "old"
     ): Promise<{ data: Branch[]; total: number; page: number; limit: number; last_page: number }> {
         const safePage = Math.max(page, 1);
         const safeLimit = Math.min(Math.max(limit, 1), 200);
 
         const query = this.branchRepo.createQueryBuilder("branch")
-            .orderBy("branch.create_date", "ASC")
+            .orderBy("branch.create_date", createdSortToOrder(sortCreated))
             .skip((safePage - 1) * safeLimit)
             .take(safeLimit);
 

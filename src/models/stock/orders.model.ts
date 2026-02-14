@@ -2,9 +2,9 @@ import { PurchaseOrder, PurchaseOrderStatus } from "../../entity/stock/PurchaseO
 import { StockOrdersItem } from "../../entity/stock/OrdersItem";
 import { StockOrdersDetail } from "../../entity/stock/OrdersDetail";
 import { getRepository, runInTransaction } from "../../database/dbContext";
+import { CreatedSort, createdSortToOrder } from "../../utils/sortCreated";
 
 export class StockOrdersModel {
-    // Creates an order and its items in a transaction
     // Creates an order and its items in a transaction
     async createOrderWithItems(orderedById: string, items: { ingredient_id: string; quantity_ordered: number }[], remark?: string, branchId?: string): Promise<PurchaseOrder> {
         return runInTransaction(async (manager) => {
@@ -31,10 +31,14 @@ export class StockOrdersModel {
         });
     }
 
-    async findAll(filters?: { status?: PurchaseOrderStatus | PurchaseOrderStatus[] }, page: number = 1, limit: number = 50, branchId?: string): Promise<{ data: PurchaseOrder[], total: number, page: number, limit: number }> {
+    async findAll(
+        filters?: { status?: PurchaseOrderStatus | PurchaseOrderStatus[] },
+        page: number = 1,
+        limit: number = 50,
+        branchId?: string,
+        sortCreated: CreatedSort = "old"
+    ): Promise<{ data: PurchaseOrder[], total: number, page: number, limit: number }> {
         // Use QueryBuilder for better control and optimization
-        const { In } = require("typeorm");
-        
         const ordersRepository = getRepository(PurchaseOrder);
         let query = ordersRepository.createQueryBuilder("order")
             .leftJoinAndSelect("order.ordered_by", "ordered_by")
@@ -42,7 +46,7 @@ export class StockOrdersModel {
             .leftJoinAndSelect("ordersItems.ingredient", "ingredient")
             .leftJoinAndSelect("ingredient.unit", "unit")
             .leftJoinAndSelect("ordersItems.ordersDetail", "ordersDetail")
-            .orderBy("order.create_date", "DESC");
+            .orderBy("order.create_date", createdSortToOrder(sortCreated));
 
         // Apply filters using dbHelpers pattern
         if (filters?.status) {
@@ -74,9 +78,12 @@ export class StockOrdersModel {
 
     async updateOrderItems(orderId: string, newItems: { ingredient_id: string; quantity_ordered: number }[], branchId?: string): Promise<PurchaseOrder> {
         return await runInTransaction(async (transactionalEntityManager) => {
-            if (branchId) {
-                const order = await transactionalEntityManager.findOne(PurchaseOrder, { where: { id: orderId, branch_id: branchId } as any });
-                if (!order) throw new Error("Order not found");
+            const order = await transactionalEntityManager.findOne(PurchaseOrder, {
+                where: branchId ? ({ id: orderId, branch_id: branchId } as any) : ({ id: orderId } as any)
+            });
+            if (!order) throw new Error("Order not found");
+            if (order.status !== PurchaseOrderStatus.PENDING) {
+                throw new Error("Only pending orders can be updated");
             }
 
             // 1. Fetch existing items
@@ -151,9 +158,18 @@ export class StockOrdersModel {
 
     async confirmPurchase(orderId: string, items: { ingredient_id: string; actual_quantity: number; is_purchased: boolean }[], purchasedById: string, branchId?: string): Promise<PurchaseOrder> {
         return await runInTransaction(async (transactionalEntityManager) => {
-            if (branchId) {
-                const order = await transactionalEntityManager.findOne(PurchaseOrder, { where: { id: orderId, branch_id: branchId } as any });
-                if (!order) throw new Error("Order not found");
+            const order = await transactionalEntityManager.findOne(PurchaseOrder, {
+                where: branchId ? ({ id: orderId, branch_id: branchId } as any) : ({ id: orderId } as any),
+                // Serialize purchase confirmation per order to avoid duplicate detail inserts.
+                lock: { mode: "pessimistic_write" }
+            });
+
+            if (!order) {
+                throw new Error("Order not found");
+            }
+
+            if (order.status !== PurchaseOrderStatus.PENDING) {
+                throw new Error("Only pending orders can be confirmed");
             }
 
             // 1. Fetch Order Items
@@ -162,23 +178,70 @@ export class StockOrdersModel {
                 relations: { ordersDetail: true }
             });
 
-            // 2. Update/Create OrdersDetail for each item
+            if (!orderItems.length) {
+                throw new Error("Order has no items");
+            }
+
+            const payloadByIngredient = new Map<string, { actual_quantity: number; is_purchased: boolean }>();
             for (const item of items) {
-                const orderItem = orderItems.find(oi => oi.ingredient_id === item.ingredient_id);
-                if (orderItem) {
-                    let detail = orderItem.ordersDetail;
-                    if (!detail) {
-                        detail = transactionalEntityManager.create(StockOrdersDetail, {
-                            orders_item_id: orderItem.id
-                        });
-                    }
-
-                    detail.actual_quantity = item.actual_quantity;
-                    detail.is_purchased = item.is_purchased;
-                    detail.purchased_by_id = purchasedById;
-
-                    await transactionalEntityManager.save(StockOrdersDetail, detail);
+                if (payloadByIngredient.has(item.ingredient_id)) {
+                    throw new Error(`Duplicate ingredient in payload: ${item.ingredient_id}`);
                 }
+                payloadByIngredient.set(item.ingredient_id, {
+                    actual_quantity: item.actual_quantity,
+                    is_purchased: Boolean(item.is_purchased),
+                });
+            }
+
+            const validIngredientIds = new Set(orderItems.map((item) => item.ingredient_id));
+            for (const ingredientId of payloadByIngredient.keys()) {
+                if (!validIngredientIds.has(ingredientId)) {
+                    throw new Error(`Ingredient is not part of this order: ${ingredientId}`);
+                }
+            }
+
+            // 2. Update/Create OrdersDetail for every order item
+            for (const item of items) {
+                const orderItem = orderItems.find((oi) => oi.ingredient_id === item.ingredient_id);
+                if (!orderItem) continue;
+
+                let detail = orderItem.ordersDetail;
+                if (!detail) {
+                    detail = transactionalEntityManager.create(StockOrdersDetail, {
+                        orders_item_id: orderItem.id
+                    });
+                }
+
+                const payload = payloadByIngredient.get(orderItem.ingredient_id);
+                const isPurchased = Boolean(payload?.is_purchased);
+                const normalizedActualQty = isPurchased
+                    ? Math.max(0, Number(payload?.actual_quantity ?? 0))
+                    : 0;
+
+                detail.actual_quantity = normalizedActualQty;
+                detail.is_purchased = isPurchased;
+                detail.purchased_by_id = purchasedById;
+
+                await transactionalEntityManager.save(StockOrdersDetail, detail);
+            }
+
+            for (const orderItem of orderItems) {
+                if (payloadByIngredient.has(orderItem.ingredient_id)) {
+                    continue;
+                }
+
+                let detail = orderItem.ordersDetail;
+                if (!detail) {
+                    detail = transactionalEntityManager.create(StockOrdersDetail, {
+                        orders_item_id: orderItem.id
+                    });
+                }
+
+                detail.actual_quantity = 0;
+                detail.is_purchased = false;
+                detail.purchased_by_id = purchasedById;
+
+                await transactionalEntityManager.save(StockOrdersDetail, detail);
             }
 
             // 3. Update Order Status to COMPLETED

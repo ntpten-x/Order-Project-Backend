@@ -7,9 +7,14 @@ import {
 import { UsersModels } from "../models/users.model";
 import { AppError } from "../utils/AppError";
 import { metrics } from "../utils/metrics";
-import { invalidatePermissionDecisionCacheByUser, resolvePermissionDecisionWithCache } from "../utils/permissionCache";
+import {
+    invalidateAllPermissionDecisionCache,
+    invalidatePermissionDecisionCacheByUser,
+    resolvePermissionDecisionWithCache,
+} from "../utils/permissionCache";
 import { normalizeRoleName } from "../utils/role";
 import { runInTransaction } from "../database/dbContext";
+import { CreatedSort } from "../utils/sortCreated";
 
 type Scope = "none" | "own" | "branch" | "all";
 
@@ -185,6 +190,26 @@ export class PermissionsService {
         }
     }
 
+    async replaceRolePermissions(roleId: string, permissions: PermissionUpsertRow[], actorUserId: string, reason?: string): Promise<void> {
+        const role = await this.rolesModel.findOne(roleId);
+        if (!role) throw AppError.notFound("Role");
+
+        const before = await this.getEffectiveByRoleId(roleId);
+        await this.permissionsModel.replaceRolePermissions(roleId, permissions);
+        await invalidateAllPermissionDecisionCache();
+        const after = await this.getEffectiveByRoleId(roleId);
+
+        await this.permissionsModel.createPermissionAudit({
+            actorUserId,
+            targetType: "role",
+            targetId: roleId,
+            actionType: "update_role_permissions",
+            payloadBefore: before ? { permissions: before.permissions } : undefined,
+            payloadAfter: after ? { permissions: after.permissions } : undefined,
+            reason,
+        });
+    }
+
     async submitUserOverrideUpdate(input: {
         targetUserId: string;
         permissions: PermissionUpsertRow[];
@@ -258,6 +283,7 @@ export class PermissionsService {
         requestedByUserId?: string;
         page: number;
         limit: number;
+        sortCreated?: CreatedSort;
     }): Promise<{ rows: any[]; total: number; page: number; limit: number }> {
         const page = Math.max(params.page, 1);
         const limit = Math.min(Math.max(params.limit, 1), 100);
@@ -268,6 +294,7 @@ export class PermissionsService {
             requestedByUserId: params.requestedByUserId,
             page,
             limit,
+            sortCreated: params.sortCreated,
         });
 
         return {
@@ -451,6 +478,7 @@ export class PermissionsService {
         to?: string;
         page: number;
         limit: number;
+        sortCreated?: CreatedSort;
     }): Promise<{ rows: any[]; total: number; page: number; limit: number }> {
         const page = Math.max(params.page, 1);
         const limit = Math.min(Math.max(params.limit, 1), 100);
@@ -465,6 +493,7 @@ export class PermissionsService {
             to: params.to,
             limit,
             offset,
+            sortCreated: params.sortCreated,
         });
 
         return {

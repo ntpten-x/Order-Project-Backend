@@ -2,15 +2,20 @@ import { IngredientsUnit } from "../../entity/stock/IngredientsUnit";
 import { IngredientsUnitModel } from "../../models/stock/ingredientsUnit.model";
 import { SocketService } from "../socket.service";
 import { RealtimeEvents } from "../../utils/realtimeEvents";
+import { CreatedSort } from "../../utils/sortCreated";
 
 export class IngredientsUnitService {
     private socketService = SocketService.getInstance();
 
     constructor(private ingredientsUnitModel: IngredientsUnitModel) { }
 
-    async findAll(filters?: { is_active?: boolean }, branchId?: string): Promise<IngredientsUnit[]> {
+    async findAll(
+        filters?: { is_active?: boolean },
+        branchId?: string,
+        sortCreated: CreatedSort = "old"
+    ): Promise<IngredientsUnit[]> {
         try {
-            return this.ingredientsUnitModel.findAll(filters, branchId)
+            return this.ingredientsUnitModel.findAll(filters, branchId, sortCreated)
         } catch (error) {
             throw error
         }
@@ -20,10 +25,11 @@ export class IngredientsUnitService {
         page: number,
         limit: number,
         filters?: { is_active?: boolean; q?: string },
-        branchId?: string
+        branchId?: string,
+        sortCreated: CreatedSort = "old"
     ): Promise<{ data: IngredientsUnit[]; total: number; page: number; limit: number; last_page: number }> {
         try {
-            return this.ingredientsUnitModel.findAllPaginated(page, limit, filters, branchId);
+            return this.ingredientsUnitModel.findAllPaginated(page, limit, filters, branchId, sortCreated);
         } catch (error) {
             throw error;
         }

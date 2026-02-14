@@ -6,6 +6,7 @@ import { AppError } from "../utils/AppError";
 import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../utils/auditLogger";
 import { getClientIp } from "../utils/securityLogger";
 import { setNoStoreHeaders } from "../utils/cacheHeaders";
+import { parseCreatedSort } from "../utils/sortCreated";
 
 export class BranchController {
     private branchService = new BranchService();
@@ -17,7 +18,8 @@ export class BranchController {
         const activeRaw = req.query.active as string | undefined;
         const isActive = activeRaw === "true" ? true : activeRaw === "false" ? false : undefined;
         const q = (req.query.q as string | undefined) || undefined;
-        const branches = await this.branchService.findAllPaginated(page, limit, isActive, q);
+        const sortCreated = parseCreatedSort(req.query.sort_created);
+        const branches = await this.branchService.findAllPaginated(page, limit, isActive, q, sortCreated);
         setNoStoreHeaders(res);
         return ApiResponses.paginated(res, branches.data, {
             page: branches.page,

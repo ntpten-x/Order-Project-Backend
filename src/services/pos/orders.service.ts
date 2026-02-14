@@ -22,6 +22,7 @@ import { RealtimeEvents } from "../../utils/realtimeEvents";
 import { normalizeOrderStatus } from "../../utils/orderStatus";
 import { metrics } from "../../utils/metrics";
 import { PermissionScope } from "../../middleware/permission.middleware";
+import { CreatedSort } from "../../utils/sortCreated";
 
 type AccessContext = {
     scope?: PermissionScope;
@@ -185,9 +186,18 @@ export class OrdersService {
         }
     }
 
-    async findAll(page: number, limit: number, statuses?: string[], type?: string, query?: string, branchId?: string, access?: AccessContext): Promise<{ data: SalesOrder[], total: number, page: number, limit: number }> {
+    async findAll(
+        page: number,
+        limit: number,
+        statuses?: string[],
+        type?: string,
+        query?: string,
+        branchId?: string,
+        access?: AccessContext,
+        sortCreated: CreatedSort = "old"
+    ): Promise<{ data: SalesOrder[], total: number, page: number, limit: number }> {
         try {
-            return this.ordersModel.findAll(page, limit, statuses, type, query, branchId, access)
+            return this.ordersModel.findAll(page, limit, statuses, type, query, branchId, access, sortCreated)
         } catch (error) {
             throw error
         }
@@ -201,20 +211,21 @@ export class OrdersService {
         query?: string,
         branchId?: string,
         access?: AccessContext,
-        options?: { bypassCache?: boolean }
+        options?: { bypassCache?: boolean },
+        sortCreated: CreatedSort = "old"
     ): Promise<{ data: any[], total: number, page: number, limit: number }> {
         const statusKey = statuses?.length ? statuses.join(",") : "all";
         const typeKey = type || "all";
         const scope = this.getCacheScopeParts(branchId);
-        const key = cacheKey(this.SUMMARY_CACHE_PREFIX, ...scope, "list", page, limit, statusKey, typeKey);
+        const key = cacheKey(this.SUMMARY_CACHE_PREFIX, ...scope, "list", page, limit, statusKey, typeKey, sortCreated);
 
         if (options?.bypassCache || query?.trim() || page > 1) {
-            return this.ordersModel.findAllSummary(page, limit, statuses, type, query, branchId, access);
+            return this.ordersModel.findAllSummary(page, limit, statuses, type, query, branchId, access, sortCreated);
         }
 
         return withCache(
             key,
-            () => this.ordersModel.findAllSummary(page, limit, statuses, type, query, branchId, access),
+            () => this.ordersModel.findAllSummary(page, limit, statuses, type, query, branchId, access, sortCreated),
             this.SUMMARY_CACHE_TTL,
             queryCache as any,
             {
@@ -256,9 +267,10 @@ export class OrdersService {
         page: number = 1,
         limit: number = 100,
         branchId?: string,
-        access?: AccessContext
+        access?: AccessContext,
+        sortCreated: CreatedSort = "old"
     ): Promise<{ data: SalesOrderItem[]; total: number; page: number; limit: number }> {
-        return this.ordersModel.findAllItems(status, page, limit, branchId, access);
+        return this.ordersModel.findAllItems(status, page, limit, branchId, access, sortCreated);
     }
 
     async findOne(id: string, branchId?: string, access?: AccessContext): Promise<SalesOrder | null> {

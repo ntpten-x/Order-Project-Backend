@@ -4,6 +4,7 @@ import { Products } from "../../entity/pos/Products";
 import { invalidateCache } from "../../utils/cache";
 import { AppError } from "../../utils/AppError";
 import { RealtimeEvents } from "../../utils/realtimeEvents";
+import { CreatedSort } from "../../utils/sortCreated";
 
 /**
  * Products Service
@@ -23,10 +24,11 @@ export class ProductsService {
         category_id?: string,
         q?: string,
         is_active?: boolean,
-        branchId?: string
+        branchId?: string,
+        sortCreated: CreatedSort = "old"
     ): Promise<{ data: Products[], total: number, page: number, last_page: number }> {
         // Caching is handled in ProductsModel
-        return this.productsModel.findAll(page, limit, category_id, q, is_active, branchId);
+        return this.productsModel.findAll(page, limit, category_id, q, is_active, branchId, sortCreated);
     }
 
     async findOne(id: string, branchId?: string): Promise<Products | null> {

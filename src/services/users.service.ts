@@ -6,6 +6,7 @@ import { RealtimeEvents } from "../utils/realtimeEvents";
 import { PermissionScope } from "../middleware/permission.middleware";
 import { metrics } from "../utils/metrics";
 import { invalidatePermissionDecisionCacheByUser } from "../utils/permissionCache";
+import { CreatedSort } from "../utils/sortCreated";
 
 type AccessContext = {
     scope?: PermissionScope;
@@ -28,9 +29,13 @@ export class UsersService {
         }
     }
 
-    async findAll(filters?: { role?: string; q?: string; status?: "active" | "inactive" }, access?: AccessContext): Promise<Users[]> {
+    async findAll(
+        filters?: { role?: string; q?: string; status?: "active" | "inactive" },
+        access?: AccessContext,
+        sortCreated: CreatedSort = "old"
+    ): Promise<Users[]> {
         try {
-            return this.usersModel.findAll(filters, access);
+            return this.usersModel.findAll(filters, access, sortCreated);
         } catch (error) {
             throw error;
         }
@@ -40,10 +45,11 @@ export class UsersService {
         filters: { role?: string; q?: string; status?: "active" | "inactive" } | undefined,
         page: number,
         limit: number,
-        access?: AccessContext
+        access?: AccessContext,
+        sortCreated: CreatedSort = "old"
     ): Promise<{ data: Users[]; total: number; page: number; limit: number; last_page: number }> {
         try {
-            return this.usersModel.findAllPaginated(filters, page, limit, access);
+            return this.usersModel.findAllPaginated(filters, page, limit, access, sortCreated);
         } catch (error) {
             throw error;
         }

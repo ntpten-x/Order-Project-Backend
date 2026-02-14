@@ -7,6 +7,7 @@ import { getBranchId } from "../../middleware/branch.middleware";
 import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../../utils/auditLogger";
 import { getClientIp } from "../../utils/securityLogger";
 import { setPrivateSwrHeaders } from "../../utils/cacheHeaders";
+import { parseCreatedSort } from "../../utils/sortCreated";
 
 export class DiscountsController {
     constructor(private discountsService: DiscountsService) { }
@@ -19,12 +20,14 @@ export class DiscountsController {
         const statusRaw = (req.query.status as string | undefined) || undefined;
         const status = statusRaw === "active" || statusRaw === "inactive" ? statusRaw : undefined;
         const type = (req.query.type as string | undefined) || undefined;
+        const sortCreated = parseCreatedSort(req.query.sort_created);
         const branchId = getBranchId(req as any);
         const discounts = await this.discountsService.findAllPaginated(
             page,
             limit,
             { ...(q ? { q } : {}), ...(status ? { status } : {}), ...(type ? { type } : {}) },
-            branchId
+            branchId,
+            sortCreated
         );
         setPrivateSwrHeaders(res);
         return ApiResponses.paginated(res, discounts.data, {

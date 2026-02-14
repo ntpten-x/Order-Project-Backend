@@ -2,15 +2,16 @@ import { ProductsUnitModels } from "../../models/pos/productsUnit.model";
 import { SocketService } from "../socket.service";
 import { ProductsUnit } from "../../entity/pos/ProductsUnit";
 import { RealtimeEvents } from "../../utils/realtimeEvents";
+import { CreatedSort } from "../../utils/sortCreated";
 
 export class ProductsUnitService {
     private socketService = SocketService.getInstance();
 
     constructor(private productsUnitModel: ProductsUnitModels) { }
 
-    async findAll(branchId?: string): Promise<ProductsUnit[]> {
+    async findAll(branchId?: string, sortCreated: CreatedSort = "old"): Promise<ProductsUnit[]> {
         try {
-            return this.productsUnitModel.findAll(branchId)
+            return this.productsUnitModel.findAll(branchId, sortCreated)
         } catch (error) {
             throw error
         }
@@ -20,10 +21,11 @@ export class ProductsUnitService {
         page: number,
         limit: number,
         filters?: { q?: string; status?: "active" | "inactive" },
-        branchId?: string
+        branchId?: string,
+        sortCreated: CreatedSort = "old"
     ): Promise<{ data: ProductsUnit[]; total: number; page: number; limit: number; last_page: number }> {
         try {
-            return this.productsUnitModel.findAllPaginated(page, limit, filters, branchId);
+            return this.productsUnitModel.findAllPaginated(page, limit, filters, branchId, sortCreated);
         } catch (error) {
             throw error;
         }

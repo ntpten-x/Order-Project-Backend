@@ -1,19 +1,21 @@
 import { IngredientsUnit } from "../../entity/stock/IngredientsUnit";
 import { getRepository } from "../../database/dbContext";
+import { CreatedSort, createdSortToOrder } from "../../utils/sortCreated";
 
 export class IngredientsUnitModel {
     async findAllPaginated(
         page: number,
         limit: number,
         filters?: { is_active?: boolean; q?: string },
-        branchId?: string
+        branchId?: string,
+        sortCreated: CreatedSort = "old"
     ): Promise<{ data: IngredientsUnit[]; total: number; page: number; limit: number; last_page: number }> {
         try {
             const safePage = Math.max(page, 1);
             const safeLimit = Math.min(Math.max(limit, 1), 200);
             const ingredientsUnitRepository = getRepository(IngredientsUnit);
             const query = ingredientsUnitRepository.createQueryBuilder("ingredientsUnit")
-                .orderBy("ingredientsUnit.create_date", "ASC");
+                .orderBy("ingredientsUnit.create_date", createdSortToOrder(sortCreated));
 
             if (branchId) {
                 query.andWhere("ingredientsUnit.branch_id = :branchId", { branchId });
@@ -41,11 +43,15 @@ export class IngredientsUnitModel {
         }
     }
 
-    async findAll(filters?: { is_active?: boolean }, branchId?: string): Promise<IngredientsUnit[]> {
+    async findAll(
+        filters?: { is_active?: boolean },
+        branchId?: string,
+        sortCreated: CreatedSort = "old"
+    ): Promise<IngredientsUnit[]> {
         try {
             const ingredientsUnitRepository = getRepository(IngredientsUnit);
             const query = ingredientsUnitRepository.createQueryBuilder("ingredientsUnit")
-                .orderBy("ingredientsUnit.create_date", "ASC");
+                .orderBy("ingredientsUnit.create_date", createdSortToOrder(sortCreated));
 
             // Filter by branch for data isolation
             if (branchId) {

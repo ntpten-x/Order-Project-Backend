@@ -7,6 +7,7 @@ import { AppError } from "../../utils/AppError";
 import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../../utils/auditLogger";
 import { getClientIp } from "../../utils/securityLogger";
 import { setPrivateSwrHeaders } from "../../utils/cacheHeaders";
+import { parseCreatedSort } from "../../utils/sortCreated";
 
 export class ProductsUnitController {
     constructor(private productsUnitService: ProductsUnitService) { }
@@ -18,12 +19,14 @@ export class ProductsUnitController {
         const q = (req.query.q as string | undefined) || undefined;
         const statusRaw = (req.query.status as string | undefined) || undefined;
         const status = statusRaw === "active" || statusRaw === "inactive" ? statusRaw : undefined;
+        const sortCreated = parseCreatedSort(req.query.sort_created);
         const branchId = getBranchId(req as any);
         const productsUnits = await this.productsUnitService.findAllPaginated(
             page,
             limit,
             { ...(q ? { q } : {}), ...(status ? { status } : {}) },
-            branchId
+            branchId,
+            sortCreated
         );
         setPrivateSwrHeaders(res);
         return ApiResponses.paginated(res, productsUnits.data, {

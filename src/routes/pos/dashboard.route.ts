@@ -10,6 +10,14 @@ const dashboardService = new DashboardService();
 const dashboardController = new DashboardController(dashboardService);
 
 dashboardRouter.get(
+    "/overview",
+    authenticateToken,
+    authorizePermission("reports.sales.page", "view"),
+    requireBranch,
+    dashboardController.getOverview
+);
+
+dashboardRouter.get(
     "/sales",
     authenticateToken,
     authorizePermission("reports.sales.page", "view"),

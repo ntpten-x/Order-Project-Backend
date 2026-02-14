@@ -1,19 +1,21 @@
 import { ProductsUnit } from "../../entity/pos/ProductsUnit";
 import { getRepository } from "../../database/dbContext";
+import { CreatedSort, createdSortToOrder } from "../../utils/sortCreated";
 
 export class ProductsUnitModels {
     async findAllPaginated(
         page: number,
         limit: number,
         filters?: { q?: string; status?: "active" | "inactive" },
-        branchId?: string
+        branchId?: string,
+        sortCreated: CreatedSort = "old"
     ): Promise<{ data: ProductsUnit[]; total: number; page: number; limit: number; last_page: number }> {
         try {
             const safePage = Math.max(page, 1);
             const safeLimit = Math.min(Math.max(limit, 1), 200);
             const productsUnitRepository = getRepository(ProductsUnit);
             const query = productsUnitRepository.createQueryBuilder("productsUnit")
-                .orderBy("productsUnit.create_date", "ASC");
+                .orderBy("productsUnit.create_date", createdSortToOrder(sortCreated));
 
             if (branchId) {
                 query.andWhere("productsUnit.branch_id = :branchId", { branchId });
@@ -42,7 +44,7 @@ export class ProductsUnitModels {
         }
     }
 
-    async findAll(branchId?: string): Promise<ProductsUnit[]> {
+    async findAll(branchId?: string, sortCreated: CreatedSort = "old"): Promise<ProductsUnit[]> {
         try {
             const productsUnitRepository = getRepository(ProductsUnit);
             const where: any = {};
@@ -52,7 +54,7 @@ export class ProductsUnitModels {
             return productsUnitRepository.find({
                 where,
                 order: {
-                    create_date: "ASC"
+                    create_date: createdSortToOrder(sortCreated)
                 }
             })
         } catch (error) {

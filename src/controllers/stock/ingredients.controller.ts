@@ -6,6 +6,7 @@ import { ApiResponses } from "../../utils/ApiResponse";
 import { getBranchId } from "../../middleware/branch.middleware";
 import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../../utils/auditLogger";
 import { getClientIp } from "../../utils/securityLogger";
+import { parseCreatedSort } from "../../utils/sortCreated";
 
 /**
  * Ingredients Controller
@@ -26,6 +27,7 @@ export class IngredientsController {
         const statusRaw = (req.query.status as string | undefined) || undefined;
         const statusActive = statusRaw === "active" ? true : statusRaw === "inactive" ? false : undefined;
         const q = (req.query.q as string | undefined) || undefined;
+        const sortCreated = parseCreatedSort(req.query.sort_created);
         const branchId = getBranchId(req as any);
         const ingredients = await this.ingredientsService.findAllPaginated(
             page,
@@ -34,7 +36,8 @@ export class IngredientsController {
                 ...(typeof (statusActive ?? active) === "boolean" ? { is_active: (statusActive ?? active) as boolean } : {}),
                 ...(q ? { q } : {}),
             },
-            branchId
+            branchId,
+            sortCreated
         );
         return ApiResponses.paginated(res, ingredients.data, {
             page: ingredients.page,

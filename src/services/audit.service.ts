@@ -1,6 +1,7 @@
 import { AuditLog } from "../entity/AuditLog";
 import { getRepository } from "../database/dbContext";
 import { AuditActionType } from "../utils/auditTypes";
+import { CreatedSort, createdSortToOrder } from "../utils/sortCreated";
 
 export type AuditLogFilters = {
     page?: number;
@@ -13,6 +14,7 @@ export type AuditLogFilters = {
     start_date?: Date;
     end_date?: Date;
     search?: string;
+    sort_created?: CreatedSort;
 };
 
 export class AuditService {
@@ -55,7 +57,7 @@ export class AuditService {
             );
         }
 
-        qb.orderBy("audit.created_at", "DESC");
+        qb.orderBy("audit.created_at", createdSortToOrder(filters.sort_created ?? "old"));
         qb.skip((page - 1) * limit);
         qb.take(limit);
 

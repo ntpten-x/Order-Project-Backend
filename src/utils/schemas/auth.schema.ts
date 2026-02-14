@@ -15,3 +15,12 @@ export const switchBranchSchema = z.object({
         branch_id: uuid.nullable().optional(),
     }).passthrough(),
 });
+
+export const updateMeSchema = z.object({
+    body: z.object({
+        name: z.string().min(1, "Name cannot be empty").max(100).optional(),
+        password: z.string().min(6, "Password must be at least 6 characters").max(100).optional(),
+    }).refine((data) => data.name !== undefined || data.password !== undefined, {
+        message: "At least one field is required",
+    }),
+});

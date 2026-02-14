@@ -4,6 +4,7 @@ import { SocketService } from "../socket.service";
 import { withCache, cacheKey, invalidateCache, queryCache } from "../../utils/cache";
 import { getDbContext } from "../../database/dbContext";
 import { LegacyRealtimeEvents, RealtimeEvents } from "../../utils/realtimeEvents";
+import { CreatedSort } from "../../utils/sortCreated";
 
 /**
  * Orders Service with Caching
@@ -40,21 +41,27 @@ export class OrdersService {
         return completeOrder;
     }
 
-    async getAllOrders(filters?: { status?: PurchaseOrderStatus | PurchaseOrderStatus[] }, page: number = 1, limit: number = 50, branchId?: string) {
+    async getAllOrders(
+        filters?: { status?: PurchaseOrderStatus | PurchaseOrderStatus[] },
+        page: number = 1,
+        limit: number = 50,
+        branchId?: string,
+        sortCreated: CreatedSort = "old"
+    ) {
         const filterKey = filters?.status 
             ? (Array.isArray(filters.status) ? filters.status.join(',') : filters.status)
             : 'all';
         const scope = this.getCacheScopeParts(branchId);
-        const key = cacheKey(this.CACHE_PREFIX, ...scope, 'list', page, limit, filterKey);
+        const key = cacheKey(this.CACHE_PREFIX, ...scope, 'list', page, limit, filterKey, sortCreated);
         
         // Skip cache if page > 1 (too many variants)
         if (page > 1) {
-            return await this.ordersModel.findAll(filters, page, limit, branchId);
+            return await this.ordersModel.findAll(filters, page, limit, branchId, sortCreated);
         }
         
         return withCache(
             key,
-            () => this.ordersModel.findAll(filters, page, limit, branchId),
+            () => this.ordersModel.findAll(filters, page, limit, branchId, sortCreated),
             this.CACHE_TTL,
             queryCache as any
         );

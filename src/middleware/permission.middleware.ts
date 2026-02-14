@@ -4,6 +4,7 @@ import { ApiResponses } from "../utils/ApiResponse";
 import type { AuthRequest } from "./auth.middleware";
 import { metrics } from "../utils/metrics";
 import { resolvePermissionDecisionWithCache } from "../utils/permissionCache";
+import { normalizeRoleName } from "../utils/role";
 
 export type PermissionScope = "none" | "own" | "branch" | "all";
 
@@ -90,6 +91,17 @@ export const authorizePermission = (resourceKey: string, actionKey: string) => {
             return ApiResponses.unauthorized(res, "Authentication required");
         }
 
+        // Safe fallback for fresh environments: Admin keeps full access even before permission seed completes.
+        const actorRole = normalizeRoleName(req.user.roles?.roles_name);
+        if (actorRole === "Admin") {
+            req.permission = {
+                resourceKey,
+                actionKey,
+                scope: "all",
+            };
+            return next();
+        }
+
         const startedAt = process.hrtime.bigint();
         const permission = await resolveEffectivePermission(req.user.id, req.user.roles_id, resourceKey, actionKey);
         const durationMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
@@ -126,6 +138,30 @@ export const authorizePermission = (resourceKey: string, actionKey: string) => {
         });
         req.permission = permission;
         next();
+    };
+};
+
+export const authorizePermissionOrSelf = (
+    resourceKey: string,
+    actionKey: string,
+    paramName: string = "id"
+) => {
+    return async (req: AuthRequest, res: Response, next: NextFunction) => {
+        if (!req.user?.id || !req.user?.roles_id) {
+            return ApiResponses.unauthorized(res, "Authentication required");
+        }
+
+        const targetId = req.params?.[paramName];
+        if (targetId && targetId === req.user.id) {
+            req.permission = {
+                resourceKey,
+                actionKey,
+                scope: "own",
+            };
+            return next();
+        }
+
+        return authorizePermission(resourceKey, actionKey)(req, res, next);
     };
 };
 

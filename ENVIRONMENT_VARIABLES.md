@@ -93,6 +93,17 @@
 - `ORDER_QUEUE_RETENTION_DAYS` - Delete queue rows older than N days (default: 7)
 - `ORDER_QUEUE_RETENTION_STATUSES` - Comma-separated `order_queue.status` values eligible for deletion
 - `ORDER_QUEUE_RETENTION_DRY_RUN` - If `true`, queue cleanup only counts and does not delete
+- `STOCK_ORDER_RETENTION_ENABLED` - Must be `true` to allow stock-order history deletes (defaults to `ORDER_RETENTION_ENABLED` when omitted)
+- `STOCK_ORDER_RETENTION_DAYS` - Delete completed stock orders older than N days (default: 7)
+- `STOCK_ORDER_RETENTION_STATUSES` - Comma-separated `stock_orders.status` values eligible for deletion (default: `completed`)
+- `STOCK_ORDER_RETENTION_BATCH_SIZE` - Max stock orders deleted per batch (default: 500)
+- `STOCK_ORDER_RETENTION_MAX_BATCHES` - Max stock-order batches per run (default: 50)
+- `STOCK_ORDER_RETENTION_DRY_RUN` - If `true`, stock-order cleanup only counts and does not delete
+- `AUDIT_LOG_RETENTION_ENABLED` - Must be `true` to allow audit-log deletes (defaults to `ORDER_RETENTION_ENABLED` when omitted)
+- `AUDIT_LOG_RETENTION_DAYS` - Delete audit logs older than N days (default: 7)
+- `AUDIT_LOG_RETENTION_BATCH_SIZE` - Max audit-log rows deleted per batch (default: 1000)
+- `AUDIT_LOG_RETENTION_MAX_BATCHES` - Max audit-log batches per run (default: 100)
+- `AUDIT_LOG_RETENTION_DRY_RUN` - If `true`, audit-log cleanup only counts and does not delete
 - `RETENTION_LOG_FILE` - Path to JSONL log file for retention run summaries (default: `logs/retention-jobs.log`)
 - `RETENTION_WARN_DELETED_TOTAL` - Warn threshold when one run deletes too many rows (default: 5000)
 
