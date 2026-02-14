@@ -182,11 +182,18 @@ SocketService.getInstance().init(io);
 // Uncomment below to enable strict CSRF.
 // Initialize CSRF protection
 // Using cookie-based CSRF tokens (no session required)
+const cookieSecure =
+    process.env.COOKIE_SECURE !== undefined
+        ? process.env.COOKIE_SECURE === "true"
+        : process.env.NODE_ENV === "production";
+// SameSite=None is only valid when Secure=true (modern browsers reject otherwise).
+const cookieSameSite = cookieSecure ? "none" : "lax";
+
 const csrfProtection = csurf({
     cookie: {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+        secure: cookieSecure,
+        sameSite: cookieSameSite,
         key: '_csrf', // Cookie name for CSRF secret
         path: '/' // Cookie path
     },

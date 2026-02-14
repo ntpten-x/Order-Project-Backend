@@ -136,8 +136,17 @@ export class AuthController {
             // Set Cookie
             res.cookie("token", token, {
                 httpOnly: true,
-                secure: process.env.NODE_ENV === "production", // true in production
-                sameSite: process.env.NODE_ENV === "production" ? "none" : "lax", // None for cross-site (Render subdomains)
+                secure:
+                    process.env.COOKIE_SECURE !== undefined
+                        ? process.env.COOKIE_SECURE === "true"
+                        : process.env.NODE_ENV === "production", // true in production
+                // SameSite=None requires Secure=true. Otherwise browsers will drop the cookie.
+                sameSite:
+                    (process.env.COOKIE_SECURE !== undefined
+                        ? process.env.COOKIE_SECURE === "true"
+                        : process.env.NODE_ENV === "production")
+                        ? "none"
+                        : "lax",
                 maxAge: 36000000 // 10 hours in ms
             });
 
@@ -222,15 +231,31 @@ export class AuthController {
 
         res.clearCookie("token", {
             httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+            secure:
+                process.env.COOKIE_SECURE !== undefined
+                    ? process.env.COOKIE_SECURE === "true"
+                    : process.env.NODE_ENV === "production",
+            sameSite:
+                (process.env.COOKIE_SECURE !== undefined
+                    ? process.env.COOKIE_SECURE === "true"
+                    : process.env.NODE_ENV === "production")
+                    ? "none"
+                    : "lax",
             path: "/"
         });
         // Clear any selected admin branch context on logout to avoid stale branch selection across sessions.
         res.clearCookie("active_branch_id", {
             httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+            secure:
+                process.env.COOKIE_SECURE !== undefined
+                    ? process.env.COOKIE_SECURE === "true"
+                    : process.env.NODE_ENV === "production",
+            sameSite:
+                (process.env.COOKIE_SECURE !== undefined
+                    ? process.env.COOKIE_SECURE === "true"
+                    : process.env.NODE_ENV === "production")
+                    ? "none"
+                    : "lax",
             path: "/"
         });
         return ApiResponses.ok(res, { message: "ออกจากระบบสำเร็จ" });
@@ -353,4 +378,3 @@ export class AuthController {
         return ApiResponses.ok(res, { active_branch_id: branchId });
     }
 }
-
