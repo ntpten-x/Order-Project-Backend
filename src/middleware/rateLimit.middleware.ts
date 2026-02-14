@@ -6,7 +6,8 @@ import { Request, Response } from "express";
  * Different limits for different endpoint types
  */
 
-const redisUrl = process.env.RATE_LIMIT_REDIS_URL || process.env.REDIS_URL;
+const rateLimitRedisDisabled = process.env.RATE_LIMIT_REDIS_DISABLED === "true";
+const redisUrl = rateLimitRedisDisabled ? "" : (process.env.RATE_LIMIT_REDIS_URL || process.env.REDIS_URL || "");
 let redisStoreFactory: ((prefix: string) => any) | undefined;
 
 const loadRedisDeps = () => {
@@ -168,7 +169,9 @@ const createRedisStore = (getRedisClient: () => any | null, prefix: string) => {
     };
 };
 
-if (redisUrl) {
+if (rateLimitRedisDisabled) {
+    console.info("[RateLimit] Redis disabled by RATE_LIMIT_REDIS_DISABLED=true. Using in-memory store.");
+} else if (redisUrl) {
     const deps = loadRedisDeps();
     if (deps) {
         const tlsOverride = parseBoolean(process.env.RATE_LIMIT_REDIS_TLS || process.env.REDIS_TLS);

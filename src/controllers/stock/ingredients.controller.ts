@@ -6,6 +6,7 @@ import { ApiResponses } from "../../utils/ApiResponse";
 import { getBranchId } from "../../middleware/branch.middleware";
 import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../../utils/auditLogger";
 import { getClientIp } from "../../utils/securityLogger";
+import { parseCreatedSort } from "../../utils/sortCreated";
 
 /**
  * Ingredients Controller
@@ -19,13 +20,30 @@ export class IngredientsController {
     constructor(private ingredientsService: IngredientsService) { }
 
     findAll = catchAsync(async (req: Request, res: Response) => {
+        const page = Math.max(parseInt(req.query.page as string) || 1, 1);
+        const limitRaw = parseInt(req.query.limit as string) || 50;
+        const limit = Math.min(Math.max(limitRaw, 1), 200);
         const active = req.query.active === 'true' ? true : req.query.active === 'false' ? false : undefined;
+        const statusRaw = (req.query.status as string | undefined) || undefined;
+        const statusActive = statusRaw === "active" ? true : statusRaw === "inactive" ? false : undefined;
+        const q = (req.query.q as string | undefined) || undefined;
+        const sortCreated = parseCreatedSort(req.query.sort_created);
         const branchId = getBranchId(req as any);
-        const ingredients = await this.ingredientsService.findAll(
-            active !== undefined ? { is_active: active } : undefined,
-            branchId
+        const ingredients = await this.ingredientsService.findAllPaginated(
+            page,
+            limit,
+            {
+                ...(typeof (statusActive ?? active) === "boolean" ? { is_active: (statusActive ?? active) as boolean } : {}),
+                ...(q ? { q } : {}),
+            },
+            branchId,
+            sortCreated
         );
-        return ApiResponses.ok(res, ingredients);
+        return ApiResponses.paginated(res, ingredients.data, {
+            page: ingredients.page,
+            limit: ingredients.limit,
+            total: ingredients.total,
+        });
     });
 
     findOne = catchAsync(async (req: Request, res: Response) => {

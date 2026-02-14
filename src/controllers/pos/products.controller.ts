@@ -7,6 +7,7 @@ import { getBranchId } from "../../middleware/branch.middleware";
 import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../../utils/auditLogger";
 import { getClientIp } from "../../utils/securityLogger";
 import { setPrivateSwrHeaders } from "../../utils/cacheHeaders";
+import { parseCreatedSort } from "../../utils/sortCreated";
 
 /**
  * Products Controller
@@ -41,9 +42,10 @@ export class ProductsController {
             if (raw === "false") return false;
             return undefined;
         })();
+        const sortCreated = parseCreatedSort(req.query.sort_created);
         const branchId = getBranchId(req as any);
         
-        const result = await this.productsService.findAll(page, limit, category_id, q, is_active, branchId);
+        const result = await this.productsService.findAll(page, limit, category_id, q, is_active, branchId, sortCreated);
         setPrivateSwrHeaders(res);
         return ApiResponses.paginated(res, result.data, {
             page: result.page,

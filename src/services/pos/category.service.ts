@@ -2,16 +2,31 @@ import { CategoryModels } from "../../models/pos/category.model";
 import { SocketService } from "../socket.service";
 import { Category } from "../../entity/pos/Category";
 import { RealtimeEvents } from "../../utils/realtimeEvents";
+import { CreatedSort } from "../../utils/sortCreated";
 
 export class CategoryService {
     private socketService = SocketService.getInstance();
     constructor(private categoryModel: CategoryModels) { }
 
-    async findAll(branchId?: string): Promise<Category[]> {
+    async findAll(branchId?: string, sortCreated: CreatedSort = "old"): Promise<Category[]> {
         try {
-            return this.categoryModel.findAll(branchId)
+            return this.categoryModel.findAll(branchId, sortCreated)
         } catch (error) {
             throw error
+        }
+    }
+
+    async findAllPaginated(
+        page: number,
+        limit: number,
+        filters?: { q?: string; status?: "active" | "inactive" },
+        branchId?: string,
+        sortCreated: CreatedSort = "old"
+    ): Promise<{ data: Category[]; total: number; page: number; limit: number; last_page: number }> {
+        try {
+            return this.categoryModel.findAllPaginated(page, limit, filters, branchId, sortCreated);
+        } catch (error) {
+            throw error;
         }
     }
 

@@ -7,6 +7,7 @@ import { getBranchId } from "../../middleware/branch.middleware";
 import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../../utils/auditLogger";
 import { getClientIp } from "../../utils/securityLogger";
 import { setPrivateSwrHeaders } from "../../utils/cacheHeaders";
+import { parseCreatedSort } from "../../utils/sortCreated";
 
 /**
  * Category Controller
@@ -20,9 +21,26 @@ export class CategoryController {
 
     findAll = catchAsync(async (req: Request, res: Response) => {
         const branchId = getBranchId(req as any);
-        const categories = await this.categoryService.findAll(branchId);
+        const page = Math.max(parseInt(req.query.page as string) || 1, 1);
+        const limitRaw = parseInt(req.query.limit as string) || 50;
+        const limit = Math.min(Math.max(limitRaw, 1), 200);
+        const q = (req.query.q as string | undefined) || undefined;
+        const statusRaw = (req.query.status as string | undefined) || undefined;
+        const status = statusRaw === "active" || statusRaw === "inactive" ? statusRaw : undefined;
+        const sortCreated = parseCreatedSort(req.query.sort_created);
+        const categories = await this.categoryService.findAllPaginated(
+            page,
+            limit,
+            { ...(q ? { q } : {}), ...(status ? { status } : {}) },
+            branchId,
+            sortCreated
+        );
         setPrivateSwrHeaders(res);
-        return ApiResponses.ok(res, categories);
+        return ApiResponses.paginated(res, categories.data, {
+            page: categories.page,
+            limit: categories.limit,
+            total: categories.total,
+        });
     });
 
     findOne = catchAsync(async (req: Request, res: Response) => {

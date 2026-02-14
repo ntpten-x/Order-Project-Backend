@@ -10,7 +10,7 @@ import { ApiResponses } from "../utils/ApiResponse";
 import { getRepository, runWithDbContext } from "../database/dbContext";
 import { RealtimeEvents } from "../utils/realtimeEvents";
 import { v4 as uuidv4 } from "uuid";
-import { getRedisClient, getSessionKey } from "../lib/redisClient";
+import { getRedisClient, getSessionKey, isRedisConfigured } from "../lib/redisClient";
 import { normalizeRoleName } from "../utils/role";
 
 export class AuthController {
@@ -129,7 +129,7 @@ export class AuthController {
                 await redis.set(sessionKey, JSON.stringify({ userId: user.id, role, branchId: user.branch_id, createdAt: Date.now() }), {
                     PX: ttl,
                 });
-            } else if (process.env.REDIS_URL) {
+            } else if (isRedisConfigured()) {
                 return ApiResponses.internalError(res, "Session store unavailable");
             }
 
@@ -263,6 +263,56 @@ export class AuthController {
         });
     }
 
+    static async updateMe(req: AuthRequest, res: Response) {
+        AuthController.setNoStoreHeaders(res);
+        if (!req.user?.id) {
+            return ApiResponses.unauthorized(res, "Authentication required");
+        }
+
+        const userRepository = AppDataSource.getRepository(Users);
+        const user = await userRepository.findOne({
+            where: { id: req.user.id },
+            relations: ["roles", "branch"],
+        });
+
+        if (!user) {
+            return ApiResponses.notFound(res, "User");
+        }
+
+        const { name, password } = req.body ?? {};
+
+        if (typeof name === "string") {
+            user.name = name.trim();
+        }
+
+        if (typeof password === "string" && password.length > 0) {
+            user.password = await bcrypt.hash(password, 10);
+        }
+
+        await userRepository.save(user);
+
+        const role = normalizeRoleName(user.roles?.roles_name) || "unknown";
+
+        return ApiResponses.ok(res, {
+            id: user.id,
+            username: user.username,
+            name: user.name,
+            role,
+            display_name: user.roles ? user.roles.display_name : user.username,
+            is_active: user.is_active,
+            is_use: user.is_use,
+            branch_id: user.branch_id,
+            branch: user.branch ? {
+                id: user.branch.id,
+                branch_name: user.branch.branch_name,
+                branch_code: user.branch.branch_code,
+                address: user.branch.address,
+                phone: user.branch.phone,
+                is_active: user.branch.is_active
+            } : undefined
+        });
+    }
+
     /**
      * Admin-only: Switch the active branch context for RLS (stored in a cookie).
      * - branch_id = uuid: select branch context (admin sees only that branch)
@@ -303,3 +353,4 @@ export class AuthController {
         return ApiResponses.ok(res, { active_branch_id: branchId });
     }
 }
+

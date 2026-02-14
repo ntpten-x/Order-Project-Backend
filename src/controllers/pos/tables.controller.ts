@@ -7,6 +7,7 @@ import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../../util
 import { getClientIp } from "../../utils/securityLogger";
 import { getBranchId } from "../../middleware/branch.middleware";
 import { setPrivateSwrHeaders } from "../../utils/cacheHeaders";
+import { parseCreatedSort } from "../../utils/sortCreated";
 
 /**
  * Tables Controller
@@ -23,9 +24,10 @@ export class TablesController {
         const rawLimit = parseInt(req.query.limit as string);
         const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
         const q = (req.query.q as string | undefined) || undefined;
+        const sortCreated = parseCreatedSort(req.query.sort_created);
         const branchId = getBranchId(req as any);
 
-        const result = await this.tablesService.findAll(page, limit, q, branchId);
+        const result = await this.tablesService.findAll(page, limit, q, branchId, sortCreated);
         
         // Check if result has pagination structure
         if (result.data && result.total !== undefined) {

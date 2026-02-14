@@ -1,46 +1,110 @@
 import { Users } from "../entity/Users";
-import { getDbContext, getRepository } from "../database/dbContext";
+import { getDbContext, getDbManager, getRepository } from "../database/dbContext";
 import { Brackets } from "typeorm";
+import { PermissionScope } from "../middleware/permission.middleware";
+import { CreatedSort, createdSortToOrder } from "../utils/sortCreated";
+
+type AccessContext = {
+    scope?: PermissionScope;
+    actorUserId?: string;
+};
 
 export class UsersModels {
-    async findAll(filters?: { role?: string }): Promise<Users[]> {
+    private buildFindAllQuery(
+        filters?: { role?: string; q?: string; status?: "active" | "inactive" },
+        access?: AccessContext,
+        sortCreated: CreatedSort = "old"
+    ) {
+        const usersRepository = getRepository(Users);
+        const ctx = getDbContext();
+        const query = usersRepository.createQueryBuilder("users")
+            .leftJoinAndSelect("users.roles", "roles")
+            .leftJoinAndSelect("users.branch", "branch")
+            .orderBy("users.is_active", "DESC")
+            .addOrderBy("users.create_date", createdSortToOrder(sortCreated));
+
+        if (filters?.role) {
+            query.where("roles.roles_name = :role", { role: filters.role });
+        }
+
+        if (filters?.status === "active") {
+            query.andWhere("users.is_active = true");
+        } else if (filters?.status === "inactive") {
+            query.andWhere("users.is_active = false");
+        }
+
+        if (filters?.q?.trim()) {
+            const q = `%${filters.q.trim().toLowerCase()}%`;
+            query.andWhere(
+                new Brackets((qb) => {
+                    qb.where("LOWER(users.username) LIKE :q", { q })
+                        .orWhere("LOWER(COALESCE(users.name, '')) LIKE :q", { q })
+                        .orWhere("LOWER(COALESCE(roles.display_name, roles.roles_name, '')) LIKE :q", { q })
+                        .orWhere("LOWER(COALESCE(branch.branch_name, '')) LIKE :q", { q });
+                })
+            );
+        }
+
+        if (ctx?.branchId) {
+            query.andWhere("users.branch_id = :branchId", { branchId: ctx.branchId });
+        }
+
+        if (ctx?.role === "Manager" && !ctx?.isAdmin) {
+            query.andWhere(
+                new Brackets((qb) => {
+                    qb.where("roles.roles_name = :employeeRole", { employeeRole: "Employee" });
+                    if (ctx.userId) {
+                        qb.orWhere("users.id = :selfId", { selfId: ctx.userId });
+                    }
+                })
+            );
+        }
+
+        if (access?.scope === "none") {
+            query.andWhere("1=0");
+        }
+
+        if (access?.scope === "own" && access.actorUserId) {
+            query.andWhere("users.id = :actorUserId", { actorUserId: access.actorUserId });
+        }
+
+        return query;
+    }
+
+    async findAll(
+        filters?: { role?: string; q?: string; status?: "active" | "inactive" },
+        access?: AccessContext,
+        sortCreated: CreatedSort = "old"
+    ): Promise<Users[]> {
         try {
-            const usersRepository = getRepository(Users);
-            const ctx = getDbContext();
-            const query = usersRepository.createQueryBuilder("users")
-                .leftJoinAndSelect("users.roles", "roles")
-                .leftJoinAndSelect("users.branch", "branch")
-                .orderBy("users.is_active", "DESC")
-                .addOrderBy("users.create_date", "ASC");
-
-            if (filters?.role) {
-                query.where("roles.roles_name = :role", { role: filters.role });
-            }
-
-            // Respect active branch context (e.g. Admin switching branch) when present.
-            if (ctx?.branchId) {
-                query.andWhere("users.branch_id = :branchId", { branchId: ctx.branchId });
-            }
-
-            // Managers can only view/manage Employee users in their own branch, plus themselves.
-            if (ctx?.role === "Manager" && !ctx?.isAdmin) {
-                query.andWhere(
-                    new Brackets((qb) => {
-                        qb.where("roles.roles_name = :employeeRole", { employeeRole: "Employee" });
-                        if (ctx.userId) {
-                            qb.orWhere("users.id = :selfId", { selfId: ctx.userId });
-                        }
-                    })
-                );
-            }
-
+            const query = this.buildFindAllQuery(filters, access, sortCreated);
             return await query.getMany();
         } catch (error) {
             throw error
         }
     }
 
-    async findOne(id: string): Promise<Users | null> {
+    async findAllPaginated(
+        filters: { role?: string; q?: string; status?: "active" | "inactive" } | undefined,
+        page: number,
+        limit: number,
+        access?: AccessContext,
+        sortCreated: CreatedSort = "old"
+    ): Promise<{ data: Users[]; total: number; page: number; limit: number; last_page: number }> {
+        try {
+            const safePage = Math.max(page, 1);
+            const safeLimit = Math.min(Math.max(limit, 1), 200);
+            const query = this.buildFindAllQuery(filters, access, sortCreated);
+            query.skip((safePage - 1) * safeLimit).take(safeLimit);
+            const [data, total] = await query.getManyAndCount();
+            const last_page = Math.max(Math.ceil(total / safeLimit), 1);
+            return { data, total, page: safePage, limit: safeLimit, last_page };
+        } catch (error) {
+            throw error;
+        }
+    }
+
+    async findOne(id: string, access?: AccessContext): Promise<Users | null> {
         try {
             const ctx = getDbContext();
             const query = getRepository(Users).createQueryBuilder("users")
@@ -61,6 +125,14 @@ export class UsersModels {
                         }
                     })
                 );
+            }
+
+            if (access?.scope === "none") {
+                query.andWhere("1=0");
+            }
+
+            if (access?.scope === "own" && access.actorUserId) {
+                query.andWhere("users.id = :actorUserId", { actorUserId: access.actorUserId });
             }
 
             return await query.getOne();
@@ -131,5 +203,52 @@ export class UsersModels {
         } catch (error) {
             throw error
         }
+    }
+
+    async revokeUserPermissionOverrides(userId: string, actorUserId?: string): Promise<number> {
+        const manager = getDbManager();
+        return manager.transaction(async (tx) => {
+            const beforeRows = await tx.query(
+                `
+                    SELECT COUNT(*)::int AS total
+                    FROM user_permissions
+                    WHERE user_id = $1
+                `,
+                [userId]
+            );
+            const beforeTotal = Number(beforeRows?.[0]?.total ?? 0);
+
+            if (beforeTotal <= 0) {
+                return 0;
+            }
+
+            await tx.query(`DELETE FROM user_permissions WHERE user_id = $1`, [userId]);
+
+            if (actorUserId) {
+                await tx.query(
+                    `
+                        INSERT INTO permission_audits (
+                            actor_user_id,
+                            target_type,
+                            target_id,
+                            action_type,
+                            payload_before,
+                            payload_after,
+                            reason
+                        )
+                        VALUES ($1, 'user', $2, 'offboarding_revoke', $3::jsonb, $4::jsonb, $5)
+                    `,
+                    [
+                        actorUserId,
+                        userId,
+                        JSON.stringify({ overrides_count: beforeTotal }),
+                        JSON.stringify({ overrides_count: 0 }),
+                        "Automatic revoke on user disable/offboarding",
+                    ]
+                );
+            }
+
+            return beforeTotal;
+        });
     }
 }

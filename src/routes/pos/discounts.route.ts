@@ -2,9 +2,11 @@ import { Router } from "express";
 import { DiscountsModels } from "../../models/pos/discounts.model";
 import { DiscountsService } from "../../services/pos/discounts.service";
 import { DiscountsController } from "../../controllers/pos/discounts.controller";
-import { authenticateToken, authorizeRole } from "../../middleware/auth.middleware";
+import { authenticateToken } from "../../middleware/auth.middleware";
 import { validate } from "../../middleware/validate.middleware";
 import { requireBranch } from "../../middleware/branch.middleware";
+import { authorizePermission } from "../../middleware/permission.middleware";
+import { paginationQuerySchema } from "../../utils/schemas/common.schema";
 import {
     createDiscountSchema,
     discountIdParamSchema,
@@ -19,18 +21,14 @@ const discountsService = new DiscountsService(discountsModel)
 const discountsController = new DiscountsController(discountsService)
 
 router.use(authenticateToken)
-router.use(authorizeRole(["Admin", "Manager", "Employee"]))
 router.use(requireBranch)
-// Authorization:
-// Admin/Manager can Manage
-// Employee can Read
 
-router.get("/", authorizeRole(["Admin", "Manager", "Employee"]), discountsController.findAll)
-router.get("/:id", authorizeRole(["Admin", "Manager", "Employee"]), validate(discountIdParamSchema), discountsController.findOne)
-router.get("/getByName/:name", authorizeRole(["Admin", "Manager", "Employee"]), validate(discountNameParamSchema), discountsController.findByName)
+router.get("/", authorizePermission("discounts.page", "view"), validate(paginationQuerySchema), discountsController.findAll)
+router.get("/:id", authorizePermission("discounts.page", "view"), validate(discountIdParamSchema), discountsController.findOne)
+router.get("/getByName/:name", authorizePermission("discounts.page", "view"), validate(discountNameParamSchema), discountsController.findByName)
 
-router.post("/", authorizeRole(["Admin", "Manager"]), validate(createDiscountSchema), discountsController.create)
-router.put("/:id", authorizeRole(["Admin", "Manager"]), validate(updateDiscountSchema), discountsController.update)
-router.delete("/:id", authorizeRole(["Admin", "Manager"]), validate(discountIdParamSchema), discountsController.delete)
+router.post("/", authorizePermission("discounts.page", "create"), validate(createDiscountSchema), discountsController.create)
+router.put("/:id", authorizePermission("discounts.page", "update"), validate(updateDiscountSchema), discountsController.update)
+router.delete("/:id", authorizePermission("discounts.page", "delete"), validate(discountIdParamSchema), discountsController.delete)
 
 export default router

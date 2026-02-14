@@ -1,0 +1,104 @@
+groups:
+  - name: permission-security-alerts
+    interval: 30s
+    rules:
+      - alert: Permission403SpikeWarning
+        expr: |
+          (
+            sum(rate(http_requests_total{status="403"}[5m]))
+            /
+            clamp_min(sum(rate(http_requests_total[5m])), 0.001)
+          ) > 0.15
+          and
+          sum(increase(http_requests_total[10m])) > 100
+        for: 10m
+        labels:
+          severity: warning
+          service: order-backend
+          team: security
+        annotations:
+          summary: "HTTP 403 ratio is elevated (>15%)"
+          description: "403 responses are above normal baseline for 10 minutes. Check recent permission changes and denied routes."
+          runbook: "PERMISSION_ALERT_RUNBOOK.md#403-spike"
+
+      - alert: Permission403SpikeCritical
+        expr: |
+          (
+            sum(rate(http_requests_total{status="403"}[5m]))
+            /
+            clamp_min(sum(rate(http_requests_total[5m])), 0.001)
+          ) > 0.30
+          and
+          sum(increase(http_requests_total[10m])) > 200
+        for: 5m
+        labels:
+          severity: critical
+          service: order-backend
+          team: security
+        annotations:
+          summary: "HTTP 403 ratio is critical (>30%)"
+          description: "A large portion of requests are being denied. Suspect policy regression or permission cache inconsistency."
+          runbook: "PERMISSION_ALERT_RUNBOOK.md#403-spike"
+
+      - alert: PermissionCheckLatencyP95Warning
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum(rate(permission_check_duration_ms_bucket[5m])) by (le)
+          ) > 50
+          and
+          sum(rate(permission_check_duration_ms_count[5m])) > 1
+        for: 10m
+        labels:
+          severity: warning
+          service: order-backend
+          team: backend
+        annotations:
+          summary: "Permission check p95 latency is high (>50ms)"
+          description: "Permission check latency p95 has degraded for 10 minutes. Verify Redis cache health and DB index usage."
+          runbook: "PERMISSION_ALERT_RUNBOOK.md#permission-latency"
+
+      - alert: PermissionCheckLatencyP95Critical
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum(rate(permission_check_duration_ms_bucket[5m])) by (le)
+          ) > 100
+          and
+          sum(rate(permission_check_duration_ms_count[5m])) > 1
+        for: 5m
+        labels:
+          severity: critical
+          service: order-backend
+          team: backend
+        annotations:
+          summary: "Permission check p95 latency is critical (>100ms)"
+          description: "Permission checks are significantly slower than baseline. Investigate Redis connectivity and permission query plans."
+          runbook: "PERMISSION_ALERT_RUNBOOK.md#permission-latency"
+
+      - alert: OverrideUpdateErrorDetected
+        expr: |
+          increase(privilege_events_total{event="override_update", result="error"}[15m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          service: order-backend
+          team: security
+        annotations:
+          summary: "Override update failed"
+          description: "One or more override update operations failed in the last 15 minutes."
+          runbook: "PERMISSION_ALERT_RUNBOOK.md#override-update-anomaly"
+
+      - alert: OverrideUpdateSpikeWarning
+        expr: |
+          increase(privilege_events_total{event="override_update", result="success"}[1h]) > 30
+        for: 0m
+        labels:
+          severity: warning
+          service: order-backend
+          team: security
+        annotations:
+          summary: "Override update volume spike detected"
+          description: "Successful override updates exceeded 30 in 1 hour. Validate whether this change volume is expected."
+          runbook: "PERMISSION_ALERT_RUNBOOK.md#override-update-anomaly"
+

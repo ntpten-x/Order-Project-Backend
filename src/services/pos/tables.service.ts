@@ -2,15 +2,22 @@ import { TablesModels } from "../../models/pos/tables.model";
 import { SocketService } from "../socket.service";
 import { Tables } from "../../entity/pos/Tables";
 import { RealtimeEvents } from "../../utils/realtimeEvents";
+import { CreatedSort } from "../../utils/sortCreated";
 
 export class TablesService {
     private socketService = SocketService.getInstance();
 
     constructor(private tablesModel: TablesModels) { }
 
-    async findAll(page: number, limit: number, q?: string, branchId?: string): Promise<{ data: Tables[], total: number, page: number, last_page: number }> {
+    async findAll(
+        page: number,
+        limit: number,
+        q?: string,
+        branchId?: string,
+        sortCreated: CreatedSort = "old"
+    ): Promise<{ data: Tables[], total: number, page: number, last_page: number }> {
         try {
-            return this.tablesModel.findAll(page, limit, q, branchId)
+            return this.tablesModel.findAll(page, limit, q, branchId, sortCreated)
         } catch (error) {
             throw error
         }

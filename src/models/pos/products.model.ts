@@ -8,6 +8,7 @@ import {
 } from "../../utils/dbHelpers";
 import { withCache, cacheKey, invalidateCache, queryCache } from "../../utils/cache";
 import { getDbContext, getRepository } from "../../database/dbContext";
+import { CreatedSort, createdSortToOrder } from "../../utils/sortCreated";
 
 /**
  * Products Model with optimized queries
@@ -38,19 +39,20 @@ export class ProductsModels {
         category_id?: string,
         q?: string,
         is_active?: boolean,
-        branchId?: string
+        branchId?: string,
+        sortCreated: CreatedSort = "old"
     ): Promise<PaginatedResult<Products>> {
         const scope = this.getCacheScopeParts(branchId);
-        const key = cacheKey(this.CACHE_PREFIX, ...scope, 'list', page, limit, category_id, q, is_active);
+        const key = cacheKey(this.CACHE_PREFIX, ...scope, 'list', page, limit, category_id, q, is_active, sortCreated);
         
         // Skip cache if search query exists (too many variants)
         if (q?.trim()) {
-            return this.findAllQuery(page, limit, category_id, q, is_active, branchId);
+            return this.findAllQuery(page, limit, category_id, q, is_active, branchId, sortCreated);
         }
         
         return withCache(
             key,
-            () => this.findAllQuery(page, limit, category_id, q, is_active, branchId),
+            () => this.findAllQuery(page, limit, category_id, q, is_active, branchId, sortCreated),
             this.CACHE_TTL,
             queryCache as any
         );
@@ -62,13 +64,14 @@ export class ProductsModels {
         category_id?: string,
         q?: string,
         is_active?: boolean,
-        branchId?: string
+        branchId?: string,
+        sortCreated: CreatedSort = "old"
     ): Promise<PaginatedResult<Products>> {
         const productsRepository = getRepository(Products);
         let query = productsRepository.createQueryBuilder("products")
             .leftJoinAndSelect("products.category", "category")
             .leftJoinAndSelect("products.unit", "unit")
-            .orderBy("products.create_date", "ASC");
+            .orderBy("products.create_date", createdSortToOrder(sortCreated));
 
         // Filter by branch_id for data isolation
         if (branchId) {

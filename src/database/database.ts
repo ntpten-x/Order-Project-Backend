@@ -31,16 +31,32 @@ import { TopSellingItemsView } from "../entity/pos/views/TopSellingItemsView"
 import { Shifts } from "../entity/pos/Shifts"
 import { OrderQueue } from "../entity/pos/OrderQueue"
 import { AuditLog } from "../entity/AuditLog"
+import { PermissionResource } from "../entity/PermissionResource"
+import { PermissionAction } from "../entity/PermissionAction"
+import { RolePermission } from "../entity/RolePermission"
+import { UserPermission } from "../entity/UserPermission"
+import { PermissionAudit } from "../entity/PermissionAudit"
+import { PermissionOverrideApproval } from "../entity/PermissionOverrideApproval"
+import { ensureRbacDefaults } from "./rbac-defaults"
 import * as dotenv from "dotenv"
 dotenv.config()
 const isProd = process.env.NODE_ENV === "production"
-const synchronize = process.env.TYPEORM_SYNC
+const requestedSynchronize = process.env.TYPEORM_SYNC
     ? process.env.TYPEORM_SYNC === "true"
     : !isProd
+const dbUser = (process.env.DATABASE_USER || "").toLowerCase()
+const syncWithNonOwnerOverride = process.env.ALLOW_TYPEORM_SYNC_WITH_NON_OWNER === "1"
+const likelyNonOwnerDbRole = dbUser !== "" && dbUser !== "postgres"
+const synchronize = requestedSynchronize && (!likelyNonOwnerDbRole || syncWithNonOwnerOverride)
 const useSsl = process.env.DATABASE_SSL === "true" || process.env.DATABASE_SSL === "1"
 const sslOptions = useSsl
     ? { rejectUnauthorized: process.env.DATABASE_SSL_REJECT_UNAUTHORIZED === "true" }
     : false
+if (requestedSynchronize && !synchronize) {
+    console.warn(
+        "[DB] TYPEORM_SYNC requested but disabled for non-owner DB role. Use migrations (recommended) or set ALLOW_TYPEORM_SYNC_WITH_NON_OWNER=1 to override."
+    )
+}
 
 // Enhanced Database Connection Pooling Configuration
 const poolSize = Number(process.env.DATABASE_POOL_MAX || 20) // Increased default pool size
@@ -60,7 +76,7 @@ export const AppDataSource = new DataSource({
     username: process.env.DATABASE_USER,
     password: process.env.DATABASE_PASSWORD,
     database: process.env.DATABASE_NAME,
-    entities: [Users, Roles, Branch, IngredientsUnit, Ingredients, PurchaseOrder, StockOrdersItem, StockOrdersDetail, SalesOrder, SalesOrderItem, SalesOrderDetail, Category, Products, ProductsUnit, Tables, Delivery, Discounts, Payments, PaymentMethod, Shifts, ShopProfile, ShopPaymentAccount, SalesSummaryView, TopSellingItemsView, OrderQueue, AuditLog],
+    entities: [Users, Roles, Branch, IngredientsUnit, Ingredients, PurchaseOrder, StockOrdersItem, StockOrdersDetail, SalesOrder, SalesOrderItem, SalesOrderDetail, Category, Products, ProductsUnit, Tables, Delivery, Discounts, Payments, PaymentMethod, Shifts, ShopProfile, ShopPaymentAccount, SalesSummaryView, TopSellingItemsView, OrderQueue, AuditLog, PermissionResource, PermissionAction, RolePermission, UserPermission, PermissionAudit, PermissionOverrideApproval],
     synchronize: synchronize as boolean,
     logging: isProd ? ["error"] : true,
     ssl: sslOptions,
@@ -145,6 +161,12 @@ export const connectDatabase = async () => {
                     "[DB] Pending migrations detected. Run `npm run migration:run` (or set RUN_MIGRATIONS_ON_START=true)."
                 )
             }
+        }
+
+        const runRbacBootstrap = process.env.RUN_RBAC_BASELINE_ON_START !== "false"
+        if (runRbacBootstrap) {
+            await ensureRbacDefaults(AppDataSource)
+            console.log("[DB] RBAC baseline ensured")
         }
 
     } catch (error) {

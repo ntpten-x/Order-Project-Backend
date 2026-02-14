@@ -2,15 +2,22 @@ import { DeliveryModels } from "../../models/pos/delivery.model";
 import { SocketService } from "../socket.service";
 import { Delivery } from "../../entity/pos/Delivery";
 import { RealtimeEvents } from "../../utils/realtimeEvents";
+import { CreatedSort } from "../../utils/sortCreated";
 
 export class DeliveryService {
     private socketService = SocketService.getInstance();
 
     constructor(private deliveryModel: DeliveryModels) { }
 
-    async findAll(page: number, limit: number, q?: string, branchId?: string): Promise<{ data: Delivery[], total: number, page: number, last_page: number }> {
+    async findAll(
+        page: number,
+        limit: number,
+        q?: string,
+        branchId?: string,
+        sortCreated: CreatedSort = "old"
+    ): Promise<{ data: Delivery[], total: number, page: number, last_page: number }> {
         try {
-            return this.deliveryModel.findAll(page, limit, q, branchId)
+            return this.deliveryModel.findAll(page, limit, q, branchId, sortCreated)
         } catch (error) {
             throw error
         }

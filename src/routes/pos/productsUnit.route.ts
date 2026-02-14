@@ -2,9 +2,11 @@ import { Router } from "express";
 import { ProductsUnitController } from "../../controllers/pos/productsUnit.controller";
 import { ProductsUnitService } from "../../services/pos/productsUnit.service";
 import { ProductsUnitModels } from "../../models/pos/productsUnit.model";
-import { authenticateToken, authorizeRole } from "../../middleware/auth.middleware";
+import { authenticateToken } from "../../middleware/auth.middleware";
 import { validate } from "../../middleware/validate.middleware";
 import { requireBranch } from "../../middleware/branch.middleware";
+import { authorizePermission } from "../../middleware/permission.middleware";
+import { paginationQuerySchema } from "../../utils/schemas/common.schema";
 import {
     createProductsUnitSchema,
     productsUnitIdParamSchema,
@@ -19,15 +21,14 @@ const productsUnitService = new ProductsUnitService(productsUnitModel)
 const productsUnitController = new ProductsUnitController(productsUnitService)
 
 router.use(authenticateToken)
-router.use(authorizeRole(["Admin", "Manager", "Employee"]))
 router.use(requireBranch)
 
-router.get("/", productsUnitController.findAll)
-router.get("/:id", validate(productsUnitIdParamSchema), productsUnitController.findOne)
-router.get("/name/:unit_name", validate(productsUnitNameParamSchema), productsUnitController.findOneByName)
+router.get("/", authorizePermission("products.page", "view"), validate(paginationQuerySchema), productsUnitController.findAll)
+router.get("/:id", authorizePermission("products.page", "view"), validate(productsUnitIdParamSchema), productsUnitController.findOne)
+router.get("/name/:unit_name", authorizePermission("products.page", "view"), validate(productsUnitNameParamSchema), productsUnitController.findOneByName)
 
-router.post("/", authorizeRole(["Admin", "Manager"]), validate(createProductsUnitSchema), productsUnitController.create)
-router.put("/:id", authorizeRole(["Admin", "Manager"]), validate(updateProductsUnitSchema), productsUnitController.update)
-router.delete("/:id", authorizeRole(["Admin", "Manager"]), validate(productsUnitIdParamSchema), productsUnitController.delete)
+router.post("/", authorizePermission("products.page", "create"), validate(createProductsUnitSchema), productsUnitController.create)
+router.put("/:id", authorizePermission("products.page", "update"), validate(updateProductsUnitSchema), productsUnitController.update)
+router.delete("/:id", authorizePermission("products.page", "delete"), validate(productsUnitIdParamSchema), productsUnitController.delete)
 
 export default router

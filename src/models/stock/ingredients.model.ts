@@ -1,6 +1,7 @@
 import { Ingredients } from "../../entity/stock/Ingredients";
 import { addBooleanFilter } from "../../utils/dbHelpers";
 import { getRepository } from "../../database/dbContext";
+import { CreatedSort, createdSortToOrder } from "../../utils/sortCreated";
 
 /**
  * Ingredients Model
@@ -10,11 +11,49 @@ import { getRepository } from "../../database/dbContext";
  * - Branch-based data isolation support
  */
 export class IngredientsModel {
-    async findAll(filters?: { is_active?: boolean }, branchId?: string): Promise<Ingredients[]> {
+    async findAllPaginated(
+        page: number,
+        limit: number,
+        filters?: { is_active?: boolean; q?: string },
+        branchId?: string,
+        sortCreated: CreatedSort = "old"
+    ): Promise<{ data: Ingredients[]; total: number; page: number; limit: number; last_page: number }> {
+        const safePage = Math.max(page, 1);
+        const safeLimit = Math.min(Math.max(limit, 1), 200);
         const ingredientsRepository = getRepository(Ingredients);
         let query = ingredientsRepository.createQueryBuilder("ingredients")
             .leftJoinAndSelect("ingredients.unit", "unit")
-            .orderBy("ingredients.create_date", "ASC");
+            .orderBy("ingredients.create_date", createdSortToOrder(sortCreated));
+
+        if (branchId) {
+            query.andWhere("ingredients.branch_id = :branchId", { branchId });
+        }
+
+        query = addBooleanFilter(query, filters?.is_active, "is_active", "ingredients");
+        if (filters?.q?.trim()) {
+            const q = `%${filters.q.trim().toLowerCase()}%`;
+            query.andWhere(
+                "(LOWER(ingredients.display_name) LIKE :q OR LOWER(ingredients.ingredient_name) LIKE :q OR LOWER(COALESCE(ingredients.description, '')) LIKE :q)",
+                { q }
+            );
+        }
+        query.addOrderBy("ingredients.is_active", "DESC");
+        query.skip((safePage - 1) * safeLimit).take(safeLimit);
+
+        const [data, total] = await query.getManyAndCount();
+        const last_page = Math.max(Math.ceil(total / safeLimit), 1);
+        return { data, total, page: safePage, limit: safeLimit, last_page };
+    }
+
+    async findAll(
+        filters?: { is_active?: boolean },
+        branchId?: string,
+        sortCreated: CreatedSort = "old"
+    ): Promise<Ingredients[]> {
+        const ingredientsRepository = getRepository(Ingredients);
+        let query = ingredientsRepository.createQueryBuilder("ingredients")
+            .leftJoinAndSelect("ingredients.unit", "unit")
+            .orderBy("ingredients.create_date", createdSortToOrder(sortCreated));
 
         // Filter by branch for data isolation
         if (branchId) {

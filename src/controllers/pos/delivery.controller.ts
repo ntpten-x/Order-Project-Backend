@@ -7,6 +7,7 @@ import { AppError } from "../../utils/AppError";
 import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../../utils/auditLogger";
 import { getClientIp } from "../../utils/securityLogger";
 import { setPrivateSwrHeaders } from "../../utils/cacheHeaders";
+import { parseCreatedSort } from "../../utils/sortCreated";
 
 export class DeliveryController {
     constructor(private deliveryService: DeliveryService) { }
@@ -16,9 +17,10 @@ export class DeliveryController {
         const rawLimit = parseInt(req.query.limit as string);
         const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
         const q = (req.query.q as string | undefined) || undefined;
+        const sortCreated = parseCreatedSort(req.query.sort_created);
         const branchId = getBranchId(req as any);
 
-        const result = await this.deliveryService.findAll(page, limit, q, branchId);
+        const result = await this.deliveryService.findAll(page, limit, q, branchId, sortCreated);
         setPrivateSwrHeaders(res);
         return ApiResponses.paginated(res, result.data, {
             page: result.page,

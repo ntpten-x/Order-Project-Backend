@@ -15,7 +15,7 @@ import { PaymentsService } from "../../services/pos/payments.service";
 import { PaymentStatus } from "../../entity/pos/Payments";
 import { DashboardService } from "../../services/pos/dashboard.service";
 import { ShiftsService } from "../../services/pos/shifts.service";
-import { runWithDbContext } from "../../database/dbContext";
+import { getRepository, runWithDbContext } from "../../database/dbContext";
 
 dotenv.config();
 
@@ -37,10 +37,6 @@ describe("POS critical flow (DB integration)", () => {
 
     it("handles cancel item -> payment -> dashboard summary consistently", async () => {
         const userRepo = AppDataSource.getRepository(Users);
-        const productRepo = AppDataSource.getRepository(Products);
-        const categoryRepo = AppDataSource.getRepository(Category);
-        const unitRepo = AppDataSource.getRepository(ProductsUnit);
-        const paymentMethodRepo = AppDataSource.getRepository(PaymentMethod);
 
         const actor = await userRepo
             .createQueryBuilder("u")
@@ -63,25 +59,32 @@ describe("POS critical flow (DB integration)", () => {
             return rows.reduce((sum, row) => sum + Number(row.total_sales || 0), 0);
         });
 
-        let product = await productRepo.findOne({ where: { branch_id: branchId, is_active: true } as any });
+        let product = await runAsBranch(async () =>
+            getRepository(Products).findOne({ where: { branch_id: branchId, is_active: true } as any })
+        );
 
         if (!product) {
             const now = Date.now();
-            const category = await categoryRepo.save({
-                branch_id: branchId,
-                category_name: `it-posflow-cat-${now}`,
-                display_name: `IT POSFLOW CAT ${now}`,
-                is_active: true,
-            } as any);
+            const category = await runAsBranch(async () =>
+                getRepository(Category).save({
+                    branch_id: branchId,
+                    category_name: `it-posflow-cat-${now}`,
+                    display_name: `IT POSFLOW CAT ${now}`,
+                    is_active: true,
+                } as any)
+            );
 
-            const unit = await unitRepo.save({
-                branch_id: branchId,
-                unit_name: `it-posflow-unit-${now}`,
-                display_name: `IT POSFLOW UNIT ${now}`,
-                is_active: true,
-            } as any);
+            const unit = await runAsBranch(async () =>
+                getRepository(ProductsUnit).save({
+                    branch_id: branchId,
+                    unit_name: `it-posflow-unit-${now}`,
+                    display_name: `IT POSFLOW UNIT ${now}`,
+                    is_active: true,
+                } as any)
+            );
 
-            product = await productRepo.save({
+            product = await runAsBranch(async () =>
+                getRepository(Products).save({
                     branch_id: branchId,
                     product_name: `it-posflow-product-${now}`,
                     display_name: `IT POSFLOW PRODUCT ${now}`,
@@ -92,22 +95,27 @@ describe("POS critical flow (DB integration)", () => {
                     category_id: category.id,
                     unit_id: unit.id,
                     is_active: true,
-            } as any);
+                } as any)
+            );
         }
 
-        let paymentMethod = await paymentMethodRepo.findOne({
-            where: { branch_id: branchId, is_active: true } as any,
-            order: { create_date: "ASC" },
-        });
+        let paymentMethod = await runAsBranch(async () =>
+            getRepository(PaymentMethod).findOne({
+                where: { branch_id: branchId, is_active: true } as any,
+                order: { create_date: "ASC" },
+            })
+        );
 
         if (!paymentMethod) {
             const now = Date.now();
-            paymentMethod = await paymentMethodRepo.save({
-                branch_id: branchId,
-                payment_method_name: `IT_CASH_${now}`,
-                display_name: `IT CASH ${now}`,
-                is_active: true,
-            } as any);
+            paymentMethod = await runAsBranch(async () =>
+                getRepository(PaymentMethod).save({
+                    branch_id: branchId,
+                    payment_method_name: `IT_CASH_${now}`,
+                    display_name: `IT CASH ${now}`,
+                    is_active: true,
+                } as any)
+            );
         }
 
         await runAsBranch(async () => {
@@ -172,25 +180,27 @@ describe("POS critical flow (DB integration)", () => {
         const delta = Number(summaryAfter) - Number(summaryBefore);
         expect(delta).toBeGreaterThanOrEqual(Number(orderAfterCancel!.total_amount) - 0.01);
 
-        await AppDataSource.query(
-            `DELETE FROM payments WHERE order_id = $1`,
-            [order.id]
-        );
-        await AppDataSource.query(
-            `DELETE FROM order_queue WHERE order_id = $1`,
-            [order.id]
-        );
-        await AppDataSource.query(
-            `DELETE FROM sales_order_detail WHERE orders_item_id IN (SELECT id FROM sales_order_item WHERE order_id = $1)`,
-            [order.id]
-        );
-        await AppDataSource.query(
-            `DELETE FROM sales_order_item WHERE order_id = $1`,
-            [order.id]
-        );
-        await AppDataSource.query(
-            `DELETE FROM sales_orders WHERE id = $1`,
-            [order.id]
-        );
+        await runAsBranch(async () => {
+            await AppDataSource.query(
+                `DELETE FROM payments WHERE order_id = $1`,
+                [order.id]
+            );
+            await AppDataSource.query(
+                `DELETE FROM order_queue WHERE order_id = $1`,
+                [order.id]
+            );
+            await AppDataSource.query(
+                `DELETE FROM sales_order_detail WHERE orders_item_id IN (SELECT id FROM sales_order_item WHERE order_id = $1)`,
+                [order.id]
+            );
+            await AppDataSource.query(
+                `DELETE FROM sales_order_item WHERE order_id = $1`,
+                [order.id]
+            );
+            await AppDataSource.query(
+                `DELETE FROM sales_orders WHERE id = $1`,
+                [order.id]
+            );
+        });
     }, 120000);
 });
