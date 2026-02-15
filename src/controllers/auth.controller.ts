@@ -356,10 +356,12 @@ export class AuthController {
 
         const branchId = (req.body?.branch_id ?? null) as string | null;
 
+        const forwardedProto = String(req.headers["x-forwarded-proto"] || "").toLowerCase();
+        const isHttps = Boolean((req as any).secure) || forwardedProto === "https";
         const cookieOptions = {
             httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: (process.env.NODE_ENV === "production" ? "none" : "lax") as "none" | "lax",
+            secure: isHttps,
+            sameSite: (isHttps ? "none" : "lax") as "none" | "lax",
             path: "/",
             maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
         };

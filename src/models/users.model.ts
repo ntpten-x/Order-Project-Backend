@@ -1,4 +1,4 @@
-import { Users } from "../entity/Users";
+﻿import { Users } from "../entity/Users";
 import { getDbContext, getDbManager, getRepository } from "../database/dbContext";
 import { Brackets } from "typeorm";
 import { PermissionScope } from "../middleware/permission.middleware";
@@ -157,7 +157,8 @@ export class UsersModels {
     async create(users: Users): Promise<Users> {
         try {
             const ctx = getDbContext();
-            // If an active branch context exists (Admin switched branch), force the user into that branch.
+            // If a branch context exists, force the user into that branch.
+            // This is required for non-admins, and also keeps admin "switched branch" behavior consistent.
             if (ctx?.branchId) {
                 (users as any).branch_id = ctx.branchId;
             }
@@ -171,13 +172,30 @@ export class UsersModels {
         try {
             const ctx = getDbContext();
 
-            // If an active branch context exists, only allow updates within that branch.
-            if (ctx?.branchId) {
+            // If a branch context exists and actor is NOT admin, only allow updates within that branch.
+            if (ctx?.branchId && !ctx?.isAdmin) {
                 const existing = await this.findOne(id);
                 if (!existing) {
-                    throw new Error("ไม่พบผู้ใช้");
+                    throw new Error("เนเธกเนเธเธเธเธนเนเนเธเน");
                 }
                 (users as any).branch_id = ctx.branchId;
+            }
+
+            // Admin: allow changing user.branch_id across branches even when admin has selected an active branch.
+            // When app.branch_id is set, Postgres RLS hides rows from other branches and may block branch moves.
+            // Temporarily clear the session branch context for this operation only.
+            if (ctx?.branchId && ctx?.isAdmin && typeof (users as any).branch_id === "string" && (users as any).branch_id !== ctx.branchId) {
+                const qr = ctx.queryRunner;
+                if (qr) {
+                    await qr.query("SELECT set_config('app.branch_id', '', false)");
+                }
+                try {
+                    return await getRepository(Users).save({ ...users, id });
+                } finally {
+                    if (qr) {
+                        await qr.query("SELECT set_config('app.branch_id', $1, false)", [ctx.branchId]);
+                    }
+                }
             }
 
             return getRepository(Users).save({ ...users, id })
@@ -185,7 +203,6 @@ export class UsersModels {
             throw error
         }
     }
-
     async delete(id: string): Promise<void> {
         try {
             const ctx = getDbContext();
@@ -194,7 +211,7 @@ export class UsersModels {
             if (ctx?.branchId) {
                 const result = await usersRepo.delete({ id, branch_id: ctx.branchId } as any);
                 if (!result.affected) {
-                    throw new Error("ไม่พบผู้ใช้");
+                    throw new Error("เนเธกเนเธเธเธเธนเนเนเธเน");
                 }
                 return;
             }
@@ -252,3 +269,4 @@ export class UsersModels {
         });
     }
 }
+
