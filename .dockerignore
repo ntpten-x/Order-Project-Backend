@@ -27,7 +27,6 @@ load-tests
 soak-artifacts
 query-plans
 monitoring
-scripts
 src/tests
 
 # Docs and local notes

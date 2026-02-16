@@ -18,6 +18,7 @@ yarn-error.log*
 .env
 .env.*
 !.env.example
+deploy/aws/backend.env
 
 # OS / editor
 .DS_Store
