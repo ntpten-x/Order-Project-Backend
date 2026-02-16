@@ -12,6 +12,26 @@ import { parseCreatedSort } from "../utils/sortCreated";
 export class UsersController {
     constructor(private usersService: UsersService) { }
 
+    private normalizeUserPayload(payload: any) {
+        if (!payload || typeof payload !== "object") return payload;
+
+        const normalized = { ...payload };
+        const directName = typeof normalized.name === "string" ? normalized.name.trim() : "";
+        const firstName = typeof normalized.firstName === "string" ? normalized.firstName.trim() : "";
+        const lastName = typeof normalized.lastName === "string" ? normalized.lastName.trim() : "";
+
+        if (!directName && (firstName || lastName)) {
+            normalized.name = `${firstName} ${lastName}`.trim();
+        } else if (directName) {
+            normalized.name = directName;
+        }
+
+        delete normalized.firstName;
+        delete normalized.lastName;
+
+        return normalized;
+    }
+
     private sanitizeUserPayload(payload: any) {
         if (!payload || typeof payload !== "object") return payload;
         const { password: _password, ...rest } = payload;
@@ -55,7 +75,8 @@ export class UsersController {
     })
 
     create = catchAsync(async (req: AuthRequest, res: Response) => {
-        const user = await this.usersService.create(req.body);
+        const normalizedBody = this.normalizeUserPayload(req.body);
+        const user = await this.usersService.create(normalizedBody);
 
         const userInfo = getUserInfoFromRequest(req as any);
         await auditLogger.log({
@@ -66,7 +87,7 @@ export class UsersController {
             entity_type: "Users",
             entity_id: user.id,
             branch_id: user.branch_id || userInfo.branch_id,
-            new_values: this.sanitizeUserPayload(req.body),
+            new_values: this.sanitizeUserPayload(normalizedBody),
             path: req.originalUrl,
             method: req.method,
             description: `Create user ${user.username || user.id}`,
@@ -76,8 +97,9 @@ export class UsersController {
     })
 
     update = catchAsync(async (req: AuthRequest, res: Response) => {
+        const normalizedBody = this.normalizeUserPayload(req.body);
         const oldUser = await this.usersService.findOne(req.params.id);
-        const user = await this.usersService.update(req.params.id, req.body, req.user?.id);
+        const user = await this.usersService.update(req.params.id, normalizedBody, req.user?.id);
 
         const userInfo = getUserInfoFromRequest(req as any);
         await auditLogger.log({
@@ -89,7 +111,7 @@ export class UsersController {
             entity_id: req.params.id,
             branch_id: user.branch_id || userInfo.branch_id,
             old_values: this.sanitizeUserPayload(oldUser),
-            new_values: this.sanitizeUserPayload(req.body),
+            new_values: this.sanitizeUserPayload(normalizedBody),
             path: req.originalUrl,
             method: req.method,
             description: `Update user ${user.username || user.id}`,
