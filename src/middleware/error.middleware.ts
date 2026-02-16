@@ -127,6 +127,9 @@ export const globalErrorHandler = (
         statusCode = err.statusCode;
         errorCode = getErrorCode(err, statusCode);
         message = err.message;
+        if (err.details !== undefined) {
+            details = err.details;
+        }
     }
     // Handle Zod validation errors
     else if (err instanceof ZodError) {

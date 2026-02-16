@@ -100,4 +100,5 @@ export enum AuditActionType {
   // Shift actions
   SHIFT_OPEN = "SHIFT_OPEN",
   SHIFT_CLOSE = "SHIFT_CLOSE",
+  SHIFT_CLOSE_PREVIEW = "SHIFT_CLOSE_PREVIEW",
 }

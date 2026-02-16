@@ -62,6 +62,10 @@ export type SystemHealthReport = {
         frontendProxyPrefix: string;
         allowedFrontendOrigins: string[];
         corsCredentialsEnabled: boolean;
+        backendApiPrefix: string;
+        healthEndpoint: string;
+        allowedProxyPaths: string[];
+        authMode: string;
     };
     warnings: string[];
 };
@@ -73,6 +77,19 @@ const DEFAULT_ALLOWED_ORIGINS = [
     "http://13.239.29.168:3001",
 ];
 const CSRF_EXCLUDED_PATHS = ["/auth/login", "/auth/logout", "/health", "/csrf-token", "/metrics"];
+const DEFAULT_ALLOWED_PROXY_PATHS = [
+    "/auth/*",
+    "/permissions/*",
+    "/users/*",
+    "/branch/*",
+    "/pos/*",
+    "/stock/*",
+    "/audit/*",
+    "/system/*",
+    "/health",
+    "/metrics",
+    "/csrf-token",
+];
 
 const LEVEL_RANK: Record<HealthLevel, number> = {
     ok: 0,
@@ -114,6 +131,20 @@ function resolveAllowedFrontendOrigins(): string[] {
                 .filter(Boolean)
         )
     );
+}
+
+function parseListEnv(value: string | undefined): string[] {
+    if (!value) return [];
+    return value
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+}
+
+function resolveAllowedProxyPaths(): string[] {
+    const fromEnv = parseListEnv(process.env.FRONTEND_ALLOWED_PROXY_PATHS);
+    if (fromEnv.length > 0) return fromEnv;
+    return DEFAULT_ALLOWED_PROXY_PATHS;
 }
 
 function resolveRetentionLogPath(): string {
@@ -252,6 +283,7 @@ export class SystemHealthService {
     async getReport(): Promise<SystemHealthReport> {
         const checkedAt = toIsoNow();
         const allowedFrontendOrigins = resolveAllowedFrontendOrigins();
+        const allowedProxyPaths = resolveAllowedProxyPaths();
         const staleThresholdHours = parseNumberEnv(process.env.HEALTH_RETENTION_STALE_HOURS, 36);
 
         const readiness = await this.collectReadiness(checkedAt, allowedFrontendOrigins);
@@ -290,6 +322,10 @@ export class SystemHealthService {
                 frontendProxyPrefix: "/api/*",
                 allowedFrontendOrigins,
                 corsCredentialsEnabled: true,
+                backendApiPrefix: "/api",
+                healthEndpoint: "/system/health",
+                allowedProxyPaths,
+                authMode: "JWT + Cookie + CSRF",
             },
             warnings,
         };
@@ -535,8 +571,52 @@ export class SystemHealthService {
         const logPath = resolveRetentionLogPath();
         const retentionLog = await readLatestRetentionLogEntry(logPath);
         const lastRun = retentionLog.entry;
+        const heartbeatAt = asString(lastRun?.ts);
+        const heartbeatDate = heartbeatAt ? new Date(heartbeatAt) : null;
+        const heartbeatAgeHours =
+            heartbeatDate && Number.isFinite(heartbeatDate.getTime())
+                ? Number(((Date.now() - heartbeatDate.getTime()) / 3_600_000).toFixed(1))
+                : null;
+        const anyRetentionEnabled = orderEnabled || stockEnabled || auditEnabled;
+
+        const schedulerLevel: HealthLevel = !anyRetentionEnabled
+            ? "warn"
+            : !heartbeatAt
+                ? "warn"
+                : lastRun?.status === "failed"
+                    ? "error"
+                    : heartbeatAgeHours !== null && heartbeatAgeHours > staleThresholdHours
+                        ? "warn"
+                        : "ok";
+
+        const schedulerSummary =
+            schedulerLevel === "ok"
+                ? "Heartbeat detected and scheduler is active"
+                : !anyRetentionEnabled
+                    ? "Retention scheduler is disabled by configuration"
+                    : !heartbeatAt
+                        ? "No heartbeat evidence found yet"
+                        : lastRun?.status === "failed"
+                            ? "Last retention cycle failed"
+                            : `Heartbeat is stale (${heartbeatAgeHours}h ago)`;
 
         return [
+            {
+                key: "scheduler-heartbeat",
+                title: "Cron Scheduler Heartbeat",
+                level: schedulerLevel,
+                summary: schedulerSummary,
+                checkedAt,
+                details: {
+                    anyRetentionEnabled,
+                    staleThresholdHours,
+                    lastRunAt: heartbeatAt || null,
+                    lastRunStatus: lastRun?.status ?? null,
+                    lastRunError: lastRun?.error ?? null,
+                    lastRunAgeHours: heartbeatAgeHours,
+                    logPath,
+                },
+            },
             buildRetentionJobCheck({
                 key: "retention-pos",
                 title: "POS Order Retention (30 days)",
