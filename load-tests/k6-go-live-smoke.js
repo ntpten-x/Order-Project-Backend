@@ -2,13 +2,19 @@ import http from "k6/http";
 import { check, sleep } from "k6";
 
 const BASE_URL = __ENV.BASE_URL || "http://localhost:3000";
+const VUS = Number(__ENV.VUS || "2");
+const DURATION = __ENV.DURATION || "20s";
+const THINK_TIME_SECONDS = Number(__ENV.THINK_TIME_SECONDS || "0.5");
+
+const resolvedVus = Number.isFinite(VUS) && VUS > 0 ? Math.trunc(VUS) : 2;
+const resolvedThinkTime = Number.isFinite(THINK_TIME_SECONDS) && THINK_TIME_SECONDS >= 0 ? THINK_TIME_SECONDS : 0.5;
 
 export const options = {
   scenarios: {
     health_smoke: {
       executor: "constant-vus",
-      vus: 2,
-      duration: "20s",
+      vus: resolvedVus,
+      duration: DURATION,
     },
   },
   thresholds: {
@@ -27,5 +33,5 @@ export default function () {
     "health has body": (res) => !!res.body && res.body.length > 0,
   });
 
-  sleep(0.5);
+  sleep(resolvedThinkTime);
 }

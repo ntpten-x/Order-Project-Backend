@@ -39,7 +39,7 @@ export class SalesOrderDetailService {
     async create(salesOrderDetail: SalesOrderDetail, branchId?: string): Promise<SalesOrderDetail> {
         try {
             if (!salesOrderDetail.orders_item_id) {
-                throw new Error("เธเธฃเธธเธ“เธฒเธฃเธฐเธเธธเธฃเธซเธฑเธชเธฃเธฒเธขเธเธฒเธฃเธชเธดเธเธเนเธฒเนเธกเนเธเนเธฒเธข")
+                throw new Error("กรุณาระบุรหัสรายการสินค้าแม่ข่าย")
             }
 
             if (branchId) {

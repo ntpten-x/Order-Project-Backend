@@ -113,7 +113,16 @@ export class UsersModels {
                 .where("users.id = :id", { id });
 
             if (ctx?.branchId) {
-                query.andWhere("users.branch_id = :branchId", { branchId: ctx.branchId });
+                if (ctx?.isAdmin && ctx?.userId) {
+                    query.andWhere(
+                        new Brackets((qb) => {
+                            qb.where("users.branch_id = :branchId", { branchId: ctx.branchId })
+                                .orWhere("users.id = :ctxUserId", { ctxUserId: ctx.userId });
+                        })
+                    );
+                } else {
+                    query.andWhere("users.branch_id = :branchId", { branchId: ctx.branchId });
+                }
             }
 
             if (ctx?.role === "Manager" && !ctx?.isAdmin) {

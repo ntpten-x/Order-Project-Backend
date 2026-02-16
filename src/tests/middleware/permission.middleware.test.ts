@@ -30,11 +30,14 @@ function makeRes() {
 }
 
 describe("permission middleware", () => {
+    const originalAdminBypass = process.env.PERMISSION_ADMIN_BYPASS;
+
     beforeEach(() => {
         queryMock.mockReset();
         observePermissionCheckMock.mockReset();
         observeCacheMock.mockReset();
         clearPermissionDecisionMemoryCache();
+        process.env.PERMISSION_ADMIN_BYPASS = originalAdminBypass;
     });
 
     it("attaches permission and calls next on allow", async () => {
@@ -111,6 +114,53 @@ describe("permission middleware", () => {
             resourceKey: "permissions.page",
             actionKey: "view",
             scope: "own",
+        });
+    });
+
+    it("does not bypass permissions for admin when bypass flag is disabled", async () => {
+        process.env.PERMISSION_ADMIN_BYPASS = "false";
+        queryMock.mockResolvedValue([{ effect: "deny", scope: "none" }]);
+        const req: any = {
+            user: {
+                id: "u1",
+                roles_id: "r1",
+                roles: {
+                    roles_name: "Admin",
+                },
+            },
+        };
+        const res = makeRes();
+        const next = vi.fn();
+
+        await authorizePermission("orders.page", "delete")(req, res as any, next);
+
+        expect(next).not.toHaveBeenCalled();
+        expect(queryMock).toHaveBeenCalledOnce();
+        expect(res.status).toHaveBeenCalledWith(403);
+    });
+
+    it("allows admin bypass only when explicitly enabled", async () => {
+        process.env.PERMISSION_ADMIN_BYPASS = "true";
+        const req: any = {
+            user: {
+                id: "u1",
+                roles_id: "r1",
+                roles: {
+                    roles_name: "Admin",
+                },
+            },
+        };
+        const res = makeRes();
+        const next = vi.fn();
+
+        await authorizePermission("orders.page", "delete")(req, res as any, next);
+
+        expect(next).toHaveBeenCalledOnce();
+        expect(queryMock).not.toHaveBeenCalled();
+        expect(req.permission).toEqual({
+            resourceKey: "orders.page",
+            actionKey: "delete",
+            scope: "all",
         });
     });
 });

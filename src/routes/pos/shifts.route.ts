@@ -17,6 +17,7 @@ shiftsRouter.use(authenticateToken);
 shiftsRouter.use(requireBranch);
 
 shiftsRouter.post("/open", authorizePermission("shifts.page", "create"), validate(openShiftSchema), shiftsController.openShift);
+shiftsRouter.post("/close/preview", authorizePermission("shifts.page", "update"), validate(closeShiftSchema), shiftsController.previewCloseShift);
 shiftsRouter.post("/close", authorizePermission("shifts.page", "update"), validate(closeShiftSchema), shiftsController.closeShift);
 shiftsRouter.get("/current", authorizePermission("shifts.page", "view"), shiftsController.getCurrentShift);
 shiftsRouter.get("/current/summary", authorizePermission("shifts.page", "view"), shiftsController.getCurrentSummary);

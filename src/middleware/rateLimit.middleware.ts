@@ -1,5 +1,6 @@
 import rateLimit from "express-rate-limit";
 import { Request, Response } from "express";
+import { resolveRedisConnectionUrlFromEnv } from "../lib/redisClient";
 
 /**
  * Enhanced Rate Limiting Middleware
@@ -7,7 +8,20 @@ import { Request, Response } from "express";
  */
 
 const rateLimitRedisDisabled = process.env.RATE_LIMIT_REDIS_DISABLED === "true";
-const redisUrl = rateLimitRedisDisabled ? "" : (process.env.RATE_LIMIT_REDIS_URL || process.env.REDIS_URL || "");
+const redisUrl = rateLimitRedisDisabled
+    ? ""
+    : (
+        resolveRedisConnectionUrlFromEnv({
+            url: process.env.RATE_LIMIT_REDIS_URL,
+            host: process.env.RATE_LIMIT_REDIS_HOST,
+            port: process.env.RATE_LIMIT_REDIS_PORT,
+            username: process.env.RATE_LIMIT_REDIS_USERNAME,
+            password: process.env.RATE_LIMIT_REDIS_PASSWORD,
+            database: process.env.RATE_LIMIT_REDIS_DB,
+        }) ||
+        resolveRedisConnectionUrlFromEnv() ||
+        ""
+    );
 let redisStoreFactory: ((prefix: string) => any) | undefined;
 
 const loadRedisDeps = () => {
