@@ -1,6 +1,36 @@
-node_modules
-dist
-.env
-.DS_Store
-coverage
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+coverage/
+*.tsbuildinfo
+.tsbuildinfo.fast
+
+# Runtime and logs
+logs/
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment files (keep template)
+.env
+.env.*
+!.env.example
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Test and performance artifacts
+soak-artifacts/
+query-plans/
+load-tests/results/
+
+# Local docker and temp artifacts
+*.tgz
+*.tar
+*.tar.gz

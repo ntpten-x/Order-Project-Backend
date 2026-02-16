@@ -1,14 +1,40 @@
-node_modules
-dist
-npm-debug.log
-.env
+# VCS and metadata
 .git
 .gitignore
-Dockerfile
-docker-compose.yml
+.github
+
+# Dependencies and build cache
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local env/secrets
+.env
+.env.*
+!.env.example
+
+# Build outputs and runtime logs
+dist
+coverage
+*.tsbuildinfo
 .tsbuildinfo.fast
 logs
-*.md
-scripts
-query-plans
+*.log
+
+# Development/test-only assets
 load-tests
+soak-artifacts
+query-plans
+monitoring
+scripts
+src/tests
+
+# Docs and local notes
+*.md
+
+# Local/editor noise
+.vscode
+.idea
+.DS_Store
+Thumbs.db
