@@ -71,7 +71,7 @@ export class OrdersService {
     private async ensureActiveShift(branchId?: string): Promise<void> {
         const activeShift = await this.shiftsService.getCurrentShift(branchId);
         if (!activeShift) {
-            throw new AppError("เน€เธยเน€เธเธเน€เธเธเน€เธโ€เน€เธเธ’เน€เธโฌเน€เธยเน€เธเธ”เน€เธโ€เน€เธยเน€เธเธเน€เธยเน€เธยเน€เธเธเน€เธยเน€เธโ€”เน€เธเธ“เน€เธเธเน€เธเธ’เน€เธเธเน€เธยเน€เธเธ’เน€เธเธ (Active Shift Required)", 400);
+            throw new AppError("กรุณาเปิดกะก่อนทำรายการ (Active Shift Required)", 400);
         }
     }
 
@@ -103,7 +103,7 @@ export class OrdersService {
             .filter((id): id is string => !!id);
 
         if (productIds.length === 0) {
-            throw new AppError("เน€เธยเน€เธเธเน€เธยเน€เธเธเน€เธเธ•เน€เธเธเน€เธเธ’เน€เธเธเน€เธยเน€เธเธ’เน€เธเธเน€เธเธเน€เธเธ”เน€เธยเน€เธยเน€เธยเน€เธเธ’เน€เธยเน€เธยเน€เธยเน€เธเธ“เน€เธเธเน€เธเธ‘เน€เธยเน€เธยเน€เธยเน€เธเธ—เน€เธยเน€เธเธ", 400);
+            throw new AppError("ไม่มีรายการสินค้าในคำสั่งซื้อ", 400);
         }
 
         // 2. Optimization: Batch Fetch Products (Single Query)
@@ -288,7 +288,7 @@ export class OrdersService {
                 if (orders.order_no) {
                     const existingOrder = await this.ordersModel.findOneByOrderNo(orders.order_no)
                     if (existingOrder) {
-                        throw new Error("เน€เธโฌเน€เธเธ…เน€เธยเน€เธโ€”เน€เธเธ•เน€เธยเน€เธเธเน€เธเธเน€เธโฌเน€เธโ€เน€เธเธเน€เธเธเน€เธยเน€เธยเน€เธเธ•เน€เธยเน€เธเธเน€เธเธ•เน€เธเธเน€เธเธเน€เธเธเน€เธยเน€เธยเน€เธยเน€เธเธเน€เธเธเน€เธยเน€เธยเน€เธยเน€เธเธ…เน€เธยเน€เธเธ")
+                        throw new Error("เลขที่ออเดอร์นี้มีอยู่ในระบบแล้ว")
                     }
                 } else {
                     orders.order_no = await this.ensureOrderNo();
@@ -367,13 +367,13 @@ export class OrdersService {
         return await runInTransaction(async (manager) => {
 
             if (!items || !Array.isArray(items) || items.length === 0) {
-                throw new AppError("เน€เธยเน€เธเธเน€เธเธเน€เธโ€เน€เธเธ’เน€เธเธเน€เธเธเน€เธยเน€เธเธเน€เธเธเน€เธเธ’เน€เธเธเน€เธยเน€เธเธ’เน€เธเธเน€เธเธเน€เธเธ”เน€เธยเน€เธยเน€เธยเน€เธเธ’", 400);
+                throw new AppError("กรุณาระบุรายการสินค้า", 400);
             }
 
             if (orderData.order_no) {
                 const existingOrder = await this.ordersModel.findOneByOrderNo(orderData.order_no)
                 if (existingOrder) {
-                    throw new Error("เน€เธโฌเน€เธเธ…เน€เธยเน€เธโ€”เน€เธเธ•เน€เธยเน€เธเธเน€เธเธเน€เธโฌเน€เธโ€เน€เธเธเน€เธเธเน€เธยเน€เธยเน€เธเธ•เน€เธยเน€เธเธเน€เธเธ•เน€เธเธเน€เธเธเน€เธเธเน€เธยเน€เธยเน€เธยเน€เธเธเน€เธเธเน€เธยเน€เธยเน€เธยเน€เธเธ…เน€เธยเน€เธเธ")
+                    throw new Error("เลขที่ออเดอร์นี้มีอยู่ในระบบแล้ว")
                 }
             } else {
                 orderData.order_no = await this.ensureOrderNo();
@@ -472,7 +472,7 @@ export class OrdersService {
         try {
             const orderToUpdate = await this.ordersModel.findOne(id, branchId)
             if (!orderToUpdate) {
-                throw new Error("เน€เธยเน€เธเธเน€เธยเน€เธยเน€เธยเน€เธยเน€เธยเน€เธเธเน€เธเธเน€เธเธเน€เธเธ…เน€เธเธเน€เธเธเน€เธโฌเน€เธโ€เน€เธเธเน€เธเธเน€เธยเน€เธโ€”เน€เธเธ•เน€เธยเน€เธโ€ขเน€เธยเน€เธเธเน€เธยเน€เธยเน€เธเธ’เน€เธเธเน€เธยเน€เธยเน€เธยเน€เธยเน€เธย")
+                throw new Error("ไม่พบข้อมูลออเดอร์ที่ต้องการแก้ไข")
             }
 
             const effectiveBranchId = orderToUpdate.branch_id || branchId;
@@ -498,7 +498,7 @@ export class OrdersService {
             if (orders.order_no && orders.order_no !== orderToUpdate.order_no) {
                 const existingOrder = await this.ordersModel.findOneByOrderNo(orders.order_no, effectiveBranchId)
                 if (existingOrder) {
-                    throw new Error("เน€เธโฌเน€เธเธ…เน€เธยเน€เธโ€”เน€เธเธ•เน€เธยเน€เธเธเน€เธเธเน€เธโฌเน€เธโ€เน€เธเธเน€เธเธเน€เธยเน€เธยเน€เธเธ•เน€เธยเน€เธเธเน€เธเธ•เน€เธเธเน€เธเธเน€เธเธเน€เธยเน€เธยเน€เธยเน€เธเธเน€เธเธเน€เธยเน€เธยเน€เธยเน€เธเธ…เน€เธยเน€เธเธ")
+                    throw new Error("เลขที่ออเดอร์นี้มีอยู่ในระบบแล้ว")
                 }
             }
 

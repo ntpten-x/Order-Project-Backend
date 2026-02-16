@@ -19,6 +19,8 @@ type RawPermissionRow = {
     scope: PermissionScope | null;
 };
 
+const isAdminPermissionBypassEnabled = (): boolean => process.env.PERMISSION_ADMIN_BYPASS === "true";
+
 async function resolveEffectivePermission(
     userId: string,
     roleId: string,
@@ -91,9 +93,9 @@ export const authorizePermission = (resourceKey: string, actionKey: string) => {
             return ApiResponses.unauthorized(res, "Authentication required");
         }
 
-        // Safe fallback for fresh environments: Admin keeps full access even before permission seed completes.
+        // Explicit opt-in only. Keep disabled by default to avoid silent over-privilege in production.
         const actorRole = normalizeRoleName(req.user.roles?.roles_name);
-        if (actorRole === "Admin") {
+        if (actorRole === "Admin" && isAdminPermissionBypassEnabled()) {
             req.permission = {
                 resourceKey,
                 actionKey,

@@ -35,13 +35,18 @@ export class OrderQueueService {
     async addToQueue(orderId: string, priority: QueuePriority = QueuePriority.Normal, branchId?: string): Promise<OrderQueue> {
         const queueRepository = getRepository(OrderQueue);
         const orderRepository = getRepository(SalesOrder);
-        // Check if order exists
-        const order = await orderRepository.findOne({ where: { id: orderId } });
+        // Branch-scoped lookup prevents cross-branch queue injection.
+        const order = await orderRepository.findOne({
+            where: branchId ? ({ id: orderId, branch_id: branchId } as any) : { id: orderId }
+        });
         if (!order) {
             throw AppError.notFound("Order not found");
         }
 
-        const effectiveBranchId = branchId || order.branch_id;
+        const effectiveBranchId = order.branch_id || branchId;
+        if (!effectiveBranchId) {
+            throw AppError.badRequest("Branch ID is required for queue operations");
+        }
 
         // Check if already in queue
         const existing = await queueRepository.findOne({ where: { order_id: orderId } });

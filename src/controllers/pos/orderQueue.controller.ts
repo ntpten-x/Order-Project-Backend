@@ -29,6 +29,9 @@ export class OrderQueueController {
         }
 
         const queuePriority = priority || QueuePriority.Normal;
+        if (!Object.values(QueuePriority).includes(queuePriority)) {
+            throw AppError.badRequest("Invalid priority");
+        }
         const queueItem = await this.queueService.addToQueue(orderId, queuePriority, branchId);
 
         // Audit log

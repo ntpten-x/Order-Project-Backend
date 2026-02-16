@@ -2,12 +2,19 @@ import { createClient, RedisClientType } from "redis";
 
 // Relax generics to avoid conflicts when optional Redis modules (graph/json) augment client types
 type AnyRedisClient = RedisClientType<any, any, any>;
+type RedisConnectionEnv = {
+    url?: string;
+    host?: string;
+    port?: string | number;
+    username?: string;
+    password?: string;
+    database?: string | number;
+};
 
 let client: AnyRedisClient | null = null;
 let initializing: Promise<AnyRedisClient | null> | null = null;
 
 const REDIS_DISABLED = process.env.REDIS_DISABLED === "true";
-const REDIS_URL = REDIS_DISABLED ? undefined : process.env.REDIS_URL?.trim();
 const DEFAULT_REDIS_PREFIX = process.env.REDIS_PREFIX || "order-app";
 
 const parseBoolean = (value: string | undefined): boolean | undefined => {
@@ -30,6 +37,56 @@ const normalizeRedisScheme = (url: string, tlsEnabled: boolean) => {
     if (tlsEnabled) return url.replace(/^redis:/, "rediss:");
     return url.replace(/^rediss:/, "redis:");
 };
+
+const trimEnvValue = (value: string | undefined): string | undefined => {
+    const trimmed = value?.trim();
+    return trimmed ? trimmed : undefined;
+};
+
+const parseRedisPort = (value: string | number | undefined): number => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed <= 0) return 6379;
+    return Math.trunc(parsed);
+};
+
+const parseRedisDatabase = (value: string | number | undefined): string | undefined => {
+    if (value === undefined || value === null || value === "") return undefined;
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed < 0) return undefined;
+    return String(Math.trunc(parsed));
+};
+
+const normalizeRedisHost = (host: string): string => {
+    if (host.includes(":") && !host.startsWith("[") && !host.endsWith("]")) {
+        return `[${host}]`;
+    }
+    return host;
+};
+
+const buildRedisAuthSegment = (username?: string, password?: string): string => {
+    if (!username && !password) return "";
+    if (username && password) return `${encodeURIComponent(username)}:${encodeURIComponent(password)}@`;
+    if (username) return `${encodeURIComponent(username)}@`;
+    return `:${encodeURIComponent(password as string)}@`;
+};
+
+export function resolveRedisConnectionUrlFromEnv(overrides: RedisConnectionEnv = {}): string | undefined {
+    const explicitUrl = trimEnvValue(overrides.url ?? process.env.REDIS_URL);
+    if (explicitUrl) return explicitUrl;
+
+    const host = trimEnvValue(overrides.host ?? process.env.REDIS_HOST);
+    if (!host) return undefined;
+
+    const port = parseRedisPort(overrides.port ?? process.env.REDIS_PORT);
+    const username = trimEnvValue(overrides.username ?? process.env.REDIS_USERNAME);
+    const password = trimEnvValue(overrides.password ?? process.env.REDIS_PASSWORD);
+    const database = parseRedisDatabase(overrides.database ?? process.env.REDIS_DB);
+    const auth = buildRedisAuthSegment(username, password);
+    const dbPath = database ? `/${database}` : "";
+    return `redis://${auth}${normalizeRedisHost(host)}:${port}${dbPath}`;
+}
+
+const REDIS_URL = REDIS_DISABLED ? undefined : resolveRedisConnectionUrlFromEnv();
 
 function buildRedisConfig(url: string, tlsEnabled: boolean, rejectUnauthorized: boolean) {
     const parsed = new URL(url);

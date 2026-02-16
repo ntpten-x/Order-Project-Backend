@@ -1,4 +1,4 @@
-import { MoreThanOrEqual, SelectQueryBuilder } from "typeorm";
+﻿import { SelectQueryBuilder } from "typeorm";
 import { Shifts, ShiftStatus } from "../../entity/pos/Shifts";
 import { Payments, PaymentStatus } from "../../entity/pos/Payments";
 import { SalesOrderItem } from "../../entity/pos/SalesOrderItem";
@@ -11,6 +11,47 @@ import { RealtimeEvents } from "../../utils/realtimeEvents";
 import { isCancelledStatus } from "../../utils/orderStatus";
 import { filterSuccessfulPayments, sumCashPaymentAmount, sumPaymentAmount } from "./shiftSummary.utils";
 import { CreatedSort, createdSortToOrder } from "../../utils/sortCreated";
+
+type PendingOrderTypeSummary = {
+    orderType: string;
+    label: string;
+    count: number;
+};
+
+export type ShiftClosePreview = {
+    shiftId: string;
+    startAmount: number;
+    endAmount: number;
+    cashSales: number;
+    expectedAmount: number;
+    diffAmount: number;
+    varianceStatus: "SHORT" | "OVER" | "MATCH";
+};
+
+const PENDING_SHIFT_ORDER_STATUSES: OrderStatus[] = [
+    OrderStatus.Pending,
+    OrderStatus.Cooking,
+    OrderStatus.Served,
+    OrderStatus.WaitingForPayment,
+    OrderStatus.pending,
+];
+
+function toOrderTypeLabel(orderType: string): string {
+    switch (orderType) {
+        case "DineIn":
+            return "เธ—เธฒเธเธ—เธตเนเธฃเนเธฒเธ";
+        case "TakeAway":
+            return "เธชเธฑเนเธเธเธฅเธฑเธเธเนเธฒเธ";
+        case "Delivery":
+            return "เน€เธ”เธฅเธดเน€เธงเธญเธฃเธตเน";
+        default:
+            return "เนเธกเนเธฃเธฐเธเธธเธเธฃเธฐเน€เธ เธ—";
+    }
+}
+
+function formatPendingOrderSummary(byOrderType: PendingOrderTypeSummary[]): string {
+    return byOrderType.map((item) => `${item.label} ${item.count} เธฃเธฒเธขเธเธฒเธฃ`).join(", ");
+}
 
 export class ShiftsService {
     private get shiftsRepo() {
@@ -84,26 +125,51 @@ export class ShiftsService {
         });
     }
 
-    async closeShift(branchId: string, endAmount: number, closedByUserId?: string): Promise<Shifts> {
-        const activeShift = await this.getCurrentShift(branchId);
-        if (!activeShift) {
-            throw new AppError("ไม่พบกะที่กำลังทำงานอยู่", 404);
-        }
+    private async getPendingOrdersByType(activeShift: Shifts): Promise<PendingOrderTypeSummary[]> {
+        const pendingRows = await this.salesOrderRepo
+            .createQueryBuilder("order")
+            .select("order.order_type", "order_type")
+            .addSelect("COUNT(order.id)", "count")
+            .where("order.branch_id = :branchId", { branchId: activeShift.branch_id })
+            .andWhere("order.create_date >= :openedAt", { openedAt: activeShift.open_time })
+            .andWhere("order.status IN (:...statuses)", { statuses: PENDING_SHIFT_ORDER_STATUSES })
+            .groupBy("order.order_type")
+            .getRawMany<{ order_type: string | null; count: string }>();
 
-        const pendingOrders = await this.salesOrderRepo.count({
-            where: [
-                { status: OrderStatus.Pending, create_date: MoreThanOrEqual(activeShift.open_time), branch_id: activeShift.branch_id },
-                { status: OrderStatus.Cooking, create_date: MoreThanOrEqual(activeShift.open_time), branch_id: activeShift.branch_id },
-                { status: OrderStatus.Served, create_date: MoreThanOrEqual(activeShift.open_time), branch_id: activeShift.branch_id },
-                { status: OrderStatus.WaitingForPayment, create_date: MoreThanOrEqual(activeShift.open_time), branch_id: activeShift.branch_id },
-                { status: OrderStatus.pending, create_date: MoreThanOrEqual(activeShift.open_time), branch_id: activeShift.branch_id }
-            ]
-        });
+        return pendingRows
+            .map<PendingOrderTypeSummary>((row) => {
+                const orderType = row.order_type || "Unknown";
+                return {
+                    orderType,
+                    label: toOrderTypeLabel(orderType),
+                    count: Number(row.count || 0),
+                };
+            })
+            .filter((row) => row.count > 0);
+    }
 
-        if (pendingOrders > 0) {
-            throw new AppError(`ไม่สามารถปิดกะได้ เนื่องจากยังมีออเดอร์ค้างอยู่ในระบบจำนวน ${pendingOrders} รายการ กรุณาจัดการให้เรียบร้อย (เสร็จสิ้น หรือ ยกเลิก) ก่อนปิดกะ`, 400);
-        }
+    private ensureNoPendingOrders(pendingByOrderType: PendingOrderTypeSummary[]): void {
+        const pendingOrders = pendingByOrderType.reduce((sum, row) => sum + row.count, 0);
+        if (pendingOrders <= 0) return;
 
+        const breakdownText = formatPendingOrderSummary(pendingByOrderType);
+        throw new AppError(
+            `ไม่สามารถปิดกะได้ เนื่องจากยังมีออเดอร์ค้างอยู่ ${pendingOrders} รายการ (${breakdownText}) กรุณาจัดการให้เรียบร้อยก่อนปิดกะ`,
+            400,
+            undefined,
+            {
+                reason: "PENDING_ORDERS",
+                totalPendingOrders: pendingOrders,
+                byOrderType: pendingByOrderType,
+            }
+        );
+    }
+
+    private async calculateShiftCloseAmounts(activeShift: Shifts, endAmount: number): Promise<{
+        cashSales: number;
+        expectedAmount: number;
+        diffAmount: number;
+    }> {
         const payments = await this.paymentsRepo.find({
             where: { shift_id: activeShift.id, status: PaymentStatus.Success },
             relations: ["payment_method"]
@@ -111,10 +177,49 @@ export class ShiftsService {
 
         const cashSales = Math.round(sumCashPaymentAmount(payments) * 100) / 100;
         const expectedAmount = Math.round((Number(activeShift.start_amount) + cashSales) * 100) / 100;
+        const diffAmount = Math.round((Number(endAmount) - expectedAmount) * 100) / 100;
+
+        return {
+            cashSales,
+            expectedAmount,
+            diffAmount,
+        };
+    }
+
+    async previewCloseShift(branchId: string, endAmount: number): Promise<ShiftClosePreview> {
+        const activeShift = await this.getCurrentShift(branchId);
+        if (!activeShift) {
+            throw new AppError("ไม่พบกะที่กำลังทำงานอยู่", 404);
+        }
+
+        const pendingByOrderType = await this.getPendingOrdersByType(activeShift);
+        this.ensureNoPendingOrders(pendingByOrderType);
+
+        const { cashSales, expectedAmount, diffAmount } = await this.calculateShiftCloseAmounts(activeShift, endAmount);
+
+        return {
+            shiftId: activeShift.id,
+            startAmount: Number(activeShift.start_amount),
+            endAmount: Number(endAmount),
+            cashSales,
+            expectedAmount,
+            diffAmount,
+            varianceStatus: diffAmount === 0 ? "MATCH" : diffAmount > 0 ? "OVER" : "SHORT",
+        };
+    }
+
+    async closeShift(branchId: string, endAmount: number, closedByUserId?: string): Promise<Shifts> {
+        const activeShift = await this.getCurrentShift(branchId);
+        if (!activeShift) {
+            throw new AppError("เนเธกเนเธเธเธเธฐเธ—เธตเนเธเธณเธฅเธฑเธเธ—เธณเธเธฒเธเธญเธขเธนเน", 404);
+        }
+        const pendingByOrderType = await this.getPendingOrdersByType(activeShift);
+        this.ensureNoPendingOrders(pendingByOrderType);
+        const { expectedAmount, diffAmount } = await this.calculateShiftCloseAmounts(activeShift, endAmount);
 
         activeShift.end_amount = endAmount;
         activeShift.expected_amount = expectedAmount;
-        activeShift.diff_amount = Math.round((Number(endAmount) - expectedAmount) * 100) / 100;
+        activeShift.diff_amount = diffAmount;
         activeShift.status = ShiftStatus.CLOSED;
         activeShift.close_time = new Date();
         if (closedByUserId) {
@@ -133,7 +238,7 @@ export class ShiftsService {
         });
 
         if (!shift) {
-            throw new AppError("ไม่พบข้อมูลกะ", 404);
+            throw new AppError("เนเธกเนเธเธเธเนเธญเธกเธนเธฅเธเธฐ", 404);
         }
 
         const payments = filterSuccessfulPayments(shift.payments || []);
@@ -145,8 +250,8 @@ export class ShiftsService {
         const categoryCounts: Record<string, number> = {};
         const productSales: Record<string, { id: string, name: string, quantity: number, revenue: number, unit: string }> = {};
         const paymentMethodSales: Record<string, number> = {
-            "เงินสด": 0,
-            "พร้อมเพย์": 0
+            "เน€เธเธดเธเธชเธ”": 0,
+            "เธเธฃเนเธญเธกเน€เธเธขเน": 0
         };
         const orderTypeSales: Record<string, number> = {
             "DineIn": 0,
@@ -157,7 +262,7 @@ export class ShiftsService {
         const seenOrderIds = new Set<string>();
 
         payments.forEach(payment => {
-            const methodName = payment.payment_method?.display_name || "อื่นๆ";
+            const methodName = payment.payment_method?.display_name || "เธญเธทเนเธเน";
             paymentMethodSales[methodName] = Math.round(((paymentMethodSales[methodName] || 0) + Number(payment.amount)) * 100) / 100;
 
             if (payment.order) {
@@ -178,7 +283,7 @@ export class ShiftsService {
 
                 totalCost += cost * qty;
 
-                const catName = item.product?.category?.display_name || "อื่นๆ";
+                const catName = item.product?.category?.display_name || "เธญเธทเนเธเน";
                 categoryCounts[catName] = (categoryCounts[catName] || 0) + qty;
 
                 const pId = item.product?.id;
@@ -189,7 +294,7 @@ export class ShiftsService {
                             name: item.product.display_name,
                             quantity: 0,
                             revenue: 0,
-                            unit: item.product.unit?.display_name || "ชิ้น"
+                            unit: item.product.unit?.display_name || "เธเธดเนเธ"
                         };
                     }
                     productSales[pId].quantity += qty;
@@ -366,3 +471,5 @@ export class ShiftsService {
         };
     }
 }
+
+

@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+﻿import { Request, Response } from "express";
 import { ShiftsService } from "../../services/pos/shifts.service";
 import { ShiftStatus } from "../../entity/pos/Shifts";
 import { catchAsync } from "../../utils/catchAsync";
@@ -11,6 +11,23 @@ import { parseCreatedSort } from "../../utils/sortCreated";
 
 export class ShiftsController {
     constructor(private shiftsService: ShiftsService) { }
+
+    private async assertCanCloseShift(req: Request, branchId: string, userId: string): Promise<void> {
+        const userRole = (req as any).user?.roles?.roles_name;
+        const currentShift = await this.shiftsService.getCurrentShift(branchId);
+        if (!currentShift) {
+            throw new AppError("ไม่พบกะที่กำลังทำงานอยู่", 404);
+        }
+
+        const canCloseByRole = userRole === "Admin" || userRole === "Manager";
+        const isShiftOpener = currentShift.opened_by_user_id
+            ? currentShift.opened_by_user_id === userId
+            : currentShift.user_id === userId;
+
+        if (!canCloseByRole && !isShiftOpener) {
+            throw new AppError("Access denied: only Admin/Manager or shift opener can close shift", 403);
+        }
+    }
 
     openShift = catchAsync(async (req: Request, res: Response) => {
         const user_id = (req as any).user?.id;
@@ -44,9 +61,51 @@ export class ShiftsController {
         return ApiResponses.created(res, shift);
     });
 
+    previewCloseShift = catchAsync(async (req: Request, res: Response) => {
+        const user_id = (req as any).user?.id;
+        const branchId = getBranchId(req as any);
+        const { end_amount } = req.body;
+
+        if (!user_id) {
+            throw new AppError("Unauthorized - User not authenticated", 401);
+        }
+        if (!branchId) {
+            throw new AppError("Branch context is required", 400);
+        }
+        if (end_amount === undefined || end_amount === null) {
+            throw new AppError("กรุณาระบุจำนวนเงินที่นับได้", 400);
+        }
+
+        await this.assertCanCloseShift(req, branchId, user_id);
+        const preview = await this.shiftsService.previewCloseShift(branchId, Number(end_amount));
+
+        const userInfo = getUserInfoFromRequest(req as any);
+        await auditLogger.log({
+            action_type: AuditActionType.SHIFT_CLOSE_PREVIEW,
+            ...userInfo,
+            ip_address: getClientIp(req),
+            user_agent: req.get("User-Agent"),
+            entity_type: "Shifts",
+            entity_id: preview.shiftId,
+            branch_id: branchId,
+            new_values: {
+                end_amount: preview.endAmount,
+                expected_amount: preview.expectedAmount,
+                diff_amount: preview.diffAmount,
+                variance_status: preview.varianceStatus,
+                start_amount: preview.startAmount,
+                cash_sales: preview.cashSales,
+            },
+            path: req.originalUrl,
+            method: req.method,
+            description: `Preview close shift ${preview.shiftId} (${preview.varianceStatus})`,
+        });
+
+        return ApiResponses.ok(res, preview);
+    });
+
     closeShift = catchAsync(async (req: Request, res: Response) => {
         const user_id = (req as any).user?.id;
-        const userRole = (req as any).user?.roles?.roles_name;
         const branchId = getBranchId(req as any);
         const { end_amount } = req.body;
 
@@ -61,20 +120,7 @@ export class ShiftsController {
             throw new AppError("กรุณาระบุจำนวนเงินที่นับได้", 400);
         }
 
-        const currentShift = await this.shiftsService.getCurrentShift(branchId);
-        if (!currentShift) {
-            throw new AppError("ไม่พบกะที่กำลังทำงานอยู่", 404);
-        }
-
-        const canCloseByRole = userRole === "Admin" || userRole === "Manager";
-        const isShiftOpener = currentShift.opened_by_user_id
-            ? currentShift.opened_by_user_id === user_id
-            : currentShift.user_id === user_id;
-
-        if (!canCloseByRole && !isShiftOpener) {
-            throw new AppError("Access denied: only Admin/Manager or shift opener can close shift", 403);
-        }
-
+        await this.assertCanCloseShift(req, branchId, user_id);
         const shift = await this.shiftsService.closeShift(branchId, Number(end_amount), user_id);
 
         const userInfo = getUserInfoFromRequest(req as any);
