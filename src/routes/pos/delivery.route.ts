@@ -4,7 +4,7 @@ import { DeliveryService } from "../../services/pos/delivery.service";
 import { DeliveryController } from "../../controllers/pos/delivery.controller";
 import { authenticateToken } from "../../middleware/auth.middleware";
 import { validate } from "../../middleware/validate.middleware";
-import { requireBranch } from "../../middleware/branch.middleware";
+import { requireBranchStrict } from "../../middleware/branch.middleware";
 import { authorizePermission } from "../../middleware/permission.middleware";
 import { paginationQuerySchema } from "../../utils/schemas/common.schema";
 import {
@@ -21,7 +21,7 @@ const deliveryService = new DeliveryService(deliveryModel)
 const deliveryController = new DeliveryController(deliveryService)
 
 router.use(authenticateToken)
-router.use(requireBranch)
+router.use(requireBranchStrict)
 
 router.get("/", authorizePermission("delivery.page", "view"), validate(paginationQuerySchema), deliveryController.findAll)
 router.get("/:id", authorizePermission("delivery.page", "view"), validate(deliveryIdParamSchema), deliveryController.findOne)

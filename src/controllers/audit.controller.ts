@@ -6,12 +6,20 @@ import { AppError } from "../utils/AppError";
 import { AuthRequest } from "../middleware/auth.middleware";
 import { setNoStoreHeaders } from "../utils/cacheHeaders";
 import { parseCreatedSort } from "../utils/sortCreated";
+import { redactAuditPayload } from "../utils/auditRedaction";
 
 export class AuditController {
     private auditService = new AuditService();
 
     getLogs = catchAsync(async (req: AuthRequest, res: Response) => {
-        const isAdmin = req.user?.roles?.roles_name === "Admin";
+        const scope = req.permission?.scope ?? "none";
+        if (!req.user?.id) {
+            return ApiResponses.unauthorized(res, "Authentication required");
+        }
+        if (scope === "none") {
+            return ApiResponses.forbidden(res, "Access denied");
+        }
+
         const query = req.query as Record<string, string | string[] | undefined>;
 
         const page = query.page ? Number(query.page) : 1;
@@ -19,12 +27,23 @@ export class AuditController {
         const sortCreated = parseCreatedSort(query.sort_created);
 
         const requestedBranch = query.branch_id as string | undefined;
-        const effectiveBranchId = isAdmin ? requestedBranch : req.user?.branch_id;
+        const actorBranchId = req.user.branch_id;
 
-        // Non-admins cannot access other branches
-        if (!isAdmin && requestedBranch && requestedBranch !== req.user?.branch_id) {
+        // Enforce data-scope based on resolved permission, not just role name.
+        // - all: can query any branch/user
+        // - branch: forced to actor branch
+        // - own: forced to actor user (and by default to actor branch as an extra guard)
+        const effectiveBranchId =
+            scope === "all"
+                ? requestedBranch
+                : actorBranchId;
+
+        if (scope !== "all" && requestedBranch && requestedBranch !== actorBranchId) {
             return ApiResponses.forbidden(res, "Access denied");
         }
+
+        const requestedUserId = query.user_id as string | undefined;
+        const effectiveUserId = scope === "own" ? req.user.id : requestedUserId;
 
         const filters = {
             page,
@@ -32,7 +51,7 @@ export class AuditController {
             action_type: query.action_type as any,
             entity_type: query.entity_type as string | undefined,
             entity_id: query.entity_id as string | undefined,
-            user_id: query.user_id as string | undefined,
+            user_id: effectiveUserId as string | undefined,
             branch_id: effectiveBranchId as string | undefined,
             start_date: query.start_date ? new Date(String(query.start_date)) : undefined,
             end_date: query.end_date ? new Date(String(query.end_date)) : undefined,
@@ -43,7 +62,12 @@ export class AuditController {
         const { logs, total } = await this.auditService.getLogs(filters);
 
         setNoStoreHeaders(res);
-        return ApiResponses.paginated(res, logs, {
+        const sanitizedLogs = logs.map((log) => ({
+            ...log,
+            old_values: typeof log.old_values === "undefined" ? undefined : redactAuditPayload(log.old_values),
+            new_values: typeof log.new_values === "undefined" ? undefined : redactAuditPayload(log.new_values),
+        }));
+        return ApiResponses.paginated(res, sanitizedLogs, {
             page: filters.page || 1,
             limit: filters.limit || 20,
             total,
@@ -51,18 +75,20 @@ export class AuditController {
     });
 
     getById = catchAsync(async (req: AuthRequest, res: Response) => {
-        const isAdmin = req.user?.roles?.roles_name === "Admin";
         const log = await this.auditService.getById(req.params.id);
 
         if (!log) {
             throw AppError.notFound("Audit log");
         }
 
-        if (!isAdmin && log.branch_id && log.branch_id !== req.user?.branch_id) {
-            return ApiResponses.forbidden(res, "Access denied");
-        }
+        // Access is enforced by `enforceAuditLogTargetScope` middleware on the route.
 
         setNoStoreHeaders(res);
-        return ApiResponses.ok(res, log);
+        const sanitized = {
+            ...log,
+            old_values: typeof log.old_values === "undefined" ? undefined : redactAuditPayload(log.old_values),
+            new_values: typeof log.new_values === "undefined" ? undefined : redactAuditPayload(log.new_values),
+        };
+        return ApiResponses.ok(res, sanitized);
     });
 }

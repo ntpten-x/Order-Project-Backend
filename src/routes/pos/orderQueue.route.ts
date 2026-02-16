@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { OrderQueueController } from "../../controllers/pos/orderQueue.controller";
 import { authenticateToken } from "../../middleware/auth.middleware";
-import { requireBranch } from "../../middleware/branch.middleware";
+import { requireBranchStrict } from "../../middleware/branch.middleware";
 import { authorizePermission } from "../../middleware/permission.middleware";
 
 const router = Router();
@@ -9,7 +9,7 @@ const orderQueueController = new OrderQueueController();
 
 // Protect all routes
 router.use(authenticateToken);
-router.use(requireBranch);
+router.use(requireBranchStrict);
 
 // Routes
 router.post("/", authorizePermission("queue.page", "create"), orderQueueController.addToQueue);

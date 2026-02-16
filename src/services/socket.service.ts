@@ -25,6 +25,7 @@ export class SocketService {
     private static instance: SocketService;
     private io: Server | null = null;
     private adapterInitStarted = false;
+    private pendingEmits: PendingEmit[] = [];
 
     // Realtime event governance:
     // - "global" events are rare (system announcements only)
@@ -32,6 +33,7 @@ export class SocketService {
     // - branch events should be emitted to branch room: branch:<branchId>
     private static readonly GLOBAL_EVENTS = new Set<string>([RealtimeEvents.system.announcement]);
     private static readonly ADMIN_EVENT_PREFIXES = ['users:', 'roles:', 'branches:'];
+    private static readonly MAX_PENDING_EMITS = 500;
 
 
     private constructor() { }
@@ -46,6 +48,7 @@ export class SocketService {
     public init(io: Server): void {
         this.io = io;
         void this.initRedisAdapter();
+        this.flushPendingEmits();
 
         // Middleware for authentication
         this.io.use(async (socket: Socket, next) => {
@@ -155,6 +158,41 @@ export class SocketService {
         });
     }
 
+    private enqueuePendingEmit(pending: PendingEmit): void {
+        if (this.pendingEmits.length >= SocketService.MAX_PENDING_EMITS) {
+            this.pendingEmits.shift();
+            console.warn(`[SocketPolicy] Pending emit queue exceeded ${SocketService.MAX_PENDING_EMITS}; dropping oldest event.`);
+        }
+        this.pendingEmits.push(pending);
+    }
+
+    private flushPendingEmits(): void {
+        if (!this.io || this.pendingEmits.length === 0) return;
+        const queue = [...this.pendingEmits];
+        this.pendingEmits = [];
+        for (const pending of queue) {
+            switch (pending.target) {
+                case "global":
+                    this.emit(pending.event, pending.data);
+                    break;
+                case "user":
+                    this.emitToUser(pending.userId, pending.event, pending.data);
+                    break;
+                case "branch":
+                    this.emitToBranch(pending.branchId, pending.event, pending.data);
+                    break;
+                case "role":
+                    this.emitToRole(pending.roleName, pending.event, pending.data);
+                    break;
+                case "users":
+                    this.emitToUsers(pending.userIds, pending.event, pending.data);
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+
     private async initRedisAdapter(): Promise<void> {
         if (!this.io || this.adapterInitStarted) return;
         this.adapterInitStarted = true;
@@ -208,7 +246,7 @@ export class SocketService {
      */
     public emit(event: string, data: any): void {
         if (!this.io) {
-            console.warn("Socket.IO not initialized! Event missed:", event);
+            this.enqueuePendingEmit({ target: "global", event, data });
             return;
         }
 
@@ -236,7 +274,7 @@ export class SocketService {
         if (this.io) {
             this.io.to(userId).emit(event, data);
         } else {
-            console.warn("Socket.IO not initialized! Event missed:", event);
+            this.enqueuePendingEmit({ target: "user", userId, event, data });
         }
     }
 
@@ -247,7 +285,7 @@ export class SocketService {
         if (this.io) {
             this.io.to(`branch:${branchId}`).emit(event, data);
         } else {
-            console.warn("Socket.IO not initialized! Event missed:", event);
+            this.enqueuePendingEmit({ target: "branch", branchId, event, data });
         }
     }
 
@@ -258,7 +296,7 @@ export class SocketService {
         if (this.io) {
             this.io.to(`role:${roleName}`).emit(event, data);
         } else {
-            console.warn("Socket.IO not initialized! Event missed:", event);
+            this.enqueuePendingEmit({ target: "role", roleName, event, data });
         }
     }
 
@@ -271,7 +309,14 @@ export class SocketService {
                 this.io!.to(userId).emit(event, data);
             });
         } else {
-            console.warn("Socket.IO not initialized! Event missed:", event);
+            this.enqueuePendingEmit({ target: "users", userIds, event, data });
         }
     }
 }
+
+type PendingEmit =
+    | { target: "global"; event: string; data: any }
+    | { target: "user"; userId: string; event: string; data: any }
+    | { target: "branch"; branchId: string; event: string; data: any }
+    | { target: "role"; roleName: string; event: string; data: any }
+    | { target: "users"; userIds: string[]; event: string; data: any };

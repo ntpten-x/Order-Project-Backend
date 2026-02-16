@@ -34,13 +34,15 @@ export class UsersModels {
         }
 
         if (filters?.q?.trim()) {
-            const q = `%${filters.q.trim().toLowerCase()}%`;
+            const q = `%${filters.q.trim()}%`;
             query.andWhere(
                 new Brackets((qb) => {
-                    qb.where("LOWER(users.username) LIKE :q", { q })
-                        .orWhere("LOWER(COALESCE(users.name, '')) LIKE :q", { q })
-                        .orWhere("LOWER(COALESCE(roles.display_name, roles.roles_name, '')) LIKE :q", { q })
-                        .orWhere("LOWER(COALESCE(branch.branch_name, '')) LIKE :q", { q });
+                    // Use ILIKE so Postgres can leverage pg_trgm indexes (if present).
+                    qb.where("users.username ILIKE :q", { q })
+                        .orWhere("users.name ILIKE :q", { q })
+                        .orWhere("roles.display_name ILIKE :q", { q })
+                        .orWhere("roles.roles_name ILIKE :q", { q })
+                        .orWhere("branch.branch_name ILIKE :q", { q });
                 })
             );
         }
@@ -269,4 +271,3 @@ export class UsersModels {
         });
     }
 }
-

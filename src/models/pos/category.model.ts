@@ -28,9 +28,10 @@ export class CategoryModels {
             }
 
             if (filters?.q?.trim()) {
-                const q = `%${filters.q.trim().toLowerCase()}%`;
+                // Use ILIKE so Postgres can use trigram indexes (pg_trgm) on the raw columns.
+                const q = `%${filters.q.trim()}%`;
                 query.andWhere(
-                    "(LOWER(category.display_name) LIKE :q OR LOWER(category.category_name) LIKE :q)",
+                    "(category.display_name ILIKE :q OR category.category_name ILIKE :q)",
                     { q }
                 );
             }
@@ -105,7 +106,8 @@ export class CategoryModels {
         try {
             const categoryRepository = getRepository(Category);
             const qb = categoryRepository.createQueryBuilder("category")
-                .update(data)
+                .update()
+                .set(data as any)
                 .where("category.id = :id", { id });
 
             if (branchId) {
@@ -129,7 +131,7 @@ export class CategoryModels {
                 qb.andWhere("category.branch_id = :branchId", { branchId });
             }
 
-            qb.execute()
+            await qb.execute()
         } catch (error) {
             throw error
         }

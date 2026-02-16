@@ -7,11 +7,20 @@ import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../utils/a
 import { getClientIp } from "../utils/securityLogger";
 import { setNoStoreHeaders } from "../utils/cacheHeaders";
 import { parseCreatedSort } from "../utils/sortCreated";
+import { normalizeRoleName } from "../utils/role";
 
 export class BranchController {
     private branchService = new BranchService();
 
     getAll = catchAsync(async (req: Request, res: Response) => {
+        const actorRole = normalizeRoleName((req as any).user?.roles?.roles_name);
+        const isAdmin = actorRole === "Admin";
+        const actorBranchId = (req as any).user?.branch_id as string | undefined;
+        // Defense in depth: list endpoint should not rely solely on RLS.
+        // If the DB role can bypass RLS (common in local dev with postgres superuser),
+        // this prevents leaking all branches to non-admins.
+        const forceBranchId = !isAdmin ? actorBranchId : undefined;
+
         const page = Math.max(parseInt(req.query.page as string) || 1, 1);
         const limitRaw = parseInt(req.query.limit as string) || 50;
         const limit = Math.min(Math.max(limitRaw, 1), 200);
@@ -19,7 +28,7 @@ export class BranchController {
         const isActive = activeRaw === "true" ? true : activeRaw === "false" ? false : undefined;
         const q = (req.query.q as string | undefined) || undefined;
         const sortCreated = parseCreatedSort(req.query.sort_created);
-        const branches = await this.branchService.findAllPaginated(page, limit, isActive, q, sortCreated);
+        const branches = await this.branchService.findAllPaginated(page, limit, isActive, q, sortCreated, forceBranchId);
         setNoStoreHeaders(res);
         return ApiResponses.paginated(res, branches.data, {
             page: branches.page,

@@ -4,7 +4,7 @@ import { SalesOrderDetailService } from "../../services/pos/salesOrderDetail.ser
 import { SalesOrderDetailController } from "../../controllers/pos/salesOrderDetail.controller";
 import { authenticateToken } from "../../middleware/auth.middleware";
 import { validate } from "../../middleware/validate.middleware";
-import { requireBranch } from "../../middleware/branch.middleware";
+import { requireBranchStrict } from "../../middleware/branch.middleware";
 import { authorizePermission } from "../../middleware/permission.middleware";
 import {
     createSalesOrderDetailSchema,
@@ -19,7 +19,7 @@ const salesOrderDetailService = new SalesOrderDetailService(salesOrderDetailMode
 const salesOrderDetailController = new SalesOrderDetailController(salesOrderDetailService)
 
 router.use(authenticateToken)
-router.use(requireBranch)
+router.use(requireBranchStrict)
 
 router.get("/", authorizePermission("orders.page", "view"), salesOrderDetailController.findAll)
 router.get("/:id", authorizePermission("orders.page", "view"), validate(salesOrderDetailIdParamSchema), salesOrderDetailController.findOne)

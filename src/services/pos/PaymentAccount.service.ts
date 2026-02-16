@@ -82,7 +82,7 @@ export class PaymentAccountService {
         // Zod Validation
         const validation = paymentAccountSchema.safeParse(data);
         if (!validation.success) {
-            throw new Error(validation.error.issues[0].message);
+            throw AppError.badRequest(validation.error.issues[0]?.message || "Invalid payment account payload");
         }
 
         // Check for duplicate account number in this shop
@@ -132,7 +132,7 @@ export class PaymentAccountService {
             // Validate format
             const validation = paymentAccountSchema.pick({ account_number: true }).safeParse({ account_number: data.account_number });
             if (!validation.success) {
-                throw new Error(validation.error.issues[0].message);
+                throw AppError.badRequest(validation.error.issues[0]?.message || "Invalid account_number");
             }
             // Check duplicates if changing number
             if (data.account_number !== account.account_number) {

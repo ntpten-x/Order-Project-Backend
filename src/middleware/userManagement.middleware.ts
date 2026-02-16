@@ -83,6 +83,11 @@ export const enforceUserManagementPolicy = async (req: AuthRequest, res: Respons
         return next();
     }
 
+    // Managers are not allowed to delete users (even within their branch).
+    if (method === "DELETE") {
+        return ApiResponses.forbidden(res, "Managers cannot delete users");
+    }
+
     // For updates/deletes, validate target user role.
     const targetUserId = req.params?.id;
     if (!targetUserId) return ApiResponses.badRequest(res, "User id is required");

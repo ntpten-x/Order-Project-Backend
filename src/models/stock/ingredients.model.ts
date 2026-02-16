@@ -31,9 +31,10 @@ export class IngredientsModel {
 
         query = addBooleanFilter(query, filters?.is_active, "is_active", "ingredients");
         if (filters?.q?.trim()) {
-            const q = `%${filters.q.trim().toLowerCase()}%`;
+            // Use ILIKE so Postgres can leverage pg_trgm indexes (if present).
+            const q = `%${filters.q.trim()}%`;
             query.andWhere(
-                "(LOWER(ingredients.display_name) LIKE :q OR LOWER(ingredients.ingredient_name) LIKE :q OR LOWER(COALESCE(ingredients.description, '')) LIKE :q)",
+                "(ingredients.display_name ILIKE :q OR ingredients.ingredient_name ILIKE :q OR COALESCE(ingredients.description, '') ILIKE :q)",
                 { q }
             );
         }

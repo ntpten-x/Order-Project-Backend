@@ -3,6 +3,7 @@ import { IngredientsUnitModel } from "../../models/stock/ingredientsUnit.model";
 import { SocketService } from "../socket.service";
 import { RealtimeEvents } from "../../utils/realtimeEvents";
 import { CreatedSort } from "../../utils/sortCreated";
+import { AppError } from "../../utils/AppError";
 
 export class IngredientsUnitService {
     private socketService = SocketService.getInstance();
@@ -62,7 +63,7 @@ export class IngredientsUnitService {
             if (ingredientsUnit.unit_name && effectiveBranchId) {
                 const existing = await this.ingredientsUnitModel.findOneByUnitName(ingredientsUnit.unit_name, effectiveBranchId);
                 if (existing) {
-                    throw new Error("ชื่อหน่วยนับนี้มีอยู่ในระบบแล้ว");
+                    throw AppError.conflict("ชื่อหน่วยนับนี้มีอยู่ในระบบแล้ว");
                 }
             }
             
@@ -84,7 +85,7 @@ export class IngredientsUnitService {
     async update(id: string, ingredientsUnit: IngredientsUnit, branchId?: string): Promise<IngredientsUnit> {
         try {
             const existing = await this.ingredientsUnitModel.findOne(id, branchId);
-            if (!existing) throw new Error("Ingredients unit not found");
+            if (!existing) throw AppError.notFound("Ingredients unit");
 
             const effectiveBranchId = branchId || existing.branch_id || ingredientsUnit.branch_id;
             if (effectiveBranchId) {
@@ -99,7 +100,7 @@ export class IngredientsUnitService {
                 }
                 return updatedIngredientsUnit
             }
-            throw new Error("พบข้อผิดพลาดในการอัปเดตหน่วยนับวัตถุดิบ")
+            throw AppError.internal("พบข้อผิดพลาดในการอัปเดตหน่วยนับวัตถุดิบ")
         } catch (error) {
             throw error
         }
@@ -108,7 +109,7 @@ export class IngredientsUnitService {
     async delete(id: string, branchId?: string): Promise<void> {
         try {
             const existing = await this.ingredientsUnitModel.findOne(id, branchId);
-            if (!existing) throw new Error("Ingredients unit not found");
+            if (!existing) throw AppError.notFound("Ingredients unit");
 
             const effectiveBranchId = branchId || existing.branch_id;
             await this.ingredientsUnitModel.delete(id, effectiveBranchId)

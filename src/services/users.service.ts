@@ -7,6 +7,7 @@ import { PermissionScope } from "../middleware/permission.middleware";
 import { metrics } from "../utils/metrics";
 import { invalidatePermissionDecisionCacheByUser } from "../utils/permissionCache";
 import { CreatedSort } from "../utils/sortCreated";
+import { AppError } from "../utils/AppError";
 
 type AccessContext = {
     scope?: PermissionScope;
@@ -67,7 +68,7 @@ export class UsersService {
         try {
             const findUser = await this.usersModel.findOneByUsername(users.username);
             if (findUser) {
-                throw new Error(`Username ${users.username} already exists`);
+                throw AppError.conflict(`Username ${users.username} already exists`);
             }
             users.password = await bcrypt.hash(users.password, 10);
             await this.usersModel.create(users);
@@ -83,7 +84,7 @@ export class UsersService {
         try {
             const findUser = await this.usersModel.findOne(id);
             if (!findUser) {
-                throw new Error("User not found");
+                throw AppError.notFound("User");
             }
             const roleChanged = !!users.roles_id && users.roles_id !== findUser.roles_id;
             const disabledForOffboarding = typeof users.is_use === "boolean" && users.is_use === false && findUser.is_use !== false;
@@ -94,7 +95,7 @@ export class UsersService {
             if (users.username && findUser.username !== users.username) {
                 const findUserByUsername = await this.usersModel.findOneByUsername(users.username);
                 if (findUserByUsername) {
-                    throw new Error(`Username ${users.username} already exists`);
+                    throw AppError.conflict(`Username ${users.username} already exists`);
                 }
             }
 
@@ -128,6 +129,11 @@ export class UsersService {
 
     async delete(id: string): Promise<void> {
         try {
+            const existing = await this.usersModel.findOne(id);
+            if (!existing) {
+                throw AppError.notFound("User");
+            }
+
             await this.usersModel.delete(id);
             await this.invalidateDecisionCacheSafely(id);
             this.socketService.emitToRole("Admin", RealtimeEvents.users.delete, { id });

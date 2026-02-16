@@ -1,8 +1,9 @@
-import { DeliveryModels } from "../../models/pos/delivery.model";
-import { SocketService } from "../socket.service";
+﻿import { DeliveryModels } from "../../models/pos/delivery.model";
 import { Delivery } from "../../entity/pos/Delivery";
-import { RealtimeEvents } from "../../utils/realtimeEvents";
 import { CreatedSort } from "../../utils/sortCreated";
+import { AppError } from "../../utils/AppError";
+import { SocketService } from "../socket.service";
+import { RealtimeEvents } from "../../utils/realtimeEvents";
 
 export class DeliveryService {
     private socketService = SocketService.getInstance();
@@ -15,87 +16,61 @@ export class DeliveryService {
         q?: string,
         branchId?: string,
         sortCreated: CreatedSort = "old"
-    ): Promise<{ data: Delivery[], total: number, page: number, last_page: number }> {
-        try {
-            return this.deliveryModel.findAll(page, limit, q, branchId, sortCreated)
-        } catch (error) {
-            throw error
-        }
+    ): Promise<{ data: Delivery[]; total: number; page: number; last_page: number }> {
+        return this.deliveryModel.findAll(page, limit, q, branchId, sortCreated);
     }
 
     async findOne(id: string, branchId?: string): Promise<Delivery | null> {
-        try {
-            return this.deliveryModel.findOne(id, branchId)
-        } catch (error) {
-            throw error
-        }
+        return this.deliveryModel.findOne(id, branchId);
     }
 
     async findOneByName(delivery_name: string, branchId?: string): Promise<Delivery | null> {
-        try {
-            return this.deliveryModel.findOneByName(delivery_name, branchId)
-        } catch (error) {
-            throw error
-        }
+        return this.deliveryModel.findOneByName(delivery_name, branchId);
     }
 
     async create(delivery: Delivery): Promise<Delivery> {
-        try {
-            if (!delivery.delivery_name) {
-                throw new Error("กรุณาระบุชื่อบริการส่ง")
-            }
+        const name = String(delivery.delivery_name || "").trim();
+        if (!name) throw AppError.badRequest("delivery_name is required");
+        delivery.delivery_name = name;
 
-            const existingDelivery = await this.deliveryModel.findOneByName(delivery.delivery_name, delivery.branch_id)
-            if (existingDelivery) {
-                throw new Error("ชื่อบริการส่งนี้มีอยู่ในระบบแล้ว")
-            }
+        const existing = await this.deliveryModel.findOneByName(name, delivery.branch_id);
+        if (existing) throw AppError.conflict("Delivery name already exists");
 
-            const createdDelivery = await this.deliveryModel.create(delivery)
-            if (createdDelivery.branch_id) {
-                this.socketService.emitToBranch(createdDelivery.branch_id, RealtimeEvents.delivery.create, createdDelivery)
-            }
-            return createdDelivery
-        } catch (error) {
-            throw error
+        const created = await this.deliveryModel.create(delivery);
+        if (created.branch_id) {
+            this.socketService.emitToBranch(created.branch_id, RealtimeEvents.delivery.create, created);
         }
+        return created;
     }
 
     async update(id: string, delivery: Delivery, branchId?: string): Promise<Delivery> {
-        try {
-            const deliveryToUpdate = await this.deliveryModel.findOne(id, branchId)
-            if (!deliveryToUpdate) {
-                throw new Error("ไม่พบข้อมูลบริการส่งที่ต้องการแก้ไข")
-            }
+        const existing = await this.deliveryModel.findOne(id, branchId);
+        if (!existing) throw AppError.notFound("Delivery");
 
-            if (delivery.delivery_name && delivery.delivery_name !== deliveryToUpdate.delivery_name) {
-                const existingDelivery = await this.deliveryModel.findOneByName(delivery.delivery_name, delivery.branch_id || deliveryToUpdate.branch_id)
-                if (existingDelivery) {
-                    throw new Error("ชื่อบริการส่งนี้มีอยู่ในระบบแล้ว")
-                }
-            }
-
-            const effectiveBranchId = deliveryToUpdate.branch_id || branchId || delivery.branch_id;
-            const updatedDelivery = await this.deliveryModel.update(id, delivery, effectiveBranchId)
-            if (effectiveBranchId) {
-                this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.delivery.update, updatedDelivery)
-            }
-            return updatedDelivery
-        } catch (error) {
-            throw error
+        if (delivery.delivery_name && String(delivery.delivery_name).trim() !== existing.delivery_name) {
+            const nextName = String(delivery.delivery_name).trim();
+            const conflict = await this.deliveryModel.findOneByName(nextName, existing.branch_id || branchId);
+            if (conflict) throw AppError.conflict("Delivery name already exists");
+            delivery.delivery_name = nextName;
         }
+
+        const effectiveBranchId = existing.branch_id || branchId || delivery.branch_id;
+        const updated = await this.deliveryModel.update(id, delivery, effectiveBranchId);
+        if (effectiveBranchId) {
+            this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.delivery.update, updated);
+        }
+        return updated;
     }
 
     async delete(id: string, branchId?: string): Promise<void> {
-        try {
-            const existing = await this.deliveryModel.findOne(id, branchId);
-            if (!existing) throw new Error("Delivery not found");
-            await this.deliveryModel.delete(id, branchId)
-            const effectiveBranchId = existing.branch_id || branchId;
-            if (effectiveBranchId) {
-                this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.delivery.delete, { id })
-            }
-        } catch (error) {
-            throw error
+        const existing = await this.deliveryModel.findOne(id, branchId);
+        if (!existing) throw AppError.notFound("Delivery");
+
+        await this.deliveryModel.delete(id, branchId);
+
+        const effectiveBranchId = existing.branch_id || branchId;
+        if (effectiveBranchId) {
+            this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.delivery.delete, { id });
         }
     }
 }

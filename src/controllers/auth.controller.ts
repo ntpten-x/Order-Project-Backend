@@ -28,10 +28,13 @@ export class AuthController {
         const ip = getClientIp(req);
 
         try {
-            const user = await userRepository.findOne({
-                where: { username },
-                relations: ["roles"]
-            });
+            // Users.password is `select: false`; explicitly fetch it for authentication only.
+            const user = await userRepository
+                .createQueryBuilder("users")
+                .addSelect("users.password")
+                .leftJoinAndSelect("users.roles", "roles")
+                .where("users.username = :username", { username })
+                .getOne();
 
             if (!user) {
                 securityLogger.log({
@@ -160,7 +163,6 @@ export class AuthController {
             SocketService.getInstance().emit(RealtimeEvents.users.status, { id: user.id, is_active: true });
 
             return ApiResponses.ok(res, {
-                token,
                 user: {
                     id: user.id,
                     username: user.username,
@@ -294,7 +296,26 @@ export class AuthController {
             return ApiResponses.unauthorized(res, "Authentication required");
         }
 
+        const { name, password } = req.body ?? {};
         const userRepository = AppDataSource.getRepository(Users);
+        const updatePatch: Partial<Users> = {};
+
+        if (typeof name === "string") {
+            const trimmedName = name.trim();
+            if (!trimmedName) {
+                return ApiResponses.badRequest(res, "Name cannot be empty");
+            }
+            updatePatch.name = trimmedName;
+        }
+
+        if (typeof password === "string" && password.length > 0) {
+            updatePatch.password = await bcrypt.hash(password, 10);
+        }
+
+        if (Object.keys(updatePatch).length > 0) {
+            await userRepository.update(req.user.id, updatePatch);
+        }
+
         const user = await userRepository.findOne({
             where: { id: req.user.id },
             relations: ["roles", "branch"],
@@ -303,18 +324,6 @@ export class AuthController {
         if (!user) {
             return ApiResponses.notFound(res, "User");
         }
-
-        const { name, password } = req.body ?? {};
-
-        if (typeof name === "string") {
-            user.name = name.trim();
-        }
-
-        if (typeof password === "string" && password.length > 0) {
-            user.password = await bcrypt.hash(password, 10);
-        }
-
-        await userRepository.save(user);
 
         const role = normalizeRoleName(user.roles?.roles_name) || "unknown";
 

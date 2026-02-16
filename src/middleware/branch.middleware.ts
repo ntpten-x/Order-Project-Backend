@@ -51,6 +51,23 @@ export const requireBranch = (req: BranchRequest, res: Response, next: NextFunct
 };
 
 /**
+ * Require Branch (Strict)
+ * Ensures that the user has a branch assigned/selected for *all* methods (including GET).
+ * Use this for endpoints where cross-branch reads are not meaningful (e.g. shifts, shop settings).
+ */
+export const requireBranchStrict = (req: BranchRequest, res: Response, next: NextFunction) => {
+    const ctx = getDbContext();
+    const effectiveBranchId = ctx?.isAdmin ? ctx?.branchId : ctx?.branchId || req.user?.branch_id;
+
+    if (!effectiveBranchId) {
+        return ApiResponses.forbidden(res, "Access denied: No branch assigned/selected");
+    }
+
+    req.branchId = effectiveBranchId;
+    next();
+};
+
+/**
  * Helper function to get branch_id from request
  * Used in controllers to safely extract branch_id
  */

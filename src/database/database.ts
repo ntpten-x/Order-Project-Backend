@@ -39,7 +39,8 @@ import { PermissionAudit } from "../entity/PermissionAudit"
 import { PermissionOverrideApproval } from "../entity/PermissionOverrideApproval"
 import { ensureRbacDefaults } from "./rbac-defaults"
 import * as dotenv from "dotenv"
-dotenv.config()
+const envPath = process.env.ENV_FILE || process.env.DOTENV_CONFIG_PATH
+dotenv.config(envPath ? { path: envPath } : {})
 const isProd = process.env.NODE_ENV === "production"
 const requestedSynchronize = process.env.TYPEORM_SYNC
     ? process.env.TYPEORM_SYNC === "true"

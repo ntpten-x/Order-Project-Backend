@@ -1,4 +1,4 @@
-import { OrdersModels } from "../../models/pos/orders.model";
+﻿import { OrdersModels } from "../../models/pos/orders.model";
 import { SocketService } from "../socket.service";
 import { withCache, cacheKey, queryCache, invalidateCache } from "../../utils/cache";
 import { SalesOrder } from "../../entity/pos/SalesOrder";
@@ -71,7 +71,7 @@ export class OrdersService {
     private async ensureActiveShift(branchId?: string): Promise<void> {
         const activeShift = await this.shiftsService.getCurrentShift(branchId);
         if (!activeShift) {
-            throw new AppError("เน€เธยเน€เธเธเน€เธเธเน€เธโ€เน€เธเธ’เน€เธโฌเน€เธยเน€เธเธ”เน€เธโ€เน€เธยเน€เธเธเน€เธยเน€เธยเน€เธเธเน€เธยเน€เธโ€”เน€เธเธ“เน€เธเธเน€เธเธ’เน€เธเธเน€เธยเน€เธเธ’เน€เธเธ (Active Shift Required)", 400);
+            throw new AppError("Active shift required. Please open a shift first.", 400);
         }
     }
 
@@ -103,7 +103,7 @@ export class OrdersService {
             .filter((id): id is string => !!id);
 
         if (productIds.length === 0) {
-            throw new AppError("เน€เธยเน€เธเธเน€เธยเน€เธเธเน€เธเธ•เน€เธเธเน€เธเธ’เน€เธเธเน€เธยเน€เธเธ’เน€เธเธเน€เธเธเน€เธเธ”เน€เธยเน€เธยเน€เธยเน€เธเธ’เน€เธยเน€เธยเน€เธยเน€เธเธ“เน€เธเธเน€เธเธ‘เน€เธยเน€เธยเน€เธยเน€เธเธ—เน€เธยเน€เธเธ", 400);
+            throw new AppError("Order items are required.", 400);
         }
 
         // 2. Optimization: Batch Fetch Products (Single Query)
@@ -288,7 +288,7 @@ export class OrdersService {
                 if (orders.order_no) {
                     const existingOrder = await this.ordersModel.findOneByOrderNo(orders.order_no)
                     if (existingOrder) {
-                        throw new Error("เน€เธโฌเน€เธเธ…เน€เธยเน€เธโ€”เน€เธเธ•เน€เธยเน€เธเธเน€เธเธเน€เธโฌเน€เธโ€เน€เธเธเน€เธเธเน€เธยเน€เธยเน€เธเธ•เน€เธยเน€เธเธเน€เธเธ•เน€เธเธเน€เธเธเน€เธเธเน€เธยเน€เธยเน€เธยเน€เธเธเน€เธเธเน€เธยเน€เธยเน€เธยเน€เธเธ…เน€เธยเน€เธเธ")
+                        throw new AppError("Duplicate order number.", 400);
                     }
                 } else {
                     orders.order_no = await this.ensureOrderNo();
@@ -367,13 +367,13 @@ export class OrdersService {
         return await runInTransaction(async (manager) => {
 
             if (!items || !Array.isArray(items) || items.length === 0) {
-                throw new AppError("เน€เธยเน€เธเธเน€เธเธเน€เธโ€เน€เธเธ’เน€เธเธเน€เธเธเน€เธยเน€เธเธเน€เธเธเน€เธเธ’เน€เธเธเน€เธยเน€เธเธ’เน€เธเธเน€เธเธเน€เธเธ”เน€เธยเน€เธยเน€เธยเน€เธเธ’", 400);
+                throw new AppError("Order items are required.", 400);
             }
 
             if (orderData.order_no) {
                 const existingOrder = await this.ordersModel.findOneByOrderNo(orderData.order_no)
                 if (existingOrder) {
-                    throw new Error("เน€เธโฌเน€เธเธ…เน€เธยเน€เธโ€”เน€เธเธ•เน€เธยเน€เธเธเน€เธเธเน€เธโฌเน€เธโ€เน€เธเธเน€เธเธเน€เธยเน€เธยเน€เธเธ•เน€เธยเน€เธเธเน€เธเธ•เน€เธเธเน€เธเธเน€เธเธเน€เธยเน€เธยเน€เธยเน€เธเธเน€เธเธเน€เธยเน€เธยเน€เธยเน€เธเธ…เน€เธยเน€เธเธ")
+                    throw new AppError("Duplicate order number.", 400);
                 }
             } else {
                 orderData.order_no = await this.ensureOrderNo();
@@ -472,7 +472,7 @@ export class OrdersService {
         try {
             const orderToUpdate = await this.ordersModel.findOne(id, branchId)
             if (!orderToUpdate) {
-                throw new Error("เน€เธยเน€เธเธเน€เธยเน€เธยเน€เธยเน€เธยเน€เธยเน€เธเธเน€เธเธเน€เธเธเน€เธเธ…เน€เธเธเน€เธเธเน€เธโฌเน€เธโ€เน€เธเธเน€เธเธเน€เธยเน€เธโ€”เน€เธเธ•เน€เธยเน€เธโ€ขเน€เธยเน€เธเธเน€เธยเน€เธยเน€เธเธ’เน€เธเธเน€เธยเน€เธยเน€เธยเน€เธยเน€เธย")
+                throw new AppError("Order not found.", 404);
             }
 
             const effectiveBranchId = orderToUpdate.branch_id || branchId;
@@ -498,7 +498,7 @@ export class OrdersService {
             if (orders.order_no && orders.order_no !== orderToUpdate.order_no) {
                 const existingOrder = await this.ordersModel.findOneByOrderNo(orders.order_no, effectiveBranchId)
                 if (existingOrder) {
-                    throw new Error("เน€เธโฌเน€เธเธ…เน€เธยเน€เธโ€”เน€เธเธ•เน€เธยเน€เธเธเน€เธเธเน€เธโฌเน€เธโ€เน€เธเธเน€เธเธเน€เธยเน€เธยเน€เธเธ•เน€เธยเน€เธเธเน€เธเธ•เน€เธเธเน€เธเธเน€เธเธเน€เธยเน€เธยเน€เธยเน€เธเธเน€เธเธเน€เธยเน€เธยเน€เธยเน€เธเธ…เน€เธยเน€เธเธ")
+                    throw new AppError("Duplicate order number.", 400);
                 }
             }
 
@@ -658,7 +658,7 @@ export class OrdersService {
         return await runInTransaction(async (manager) => {
             try {
                 const item = await this.ordersModel.findItemById(itemId, manager, branchId);
-                if (!item) throw new Error("Item not found");
+                if (!item) throw new AppError("Item not found", 404);
 
                 const detailRepo = manager.getRepository(SalesOrderDetail);
 
@@ -681,7 +681,7 @@ export class OrdersService {
 
                 // Refetch item with new details to get total price right
                 const updatedItemWithDetails = await this.ordersModel.findItemById(itemId, manager, branchId);
-                if (!updatedItemWithDetails) throw new Error("Item not found after detail update");
+                if (!updatedItemWithDetails) throw new AppError("Item not found", 404);
 
                 if (data.quantity !== undefined) {
                     const qty = Number(data.quantity);
@@ -727,7 +727,7 @@ export class OrdersService {
         return await runInTransaction(async (manager) => {
             try {
                 const item = await this.ordersModel.findItemById(itemId, manager, branchId);
-                if (!item) throw new Error("Item not found");
+                if (!item) throw new AppError("Item not found", 404);
                 const orderId = item.order_id;
 
                 await this.ordersModel.deleteItem(itemId, manager);
@@ -751,3 +751,4 @@ export class OrdersService {
         })
     }
 }
+
