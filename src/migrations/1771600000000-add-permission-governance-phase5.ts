@@ -221,13 +221,6 @@ export class AddPermissionGovernancePhase51771600000000 implements MigrationInte
                                 INNER JOIN "permission_actions" pa ON pa.action_key = $4
                                 WHERE lower(r.roles_name) = lower($5)
                                 LIMIT 1
-                            ),
-                            deleted AS (
-                                DELETE FROM "role_permissions" rp
-                                USING target t
-                                WHERE rp.role_id = t.role_id
-                                  AND rp.resource_id = t.resource_id
-                                  AND rp.action_id = t.action_id
                             )
                             INSERT INTO "role_permissions" (
                                 "role_id",
@@ -243,6 +236,11 @@ export class AddPermissionGovernancePhase51771600000000 implements MigrationInte
                                 $1::varchar,
                                 $2::varchar
                             FROM target t
+                            ON CONFLICT ("role_id", "resource_id", "action_id")
+                            DO UPDATE SET
+                                "effect" = EXCLUDED."effect",
+                                "scope" = EXCLUDED."scope",
+                                "updated_at" = now()
                         `,
                         [effect, scope, resource.resourceKey, actionKey, roleName]
                     );

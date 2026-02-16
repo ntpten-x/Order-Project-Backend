@@ -66,6 +66,55 @@ export class AddPermissionsPhase11771300000000 implements MigrationInterface {
             ON "role_permissions" ("role_id")
         `);
 
+        // When tables already exist (e.g. created by TYPEORM_SYNC), make uniqueness explicit for ON CONFLICT usage.
+        await queryRunner.query(`
+            WITH ranked AS (
+                SELECT ctid, ROW_NUMBER() OVER (PARTITION BY "action_key" ORDER BY "id") AS rn
+                FROM "permission_actions"
+            )
+            DELETE FROM "permission_actions" p
+            USING ranked r
+            WHERE p.ctid = r.ctid
+              AND r.rn > 1
+        `);
+        await queryRunner.query(`
+            CREATE UNIQUE INDEX IF NOT EXISTS "idx_permission_actions_action_key_uq"
+            ON "permission_actions" ("action_key")
+        `);
+
+        await queryRunner.query(`
+            WITH ranked AS (
+                SELECT ctid, ROW_NUMBER() OVER (PARTITION BY "resource_key" ORDER BY "id") AS rn
+                FROM "permission_resources"
+            )
+            DELETE FROM "permission_resources" p
+            USING ranked r
+            WHERE p.ctid = r.ctid
+              AND r.rn > 1
+        `);
+        await queryRunner.query(`
+            CREATE UNIQUE INDEX IF NOT EXISTS "idx_permission_resources_resource_key_uq"
+            ON "permission_resources" ("resource_key")
+        `);
+
+        await queryRunner.query(`
+            WITH ranked AS (
+                SELECT ctid, ROW_NUMBER() OVER (
+                    PARTITION BY "role_id", "resource_id", "action_id"
+                    ORDER BY "updated_at" DESC, "created_at" DESC, "id" DESC
+                ) AS rn
+                FROM "role_permissions"
+            )
+            DELETE FROM "role_permissions" p
+            USING ranked r
+            WHERE p.ctid = r.ctid
+              AND r.rn > 1
+        `);
+        await queryRunner.query(`
+            CREATE UNIQUE INDEX IF NOT EXISTS "UQ_role_permissions_role_resource_action"
+            ON "role_permissions" ("role_id", "resource_id", "action_id")
+        `);
+
         await queryRunner.query(`
             INSERT INTO "permission_actions" ("action_key", "action_name")
             VALUES
@@ -158,7 +207,11 @@ export class AddPermissionsPhase11771300000000 implements MigrationInterface {
             INNER JOIN "roles" r ON lower(r.roles_name) = lower(seed.role_name)
             INNER JOIN "permission_resources" pr ON pr.resource_key = seed.resource_key
             INNER JOIN "permission_actions" pa ON pa.action_key = seed.action_key
-            ON CONFLICT ("role_id", "resource_id", "action_id") DO NOTHING
+            ON CONFLICT ("role_id", "resource_id", "action_id")
+            DO UPDATE SET
+                "effect" = EXCLUDED."effect",
+                "scope" = EXCLUDED."scope",
+                "updated_at" = now()
         `);
     }
 
