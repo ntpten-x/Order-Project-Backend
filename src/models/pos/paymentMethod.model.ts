@@ -62,19 +62,6 @@ export class PaymentMethodModels {
         }
     }
 
-    async findOneByDisplayName(display_name: string, branchId?: string): Promise<PaymentMethod | null> {
-        try {
-            const paymentMethodRepository = getRepository(PaymentMethod);
-            const where: any = { display_name };
-            if (branchId) {
-                where.branch_id = branchId;
-            }
-            return paymentMethodRepository.findOneBy(where);
-        } catch (error) {
-            throw error;
-        }
-    }
-
     async create(data: PaymentMethod): Promise<PaymentMethod> {
         try {
             return getRepository(PaymentMethod).save(data)

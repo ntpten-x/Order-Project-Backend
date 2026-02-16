@@ -128,22 +128,6 @@ export class DashboardService {
         return Math.min(Math.max(Math.trunc(value), 1), max);
     }
 
-    private buildTimestampRange(startDate?: string, endDate?: string): {
-        startTs?: string;
-        endExclusiveTs?: string;
-    } {
-        if (!startDate || !endDate) return {};
-
-        const startTs = `${startDate}T00:00:00.000Z`;
-        const endExclusive = new Date(`${endDate}T00:00:00.000Z`);
-        endExclusive.setUTCDate(endExclusive.getUTCDate() + 1);
-
-        return {
-            startTs,
-            endExclusiveTs: endExclusive.toISOString(),
-        };
-    }
-
     async getSalesSummary(startDate?: string, endDate?: string, branchId?: string): Promise<SalesSummaryView[]> {
         const normalized = this.normalizeDateRange(startDate, endDate);
         const scope = this.getCacheScopeParts(branchId);
@@ -224,7 +208,6 @@ export class DashboardService {
         startDate?: string,
         endDate?: string
     ): Promise<TopSellingItemsView[]> {
-        const range = this.buildTimestampRange(startDate, endDate);
         const topItemsQuery = getRepository(SalesOrderItem)
             .createQueryBuilder("item")
             .innerJoin(SalesOrder, "order", "order.id = item.order_id")
@@ -243,10 +226,10 @@ export class DashboardService {
             topItemsQuery.andWhere("order.branch_id = :branchId", { branchId });
         }
 
-        if (range.startTs && range.endExclusiveTs) {
-            topItemsQuery.andWhere("order.create_date >= :startTs AND order.create_date < :endExclusiveTs", {
-                startTs: range.startTs,
-                endExclusiveTs: range.endExclusiveTs,
+        if (startDate && endDate) {
+            topItemsQuery.andWhere("DATE(order.create_date) BETWEEN :startDate AND :endDate", {
+                startDate,
+                endDate,
             });
         }
 
@@ -278,7 +261,6 @@ export class DashboardService {
         startDate?: string,
         endDate?: string
     ): Promise<DashboardRecentOrderSummary[]> {
-        const range = this.buildTimestampRange(startDate, endDate);
         const recentOrdersQuery = getRepository(SalesOrder)
             .createQueryBuilder("order")
             .leftJoin("order.table", "table")
@@ -306,10 +288,10 @@ export class DashboardService {
             recentOrdersQuery.andWhere("order.branch_id = :branchId", { branchId });
         }
 
-        if (range.startTs && range.endExclusiveTs) {
-            recentOrdersQuery.andWhere("order.create_date >= :startTs AND order.create_date < :endExclusiveTs", {
-                startTs: range.startTs,
-                endExclusiveTs: range.endExclusiveTs,
+        if (startDate && endDate) {
+            recentOrdersQuery.andWhere("DATE(order.create_date) BETWEEN :startDate AND :endDate", {
+                startDate,
+                endDate,
             });
         }
 

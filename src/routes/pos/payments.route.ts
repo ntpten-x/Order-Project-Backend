@@ -3,7 +3,7 @@ import { PaymentsModels } from "../../models/pos/payments.model";
 import { PaymentsService } from "../../services/pos/payments.service";
 import { PaymentsController } from "../../controllers/pos/payments.controller";
 import { authenticateToken } from "../../middleware/auth.middleware";
-import { requireBranchStrict } from "../../middleware/branch.middleware";
+import { requireBranch } from "../../middleware/branch.middleware";
 import { validate } from "../../middleware/validate.middleware";
 import { authorizePermission } from "../../middleware/permission.middleware";
 import { createPaymentSchema, paymentIdParamSchema, updatePaymentSchema } from "../../utils/schemas/payments.schema";
@@ -15,7 +15,7 @@ const paymentsService = new PaymentsService(paymentsModel)
 const paymentsController = new PaymentsController(paymentsService)
 
 router.use(authenticateToken)
-router.use(requireBranchStrict)
+router.use(requireBranch)
 
 router.get("/", authorizePermission("payments.page", "view"), paymentsController.findAll)
 router.get("/:id", authorizePermission("payments.page", "view"), validate(paymentIdParamSchema), paymentsController.findOne)

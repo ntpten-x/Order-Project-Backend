@@ -104,9 +104,6 @@ export class OrdersController {
 
         const branch_id = getBranchId(req as any);
         const oldOrder = await this.ordersService.getOrderById(id, branch_id);
-        if (!oldOrder) {
-            throw AppError.notFound("เธเธฒเธฃเธชเธฑเนเธเธเธทเนเธญ");
-        }
         const updatedOrder = await this.ordersService.updateOrder(id, items, branch_id);
 
         const userInfo = getUserInfoFromRequest(req as any);
@@ -137,9 +134,6 @@ export class OrdersController {
 
         const branch_id = getBranchId(req as any);
         const oldOrder = await this.ordersService.getOrderById(id, branch_id);
-        if (!oldOrder) {
-            throw AppError.notFound("เธเธฒเธฃเธชเธฑเนเธเธเธทเนเธญ");
-        }
         const updatedOrder = await this.ordersService.updateStatus(id, status, branch_id);
 
         const userInfo = getUserInfoFromRequest(req as any);
@@ -164,9 +158,6 @@ export class OrdersController {
         const { id } = req.params;
         const branch_id = getBranchId(req as any);
         const oldOrder = await this.ordersService.getOrderById(id, branch_id);
-        if (!oldOrder) {
-            throw AppError.notFound("เธเธฒเธฃเธชเธฑเนเธเธเธทเนเธญ");
-        }
         const result = await this.ordersService.deleteOrder(id, branch_id);
 
         if (result?.affected) {
@@ -206,9 +197,6 @@ export class OrdersController {
 
         const branch_id = getBranchId(req as any);
         const oldOrder = await this.ordersService.getOrderById(id, branch_id);
-        if (!oldOrder) {
-            throw AppError.notFound("เธเธฒเธฃเธชเธฑเนเธเธเธทเนเธญ");
-        }
         const updatedOrder = await this.ordersService.confirmPurchase(id, items, purchased_by_id, branch_id);
 
         const userInfo = getUserInfoFromRequest(req as any);

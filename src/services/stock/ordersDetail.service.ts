@@ -1,7 +1,6 @@
 import { StockOrdersDetailModel } from "../../models/stock/ordersDetail.model";
 import { SocketService } from "../socket.service";
 import { LegacyRealtimeEvents, RealtimeEvents } from "../../utils/realtimeEvents";
-import { AppError } from "../../utils/AppError";
 
 export class OrdersDetailService {
     private socketService = SocketService.getInstance();
@@ -12,7 +11,7 @@ export class OrdersDetailService {
         try {
             const orderItem = await this.ordersDetailModel.getOrderItemWithOrder(ordersItemId, branchId);
             if (!orderItem) {
-                throw AppError.notFound("Order item");
+                throw new Error("Order item not found");
             }
 
             const savedDetail = await this.ordersDetailModel.createOrUpdate(ordersItemId, data);

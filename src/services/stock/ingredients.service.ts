@@ -5,7 +5,6 @@ import { withCache, cacheKey, invalidateCache, metadataCache } from "../../utils
 import { getDbContext } from "../../database/dbContext";
 import { RealtimeEvents } from "../../utils/realtimeEvents";
 import { CreatedSort } from "../../utils/sortCreated";
-import { AppError } from "../../utils/AppError";
 
 /**
  * Ingredients Service with Caching
@@ -90,7 +89,7 @@ export class IngredientsService {
         if (ingredients.ingredient_name && ingredients.branch_id) {
             const existing = await this.ingredientsModel.findOneByName(ingredients.ingredient_name, ingredients.branch_id);
             if (existing) {
-                throw AppError.conflict("ชื่อวัตถุดิบนี้มีอยู่ในระบบแล้ว");
+                throw new Error("ชื่อวัตถุดิบนี้มีอยู่ในระบบแล้ว");
             }
         }
         
@@ -111,7 +110,7 @@ export class IngredientsService {
 
     async update(id: string, ingredients: Ingredients, branchId?: string): Promise<Ingredients> {
         const existing = await this.ingredientsModel.findOne(id, branchId);
-        if (!existing) throw AppError.notFound("Ingredient");
+        if (!existing) throw new Error("Ingredient not found");
 
         const effectiveBranchId = branchId || existing.branch_id || ingredients.branch_id;
         if (effectiveBranchId) {
@@ -130,12 +129,12 @@ export class IngredientsService {
             return updatedIngredients;
         }
         
-        throw AppError.internal("พบข้อผิดพลาดในการอัปเดตวัตถุดิบ");
+        throw new Error("พบข้อผิดพลาดในการอัปเดตวัตถุดิบ");
     }
 
     async delete(id: string, branchId?: string): Promise<void> {
         const existing = await this.ingredientsModel.findOne(id, branchId);
-        if (!existing) throw AppError.notFound("Ingredient");
+        if (!existing) throw new Error("Ingredient not found");
 
         const effectiveBranchId = branchId || existing.branch_id;
         await this.ingredientsModel.delete(id, effectiveBranchId);

@@ -3,7 +3,7 @@ import { Router } from "express";
 import { ShiftsController } from "../../controllers/pos/shifts.controller";
 import { ShiftsService } from "../../services/pos/shifts.service";
 import { authenticateToken } from "../../middleware/auth.middleware";
-import { requireBranchStrict } from "../../middleware/branch.middleware";
+import { requireBranch } from "../../middleware/branch.middleware";
 import { authorizePermission } from "../../middleware/permission.middleware";
 import { validate } from "../../middleware/validate.middleware";
 import { closeShiftSchema, openShiftSchema, shiftSummaryIdParamSchema } from "../../utils/schemas/posMaster.schema";
@@ -14,7 +14,7 @@ const shiftsService = new ShiftsService();
 const shiftsController = new ShiftsController(shiftsService);
 
 shiftsRouter.use(authenticateToken);
-shiftsRouter.use(requireBranchStrict);
+shiftsRouter.use(requireBranch);
 
 shiftsRouter.post("/open", authorizePermission("shifts.page", "create"), validate(openShiftSchema), shiftsController.openShift);
 shiftsRouter.post("/close", authorizePermission("shifts.page", "update"), validate(closeShiftSchema), shiftsController.closeShift);

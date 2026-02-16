@@ -13,9 +13,7 @@ export class Users {
     @Column({ type: "varchar", length: 100, nullable: true })
     name?: string
 
-    // Never expose password hashes in API responses by default.
-    // Auth flows that need it must explicitly `addSelect("users.password")`.
-    @Column({ type: "varchar", length: 100, select: false })
+    @Column({ type: "varchar", length: 100 })
     password!: string
 
     @CreateDateColumn({ type: "timestamptz" })

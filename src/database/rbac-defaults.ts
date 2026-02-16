@@ -82,7 +82,6 @@ const CORE_PERMISSION_RESOURCES: Array<{
     { resourceKey: "audit.page", resourceName: "Audit Logs", routePattern: "/audit", resourceType: "page", sortOrder: 14 },
     { resourceKey: "orders.page", resourceName: "Orders", routePattern: "/pos/orders", resourceType: "page", sortOrder: 20 },
     { resourceKey: "products.page", resourceName: "Products", routePattern: "/pos/products", resourceType: "page", sortOrder: 21 },
-    { resourceKey: "products_unit.page", resourceName: "Product Units", routePattern: "/pos/productsUnit", resourceType: "page", sortOrder: 22 },
     { resourceKey: "category.page", resourceName: "Category", routePattern: "/pos/category", resourceType: "page", sortOrder: 22 },
     { resourceKey: "queue.page", resourceName: "Queue", routePattern: "/pos/queue", resourceType: "page", sortOrder: 23 },
     { resourceKey: "payments.page", resourceName: "Payments", routePattern: "/pos/payments", resourceType: "page", sortOrder: 24 },
@@ -109,7 +108,6 @@ const MANAGER_RESTRICTED_RESOURCES = new Set<string>([
 const EMPLOYEE_READ_ALLOW = new Set<string>([
     "orders.page",
     "products.page",
-    "products_unit.page",
     "queue.page",
     "shifts.page",
     "payments.page",

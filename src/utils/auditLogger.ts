@@ -7,7 +7,6 @@
 import { getDbContext, getRepository } from "../database/dbContext";
 import { AuditLog } from "../entity/AuditLog";
 import { AuditActionType } from "./auditTypes";
-import { redactAuditPayload } from "./auditRedaction";
 
 class AuditLogger {
     private get repository() {
@@ -26,8 +25,8 @@ class AuditLogger {
         entity_type?: string;
         entity_id?: string;
         branch_id?: string;
-        old_values?: unknown;
-        new_values?: unknown;
+        old_values?: Record<string, any>;
+        new_values?: Record<string, any>;
         description?: string;
         path?: string;
         method?: string;
@@ -36,30 +35,11 @@ class AuditLogger {
             const ctx = getDbContext();
             const branch_id = params.branch_id ?? ctx?.branchId;
 
-            const old_values =
-                typeof params.old_values === "undefined" ? undefined : redactAuditPayload(params.old_values);
-            const new_values =
-                typeof params.new_values === "undefined" ? undefined : redactAuditPayload(params.new_values);
-
-            // Avoid overload/type inference issues with `Repository.create` by building a typed payload.
-            const createPayload: Partial<AuditLog> = {
-                action_type: params.action_type,
-                user_id: params.user_id,
-                username: params.username,
-                ip_address: params.ip_address,
-                user_agent: params.user_agent,
-                entity_type: params.entity_type,
-                entity_id: params.entity_id,
+            const auditLog = this.repository.create({
+                ...params,
                 branch_id,
-                old_values: old_values as any,
-                new_values: new_values as any,
-                description: params.description,
-                path: params.path,
-                method: params.method,
                 created_at: new Date(),
-            };
-
-            const auditLog = this.repository.create(createPayload as any);
+            });
 
             await this.repository.save(auditLog);
 

@@ -28,9 +28,9 @@ export class ProductsUnitModels {
             }
 
             if (filters?.q?.trim()) {
-                const q = `%${filters.q.trim()}%`;
+                const q = `%${filters.q.trim().toLowerCase()}%`;
                 query.andWhere(
-                    "(productsUnit.display_name ILIKE :q OR productsUnit.unit_name ILIKE :q)",
+                    "(LOWER(productsUnit.display_name) LIKE :q OR LOWER(productsUnit.unit_name) LIKE :q)",
                     { q }
                 );
             }
@@ -89,19 +89,6 @@ export class ProductsUnitModels {
             })
         } catch (error) {
             throw error
-        }
-    }
-
-    async findOneByDisplayName(display_name: string, branchId?: string): Promise<ProductsUnit | null> {
-        try {
-            const productsUnitRepository = getRepository(ProductsUnit);
-            const where: any = { display_name };
-            if (branchId) {
-                where.branch_id = branchId;
-            }
-            return productsUnitRepository.findOne({ where });
-        } catch (error) {
-            throw error;
         }
     }
 

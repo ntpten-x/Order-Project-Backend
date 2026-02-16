@@ -8,7 +8,6 @@ export const auditQuerySchema = z.object({
         .object({
             page: z.coerce.number().int().min(1).max(1000).optional(),
             limit: z.coerce.number().int().min(1).max(100).optional(),
-            sort_created: z.enum(["old", "new"]).optional(),
             action_type: z.nativeEnum(AuditActionType).optional(),
             entity_type: z.string().max(100).optional(),
             entity_id: uuid.optional(),

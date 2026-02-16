@@ -12,18 +12,6 @@ import { parseCreatedSort } from "../utils/sortCreated";
 export class UsersController {
     constructor(private usersService: UsersService) { }
 
-    private normalizeUserPayload(payload: any) {
-        if (!payload || typeof payload !== "object") return payload;
-        if (typeof payload.name === "string" && payload.name.trim().length > 0) return payload;
-        const firstName = typeof payload.firstName === "string" ? payload.firstName.trim() : "";
-        const lastName = typeof payload.lastName === "string" ? payload.lastName.trim() : "";
-        const combined = `${firstName} ${lastName}`.trim();
-        if (combined) {
-            return { ...payload, name: combined };
-        }
-        return payload;
-    }
-
     private sanitizeUserPayload(payload: any) {
         if (!payload || typeof payload !== "object") return payload;
         const { password: _password, ...rest } = payload;
@@ -67,7 +55,6 @@ export class UsersController {
     })
 
     create = catchAsync(async (req: AuthRequest, res: Response) => {
-        req.body = this.normalizeUserPayload(req.body);
         const user = await this.usersService.create(req.body);
 
         const userInfo = getUserInfoFromRequest(req as any);
@@ -90,7 +77,6 @@ export class UsersController {
 
     update = catchAsync(async (req: AuthRequest, res: Response) => {
         const oldUser = await this.usersService.findOne(req.params.id);
-        req.body = this.normalizeUserPayload(req.body);
         const user = await this.usersService.update(req.params.id, req.body, req.user?.id);
 
         const userInfo = getUserInfoFromRequest(req as any);

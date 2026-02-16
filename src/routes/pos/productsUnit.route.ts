@@ -23,12 +23,12 @@ const productsUnitController = new ProductsUnitController(productsUnitService)
 router.use(authenticateToken)
 router.use(requireBranch)
 
-router.get("/", authorizePermission("products_unit.page", "view"), validate(paginationQuerySchema), productsUnitController.findAll)
-router.get("/:id", authorizePermission("products_unit.page", "view"), validate(productsUnitIdParamSchema), productsUnitController.findOne)
-router.get("/name/:unit_name", authorizePermission("products_unit.page", "view"), validate(productsUnitNameParamSchema), productsUnitController.findOneByName)
+router.get("/", authorizePermission("products.page", "view"), validate(paginationQuerySchema), productsUnitController.findAll)
+router.get("/:id", authorizePermission("products.page", "view"), validate(productsUnitIdParamSchema), productsUnitController.findOne)
+router.get("/name/:unit_name", authorizePermission("products.page", "view"), validate(productsUnitNameParamSchema), productsUnitController.findOneByName)
 
-router.post("/", authorizePermission("products_unit.page", "create"), validate(createProductsUnitSchema), productsUnitController.create)
-router.put("/:id", authorizePermission("products_unit.page", "update"), validate(updateProductsUnitSchema), productsUnitController.update)
-router.delete("/:id", authorizePermission("products_unit.page", "delete"), validate(productsUnitIdParamSchema), productsUnitController.delete)
+router.post("/", authorizePermission("products.page", "create"), validate(createProductsUnitSchema), productsUnitController.create)
+router.put("/:id", authorizePermission("products.page", "update"), validate(updateProductsUnitSchema), productsUnitController.update)
+router.delete("/:id", authorizePermission("products.page", "delete"), validate(productsUnitIdParamSchema), productsUnitController.delete)
 
 export default router

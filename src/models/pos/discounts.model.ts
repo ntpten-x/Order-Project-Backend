@@ -97,19 +97,6 @@ export class DiscountsModels {
         }
     }
 
-    async findOneByDisplayName(display_name: string, branchId?: string): Promise<Discounts | null> {
-        try {
-            const discountsRepository = getRepository(Discounts);
-            const where: any = { display_name };
-            if (branchId) {
-                where.branch_id = branchId;
-            }
-            return discountsRepository.findOneBy(where)
-        } catch (error) {
-            throw error
-        }
-    }
-
     async create(data: Discounts): Promise<Discounts> {
         try {
             return getRepository(Discounts).save(data)

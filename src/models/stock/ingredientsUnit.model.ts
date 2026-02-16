@@ -26,10 +26,9 @@ export class IngredientsUnitModel {
             }
 
             if (filters?.q?.trim()) {
-                // Use ILIKE so Postgres can leverage pg_trgm indexes (if present).
-                const q = `%${filters.q.trim()}%`;
+                const q = `%${filters.q.trim().toLowerCase()}%`;
                 query.andWhere(
-                    "(ingredientsUnit.display_name ILIKE :q OR ingredientsUnit.unit_name ILIKE :q)",
+                    "(LOWER(ingredientsUnit.display_name) LIKE :q OR LOWER(ingredientsUnit.unit_name) LIKE :q)",
                     { q }
                 );
             }

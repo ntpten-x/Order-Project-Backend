@@ -1,4 +1,4 @@
-﻿import { Users } from "../entity/Users";
+import { Users } from "../entity/Users";
 import { getDbContext, getDbManager, getRepository } from "../database/dbContext";
 import { Brackets } from "typeorm";
 import { PermissionScope } from "../middleware/permission.middleware";
@@ -34,15 +34,13 @@ export class UsersModels {
         }
 
         if (filters?.q?.trim()) {
-            const q = `%${filters.q.trim()}%`;
+            const q = `%${filters.q.trim().toLowerCase()}%`;
             query.andWhere(
                 new Brackets((qb) => {
-                    // Use ILIKE so Postgres can leverage pg_trgm indexes (if present).
-                    qb.where("users.username ILIKE :q", { q })
-                        .orWhere("users.name ILIKE :q", { q })
-                        .orWhere("roles.display_name ILIKE :q", { q })
-                        .orWhere("roles.roles_name ILIKE :q", { q })
-                        .orWhere("branch.branch_name ILIKE :q", { q });
+                    qb.where("LOWER(users.username) LIKE :q", { q })
+                        .orWhere("LOWER(COALESCE(users.name, '')) LIKE :q", { q })
+                        .orWhere("LOWER(COALESCE(roles.display_name, roles.roles_name, '')) LIKE :q", { q })
+                        .orWhere("LOWER(COALESCE(branch.branch_name, '')) LIKE :q", { q });
                 })
             );
         }
@@ -159,8 +157,7 @@ export class UsersModels {
     async create(users: Users): Promise<Users> {
         try {
             const ctx = getDbContext();
-            // If a branch context exists, force the user into that branch.
-            // This is required for non-admins, and also keeps admin "switched branch" behavior consistent.
+            // If an active branch context exists (Admin switched branch), force the user into that branch.
             if (ctx?.branchId) {
                 (users as any).branch_id = ctx.branchId;
             }
@@ -174,30 +171,13 @@ export class UsersModels {
         try {
             const ctx = getDbContext();
 
-            // If a branch context exists and actor is NOT admin, only allow updates within that branch.
-            if (ctx?.branchId && !ctx?.isAdmin) {
+            // If an active branch context exists, only allow updates within that branch.
+            if (ctx?.branchId) {
                 const existing = await this.findOne(id);
                 if (!existing) {
-                    throw new Error("เนเธกเนเธเธเธเธนเนเนเธเน");
+                    throw new Error("ไม่พบผู้ใช้");
                 }
                 (users as any).branch_id = ctx.branchId;
-            }
-
-            // Admin: allow changing user.branch_id across branches even when admin has selected an active branch.
-            // When app.branch_id is set, Postgres RLS hides rows from other branches and may block branch moves.
-            // Temporarily clear the session branch context for this operation only.
-            if (ctx?.branchId && ctx?.isAdmin && typeof (users as any).branch_id === "string" && (users as any).branch_id !== ctx.branchId) {
-                const qr = ctx.queryRunner;
-                if (qr) {
-                    await qr.query("SELECT set_config('app.branch_id', '', false)");
-                }
-                try {
-                    return await getRepository(Users).save({ ...users, id });
-                } finally {
-                    if (qr) {
-                        await qr.query("SELECT set_config('app.branch_id', $1, false)", [ctx.branchId]);
-                    }
-                }
             }
 
             return getRepository(Users).save({ ...users, id })
@@ -205,6 +185,7 @@ export class UsersModels {
             throw error
         }
     }
+
     async delete(id: string): Promise<void> {
         try {
             const ctx = getDbContext();
@@ -213,7 +194,7 @@ export class UsersModels {
             if (ctx?.branchId) {
                 const result = await usersRepo.delete({ id, branch_id: ctx.branchId } as any);
                 if (!result.affected) {
-                    throw new Error("เนเธกเนเธเธเธเธนเนเนเธเน");
+                    throw new Error("ไม่พบผู้ใช้");
                 }
                 return;
             }

@@ -3,13 +3,13 @@ import { getShopProfile, updateShopProfile } from "../../controllers/pos/shopPro
 import { authenticateToken } from "../../middleware/auth.middleware";
 import { validate } from "../../middleware/validate.middleware";
 import { updateShopProfileSchema } from "../../utils/schemas/posMaster.schema";
-import { requireBranchStrict } from "../../middleware/branch.middleware";
+import { requireBranch } from "../../middleware/branch.middleware";
 import { authorizePermission } from "../../middleware/permission.middleware";
 
 const router = express.Router();
 
 router.use(authenticateToken);
-router.use(requireBranchStrict);
+router.use(requireBranch);
 
 router.get("/", authorizePermission("shop_profile.page", "view"), getShopProfile);
 router.put("/", authorizePermission("shop_profile.page", "update"), validate(updateShopProfileSchema), updateShopProfile);

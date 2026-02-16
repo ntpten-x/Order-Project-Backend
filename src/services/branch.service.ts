@@ -23,8 +23,7 @@ export class BranchService {
         limit: number,
         isActive?: boolean,
         q?: string,
-        sortCreated: CreatedSort = "old",
-        forceBranchId?: string
+        sortCreated: CreatedSort = "old"
     ): Promise<{ data: Branch[]; total: number; page: number; limit: number; last_page: number }> {
         const safePage = Math.max(page, 1);
         const safeLimit = Math.min(Math.max(limit, 1), 200);
@@ -34,30 +33,15 @@ export class BranchService {
             .skip((safePage - 1) * safeLimit)
             .take(safeLimit);
 
-        if (forceBranchId) {
-            query.where("branch.id = :branchId", { branchId: forceBranchId });
-        }
-
         if (typeof isActive === "boolean") {
-            // Keep a consistent clause-builder whether or not a branchId filter exists.
-            if (forceBranchId) {
-                query.andWhere("branch.is_active = :isActive", { isActive });
-            } else {
-                query.where("branch.is_active = :isActive", { isActive });
-            }
+            query.where("branch.is_active = :isActive", { isActive });
         }
 
         if (q?.trim()) {
-            // Use ILIKE so pg_trgm trigram indexes can be used for %keyword% searches (when present).
-            const keyword = `%${q.trim()}%`;
+            const keyword = `%${q.trim().toLowerCase()}%`;
             query.andWhere(
-                "(" +
-                "branch.branch_name ILIKE :q " +
-                "OR branch.branch_code ILIKE :q " +
-                "OR branch.address ILIKE :q " +
-                "OR branch.phone ILIKE :q" +
-                ")",
-                { q: keyword }
+                "(LOWER(branch.branch_name) LIKE :q OR LOWER(branch.branch_code) LIKE :q OR LOWER(COALESCE(branch.address, '')) LIKE :q OR COALESCE(branch.phone, '') LIKE :phoneQ)",
+                { q: keyword, phoneQ: `%${q.trim()}%` }
             );
         }
 

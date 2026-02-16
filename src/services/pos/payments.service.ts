@@ -110,15 +110,15 @@ export class PaymentsService {
         return await runInTransaction(async (manager) => {
             try {
                 if (!payments.order_id) {
-                    throw new AppError("กรุณาระบุรหัสออเดอร์", 400)
+                    throw new Error("กรุณาระบุรหัสออเดอร์")
                 }
                 if (!payments.payment_method_id) {
-                    throw new AppError("กรุณาระบุรหัสวิธีการชำระเงิน", 400)
+                    throw new Error("กรุณาระบุรหัสวิธีการชำระเงิน")
                 }
 
                 const amount = Number(payments.amount);
                 if (!Number.isFinite(amount) || amount <= 0) {
-                    throw new AppError("ยอดเงินที่ชำระต้องมากกว่า 0", 400)
+                    throw new Error("ยอดเงินที่ชำระต้องมากกว่า 0")
                 }
 
                 const orderRepo = manager.getRepository(SalesOrder);
@@ -191,7 +191,7 @@ export class PaymentsService {
                 const existingPayment = await paymentsRepo.findOneBy(branchId ? ({ id, branch_id: branchId } as any) : { id });
 
                 if (!existingPayment) {
-                    throw new AppError("ไม่พบข้อมูลการชำระเงินที่ต้องการแก้ไข", 404)
+                    throw new Error("ไม่พบข้อมูลการชำระเงินที่ต้องการแก้ไข")
                 }
 
                 if (payments.order_id && payments.order_id !== existingPayment.order_id) {
@@ -243,7 +243,7 @@ export class PaymentsService {
                 }
                 return updatedPayment
             }
-            throw new AppError("Failed to retrieve updated payment", 500);
+            throw new Error("Critical: Failed to retrieve updated payment");
         })
     }
 

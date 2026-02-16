@@ -200,14 +200,6 @@ export class StockOrdersModel {
                 }
             }
 
-            const effectiveBranchId = branchId || (order as any).branch_id;
-            if (!effectiveBranchId) {
-                throw new Error("Order branch_id is missing");
-            }
-
-            // Aggregate quantities to add to stock per ingredient (only purchased items).
-            const stockAdditions = new Map<string, number>();
-
             // 2. Update/Create OrdersDetail for every order item
             for (const item of items) {
                 const orderItem = orderItems.find((oi) => oi.ingredient_id === item.ingredient_id);
@@ -231,13 +223,6 @@ export class StockOrdersModel {
                 detail.purchased_by_id = purchasedById;
 
                 await transactionalEntityManager.save(StockOrdersDetail, detail);
-
-                if (isPurchased && normalizedActualQty > 0) {
-                    stockAdditions.set(
-                        orderItem.ingredient_id,
-                        (stockAdditions.get(orderItem.ingredient_id) || 0) + normalizedActualQty
-                    );
-                }
             }
 
             for (const orderItem of orderItems) {
@@ -257,22 +242,6 @@ export class StockOrdersModel {
                 detail.purchased_by_id = purchasedById;
 
                 await transactionalEntityManager.save(StockOrdersDetail, detail);
-            }
-
-            // 3. Apply stock additions to branch_stock (upsert + increment).
-            // This is done inside the same transaction as purchase confirmation, guarded by the order lock above.
-            for (const [ingredientId, qtyToAdd] of stockAdditions.entries()) {
-                await transactionalEntityManager.query(
-                    `
-                    INSERT INTO "branch_stock" ("id", "branch_id", "ingredient_id", "quantity")
-                    VALUES (uuid_generate_v4(), $1, $2, $3)
-                    ON CONFLICT ("branch_id", "ingredient_id")
-                    DO UPDATE SET
-                      "quantity" = "branch_stock"."quantity" + EXCLUDED."quantity",
-                      "last_updated" = CURRENT_TIMESTAMP
-                    `,
-                    [effectiveBranchId, ingredientId, qtyToAdd]
-                );
             }
 
             // 3. Update Order Status to COMPLETED

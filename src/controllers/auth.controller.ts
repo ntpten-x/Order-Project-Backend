@@ -28,13 +28,10 @@ export class AuthController {
         const ip = getClientIp(req);
 
         try {
-            // Users.password is `select: false`; explicitly fetch it for authentication only.
-            const user = await userRepository
-                .createQueryBuilder("users")
-                .addSelect("users.password")
-                .leftJoinAndSelect("users.roles", "roles")
-                .where("users.username = :username", { username })
-                .getOne();
+            const user = await userRepository.findOne({
+                where: { username },
+                relations: ["roles"]
+            });
 
             if (!user) {
                 securityLogger.log({
@@ -139,17 +136,8 @@ export class AuthController {
             // Set Cookie
             res.cookie("token", token, {
                 httpOnly: true,
-                secure:
-                    process.env.COOKIE_SECURE !== undefined
-                        ? process.env.COOKIE_SECURE === "true"
-                        : process.env.NODE_ENV === "production", // true in production
-                // SameSite=None requires Secure=true. Otherwise browsers will drop the cookie.
-                sameSite:
-                    (process.env.COOKIE_SECURE !== undefined
-                        ? process.env.COOKIE_SECURE === "true"
-                        : process.env.NODE_ENV === "production")
-                        ? "none"
-                        : "lax",
+                secure: process.env.NODE_ENV === "production", // true in production
+                sameSite: process.env.NODE_ENV === "production" ? "none" : "lax", // None for cross-site (Render subdomains)
                 maxAge: 36000000 // 10 hours in ms
             });
 
@@ -163,6 +151,7 @@ export class AuthController {
             SocketService.getInstance().emit(RealtimeEvents.users.status, { id: user.id, is_active: true });
 
             return ApiResponses.ok(res, {
+                token,
                 user: {
                     id: user.id,
                     username: user.username,
@@ -233,31 +222,15 @@ export class AuthController {
 
         res.clearCookie("token", {
             httpOnly: true,
-            secure:
-                process.env.COOKIE_SECURE !== undefined
-                    ? process.env.COOKIE_SECURE === "true"
-                    : process.env.NODE_ENV === "production",
-            sameSite:
-                (process.env.COOKIE_SECURE !== undefined
-                    ? process.env.COOKIE_SECURE === "true"
-                    : process.env.NODE_ENV === "production")
-                    ? "none"
-                    : "lax",
+            secure: process.env.NODE_ENV === "production",
+            sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
             path: "/"
         });
         // Clear any selected admin branch context on logout to avoid stale branch selection across sessions.
         res.clearCookie("active_branch_id", {
             httpOnly: true,
-            secure:
-                process.env.COOKIE_SECURE !== undefined
-                    ? process.env.COOKIE_SECURE === "true"
-                    : process.env.NODE_ENV === "production",
-            sameSite:
-                (process.env.COOKIE_SECURE !== undefined
-                    ? process.env.COOKIE_SECURE === "true"
-                    : process.env.NODE_ENV === "production")
-                    ? "none"
-                    : "lax",
+            secure: process.env.NODE_ENV === "production",
+            sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
             path: "/"
         });
         return ApiResponses.ok(res, { message: "ออกจากระบบสำเร็จ" });
@@ -296,26 +269,7 @@ export class AuthController {
             return ApiResponses.unauthorized(res, "Authentication required");
         }
 
-        const { name, password } = req.body ?? {};
         const userRepository = AppDataSource.getRepository(Users);
-        const updatePatch: Partial<Users> = {};
-
-        if (typeof name === "string") {
-            const trimmedName = name.trim();
-            if (!trimmedName) {
-                return ApiResponses.badRequest(res, "Name cannot be empty");
-            }
-            updatePatch.name = trimmedName;
-        }
-
-        if (typeof password === "string" && password.length > 0) {
-            updatePatch.password = await bcrypt.hash(password, 10);
-        }
-
-        if (Object.keys(updatePatch).length > 0) {
-            await userRepository.update(req.user.id, updatePatch);
-        }
-
         const user = await userRepository.findOne({
             where: { id: req.user.id },
             relations: ["roles", "branch"],
@@ -324,6 +278,18 @@ export class AuthController {
         if (!user) {
             return ApiResponses.notFound(res, "User");
         }
+
+        const { name, password } = req.body ?? {};
+
+        if (typeof name === "string") {
+            user.name = name.trim();
+        }
+
+        if (typeof password === "string" && password.length > 0) {
+            user.password = await bcrypt.hash(password, 10);
+        }
+
+        await userRepository.save(user);
 
         const role = normalizeRoleName(user.roles?.roles_name) || "unknown";
 
@@ -365,12 +331,10 @@ export class AuthController {
 
         const branchId = (req.body?.branch_id ?? null) as string | null;
 
-        const forwardedProto = String(req.headers["x-forwarded-proto"] || "").toLowerCase();
-        const isHttps = Boolean((req as any).secure) || forwardedProto === "https";
         const cookieOptions = {
             httpOnly: true,
-            secure: isHttps,
-            sameSite: (isHttps ? "none" : "lax") as "none" | "lax",
+            secure: process.env.NODE_ENV === "production",
+            sameSite: (process.env.NODE_ENV === "production" ? "none" : "lax") as "none" | "lax",
             path: "/",
             maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
         };
@@ -389,3 +353,4 @@ export class AuthController {
         return ApiResponses.ok(res, { active_branch_id: branchId });
     }
 }
+
