@@ -25,6 +25,7 @@ export class SocketService {
     private static instance: SocketService;
     private io: Server | null = null;
     private adapterInitStarted = false;
+    private redisAdapterReady = false;
 
     // Realtime event governance:
     // - "global" events are rare (system announcements only)
@@ -186,10 +187,26 @@ export class SocketService {
 
             await Promise.all([pubClient.connect(), subClient.connect()]);
             this.io.adapter(createAdapter(pubClient, subClient));
+            this.redisAdapterReady = true;
             console.info("[SocketAdapter] Redis adapter enabled for multi-instance realtime.");
         } catch (error) {
+            this.redisAdapterReady = false;
             console.error("[SocketAdapter] Failed to initialize Redis adapter. Falling back to local adapter.", error);
         }
+    }
+
+    public getHealthSnapshot(): {
+        initialized: boolean;
+        connectedClients: number;
+        redisAdapterEnabled: boolean;
+        redisAdapterReady: boolean;
+    } {
+        return {
+            initialized: Boolean(this.io),
+            connectedClients: this.io?.engine?.clientsCount || 0,
+            redisAdapterEnabled: process.env.SOCKET_REDIS_ADAPTER_ENABLED === "true",
+            redisAdapterReady: this.redisAdapterReady,
+        };
     }
 
     private async updateUserStatus(userId: string, isActive: boolean) {
