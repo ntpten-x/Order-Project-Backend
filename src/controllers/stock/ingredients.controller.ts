@@ -7,17 +7,14 @@ import { getBranchId } from "../../middleware/branch.middleware";
 import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../../utils/auditLogger";
 import { getClientIp } from "../../utils/securityLogger";
 import { parseCreatedSort } from "../../utils/sortCreated";
+import { normalizeImageSourceInput } from "../../utils/imageSource";
 
 function normalizeDescription(value: unknown): string {
     return typeof value === "string" ? value.trim() : "";
 }
 
 function normalizeImageUrl(value: unknown): string | null {
-    if (typeof value !== "string") {
-        return null;
-    }
-    const normalized = value.trim();
-    return normalized.length > 0 ? normalized : null;
+    return normalizeImageSourceInput(value);
 }
 
 /**

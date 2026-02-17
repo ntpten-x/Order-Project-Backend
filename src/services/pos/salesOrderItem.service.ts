@@ -2,15 +2,58 @@ import { SalesOrderItemModels } from "../../models/pos/salesOrderItem.model";
 import { SocketService } from "../socket.service";
 import { SalesOrderItem } from "../../entity/pos/SalesOrderItem";
 import { SalesOrder } from "../../entity/pos/SalesOrder";
+import { OrderStatus } from "../../entity/pos/OrderEnums";
 import { getRepository } from "../../database/dbContext";
 import { RealtimeEvents } from "../../utils/realtimeEvents";
 import { recalculateOrderTotal } from "./orderTotals.service";
-import { normalizeOrderStatus } from "../../utils/orderStatus";
+import { normalizeOrderStatus, isCancelledStatus } from "../../utils/orderStatus";
 
 export class SalesOrderItemService {
     private socketService = SocketService.getInstance();
 
     constructor(private salesOrderItemModel: SalesOrderItemModels) { }
+
+    private canSyncFromItemStatuses(status: OrderStatus): boolean {
+        return (
+            status === OrderStatus.Pending ||
+            status === OrderStatus.Cooking ||
+            status === OrderStatus.Served
+        );
+    }
+
+    private deriveOrderStatusFromItems(items: SalesOrderItem[]): OrderStatus | null {
+        const activeItems = items.filter((item) => !isCancelledStatus(String(item.status)));
+        if (activeItems.length === 0) return null;
+
+        const statuses = activeItems.map((item) => normalizeOrderStatus(String(item.status)));
+        if (statuses.some((status) => status === OrderStatus.Cooking)) {
+            return OrderStatus.Cooking;
+        }
+        if (statuses.every((status) => status === OrderStatus.Served)) {
+            return OrderStatus.Served;
+        }
+        return OrderStatus.Pending;
+    }
+
+    private async syncOrderStatusFromItems(orderId: string, branchId?: string): Promise<SalesOrder | null> {
+        const orderRepo = getRepository(SalesOrder);
+        const itemRepo = getRepository(SalesOrderItem);
+
+        const order = await orderRepo.findOne({
+            where: branchId ? ({ id: orderId, branch_id: branchId } as any) : { id: orderId },
+        });
+        if (!order) return null;
+        if (!this.canSyncFromItemStatuses(order.status)) return order;
+
+        const items = await itemRepo.find({ where: { order_id: orderId } });
+        const nextStatus = this.deriveOrderStatusFromItems(items);
+        if (nextStatus && nextStatus !== order.status) {
+            await orderRepo.update(order.id, { status: nextStatus } as Partial<SalesOrder>);
+            order.status = nextStatus;
+        }
+
+        return order;
+    }
 
     async findAll(branchId?: string): Promise<SalesOrderItem[]> {
         try {
@@ -54,14 +97,16 @@ export class SalesOrderItemService {
 
             // Keep order totals consistent even if this endpoint is used directly.
             await recalculateOrderTotal(createdItem.order_id);
-            if (branchId) {
-                this.socketService.emitToBranch(branchId, RealtimeEvents.orders.update, { id: createdItem.order_id } as any);
+            const syncedOrder = await this.syncOrderStatusFromItems(createdItem.order_id, branchId);
+            const effectiveBranchId = syncedOrder?.branch_id || branchId;
+            if (effectiveBranchId) {
+                this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.update, { id: createdItem.order_id } as any);
             }
 
             const completeItem = await this.salesOrderItemModel.findOne(createdItem.id, branchId)
             if (completeItem) {
-                if (branchId) {
-                    this.socketService.emitToBranch(branchId, RealtimeEvents.salesOrderItem.create, completeItem)
+                if (effectiveBranchId) {
+                    this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.salesOrderItem.create, completeItem)
                 }
                 return completeItem
             }
@@ -84,11 +129,13 @@ export class SalesOrderItemService {
 
             const updatedItem = await this.salesOrderItemModel.update(id, salesOrderItem, branchId)
             await recalculateOrderTotal(itemToUpdate.order_id);
-            if (branchId) {
-                this.socketService.emitToBranch(branchId, RealtimeEvents.orders.update, { id: itemToUpdate.order_id } as any);
+            const syncedOrder = await this.syncOrderStatusFromItems(itemToUpdate.order_id, branchId);
+            const effectiveBranchId = syncedOrder?.branch_id || branchId;
+            if (effectiveBranchId) {
+                this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.update, { id: itemToUpdate.order_id } as any);
             }
-            if (branchId) {
-                this.socketService.emitToBranch(branchId, RealtimeEvents.salesOrderItem.update, updatedItem)
+            if (effectiveBranchId) {
+                this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.salesOrderItem.update, updatedItem)
             }
             return updatedItem
         } catch (error) {
@@ -102,11 +149,13 @@ export class SalesOrderItemService {
             await this.salesOrderItemModel.delete(id, branchId)
             if (item?.order_id) {
                 await recalculateOrderTotal(item.order_id);
-                if (branchId) {
-                    this.socketService.emitToBranch(branchId, RealtimeEvents.orders.update, { id: item.order_id } as any);
+                const syncedOrder = await this.syncOrderStatusFromItems(item.order_id, branchId);
+                const effectiveBranchId = syncedOrder?.branch_id || branchId;
+                if (effectiveBranchId) {
+                    this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.update, { id: item.order_id } as any);
+                    this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.salesOrderItem.delete, { id })
                 }
-            }
-            if (branchId) {
+            } else if (branchId) {
                 this.socketService.emitToBranch(branchId, RealtimeEvents.salesOrderItem.delete, { id })
             }
         } catch (error) {
