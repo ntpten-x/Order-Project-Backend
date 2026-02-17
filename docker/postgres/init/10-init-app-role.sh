@@ -1,0 +1,65 @@
+#!/bin/sh
+set -eu
+
+APP_DB_USER="${APP_DB_USER:-order_app}"
+APP_DB_PASSWORD="${APP_DB_PASSWORD:-change-me-db-password}"
+APP_DB_NAME="${APP_DB_NAME:-${POSTGRES_DB:-postgres}}"
+
+if [ "$APP_DB_USER" = "${POSTGRES_USER:-postgres}" ]; then
+  echo "[db-init] APP_DB_USER must not be the bootstrap superuser (${POSTGRES_USER:-postgres})." >&2
+  exit 1
+fi
+
+case "$APP_DB_USER" in
+  ""|*[!A-Za-z0-9_]*)
+    echo "[db-init] APP_DB_USER contains invalid characters." >&2
+    exit 1
+    ;;
+esac
+
+case "$APP_DB_USER" in
+  [0-9]*)
+    echo "[db-init] APP_DB_USER must not start with a digit." >&2
+    exit 1
+    ;;
+esac
+
+APP_DB_USER_SQL="$(printf '%s' "$APP_DB_USER" | sed 's/"/""/g')"
+APP_DB_PASSWORD_SQL="$(printf '%s' "$APP_DB_PASSWORD" | sed "s/'/''/g")"
+APP_DB_NAME_SQL="$(printf '%s' "$APP_DB_NAME" | sed 's/"/""/g')"
+
+psql -v ON_ERROR_STOP=1 --username "${POSTGRES_USER}" --dbname "${POSTGRES_DB}" <<EOSQL
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pg_trgm";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+DO \$\$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${APP_DB_USER_SQL}') THEN
+    CREATE ROLE "${APP_DB_USER_SQL}" LOGIN PASSWORD '${APP_DB_PASSWORD_SQL}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+  ELSE
+    ALTER ROLE "${APP_DB_USER_SQL}" WITH LOGIN PASSWORD '${APP_DB_PASSWORD_SQL}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+  END IF;
+END
+\$\$;
+
+DO \$\$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'app') THEN
+    EXECUTE format('CREATE SCHEMA app AUTHORIZATION %I', '${APP_DB_USER_SQL}');
+  ELSE
+    EXECUTE format('ALTER SCHEMA app OWNER TO %I', '${APP_DB_USER_SQL}');
+  END IF;
+END
+\$\$;
+
+GRANT CONNECT ON DATABASE "${APP_DB_NAME_SQL}" TO "${APP_DB_USER_SQL}";
+GRANT USAGE, CREATE ON SCHEMA public TO "${APP_DB_USER_SQL}";
+GRANT USAGE, CREATE ON SCHEMA app TO "${APP_DB_USER_SQL}";
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO "${APP_DB_USER_SQL}";
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO "${APP_DB_USER_SQL}";
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "${APP_DB_USER_SQL}";
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO "${APP_DB_USER_SQL}";
+EOSQL
+
+echo "[db-init] ensured role ${APP_DB_USER} as NOSUPERUSER NOBYPASSRLS"

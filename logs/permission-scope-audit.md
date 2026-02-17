@@ -1,10 +1,10 @@
 # Permission Scope Audit
 
-Generated: 2026-02-13T07:39:56.794Z
+Generated: 2026-02-17T11:52:03.266Z
 
 ## Critical Rules Coverage
 
-- Covered critical routes: 21
+- Covered critical routes: 20
 - Missing critical routes: 0
 
 ## Missing Critical Scope Middleware
@@ -37,16 +37,16 @@ _None_
 - src/routes/pos/products.route.ts:27 GET /:id (products.page:view)
 - src/routes/pos/products.route.ts:31 PUT /:id (products.page:update)
 - src/routes/pos/products.route.ts:32 DELETE /:id (products.page:delete)
-- src/routes/pos/productsUnit.route.ts:27 GET /:id (products.page:view)
-- src/routes/pos/productsUnit.route.ts:31 PUT /:id (products.page:update)
-- src/routes/pos/productsUnit.route.ts:32 DELETE /:id (products.page:delete)
+- src/routes/pos/productsUnit.route.ts:27 GET /:id (products_unit.page:view)
+- src/routes/pos/productsUnit.route.ts:31 PUT /:id (products_unit.page:update)
+- src/routes/pos/productsUnit.route.ts:32 DELETE /:id (products_unit.page:delete)
 - src/routes/pos/salesOrderDetail.route.ts:25 GET /:id (orders.page:view)
 - src/routes/pos/salesOrderDetail.route.ts:28 PUT /:id (orders.page:update)
 - src/routes/pos/salesOrderDetail.route.ts:29 DELETE /:id (orders.page:delete)
 - src/routes/pos/salesOrderItem.route.ts:25 GET /:id (orders.page:view)
 - src/routes/pos/salesOrderItem.route.ts:28 PUT /:id (orders.page:update)
 - src/routes/pos/salesOrderItem.route.ts:29 DELETE /:id (orders.page:delete)
-- src/routes/pos/shifts.route.ts:24 GET /summary/:id (shifts.page:view)
+- src/routes/pos/shifts.route.ts:25 GET /summary/:id (shifts.page:view)
 - src/routes/pos/tables.route.ts:27 GET /:id (tables.page:view)
 - src/routes/pos/tables.route.ts:31 PUT /:id (tables.page:update)
 - src/routes/pos/tables.route.ts:32 DELETE /:id (tables.page:delete)

@@ -39,18 +39,18 @@ const PENDING_SHIFT_ORDER_STATUSES: OrderStatus[] = [
 function toOrderTypeLabel(orderType: string): string {
     switch (orderType) {
         case "DineIn":
-            return "เธ—เธฒเธเธ—เธตเนเธฃเนเธฒเธ";
+            return "ทานที่ร้าน";
         case "TakeAway":
-            return "เธชเธฑเนเธเธเธฅเธฑเธเธเนเธฒเธ";
+            return "สั่งกลับบ้าน";
         case "Delivery":
-            return "เน€เธ”เธฅเธดเน€เธงเธญเธฃเธตเน";
+            return "เดลิเวอรี่";
         default:
-            return "เนเธกเนเธฃเธฐเธเธธเธเธฃเธฐเน€เธ เธ—";
+            return "ไม่ระบุประเภท";
     }
 }
 
 function formatPendingOrderSummary(byOrderType: PendingOrderTypeSummary[]): string {
-    return byOrderType.map((item) => `${item.label} ${item.count} เธฃเธฒเธขเธเธฒเธฃ`).join(", ");
+    return byOrderType.map((item) => `${item.label} ${item.count} รายการ`).join(", ");
 }
 
 export class ShiftsService {
@@ -211,7 +211,7 @@ export class ShiftsService {
     async closeShift(branchId: string, endAmount: number, closedByUserId?: string): Promise<Shifts> {
         const activeShift = await this.getCurrentShift(branchId);
         if (!activeShift) {
-            throw new AppError("เนเธกเนเธเธเธเธฐเธ—เธตเนเธเธณเธฅเธฑเธเธ—เธณเธเธฒเธเธญเธขเธนเน", 404);
+            throw new AppError("ไม่พบกะที่กำลังทำงานอยู่", 404);
         }
         const pendingByOrderType = await this.getPendingOrdersByType(activeShift);
         this.ensureNoPendingOrders(pendingByOrderType);
@@ -238,7 +238,7 @@ export class ShiftsService {
         });
 
         if (!shift) {
-            throw new AppError("เนเธกเนเธเธเธเนเธญเธกเธนเธฅเธเธฐ", 404);
+            throw new AppError("ไม่พบข้อมูลกะ", 404);
         }
 
         const payments = filterSuccessfulPayments(shift.payments || []);
@@ -250,8 +250,8 @@ export class ShiftsService {
         const categoryCounts: Record<string, number> = {};
         const productSales: Record<string, { id: string, name: string, quantity: number, revenue: number, unit: string }> = {};
         const paymentMethodSales: Record<string, number> = {
-            "เน€เธเธดเธเธชเธ”": 0,
-            "เธเธฃเนเธญเธกเน€เธเธขเน": 0
+            "เงินสด": 0,
+            "พร้อมเพย์": 0
         };
         const orderTypeSales: Record<string, number> = {
             "DineIn": 0,
@@ -262,7 +262,7 @@ export class ShiftsService {
         const seenOrderIds = new Set<string>();
 
         payments.forEach(payment => {
-            const methodName = payment.payment_method?.display_name || "เธญเธทเนเธเน";
+            const methodName = payment.payment_method?.display_name || "อื่นๆ";
             paymentMethodSales[methodName] = Math.round(((paymentMethodSales[methodName] || 0) + Number(payment.amount)) * 100) / 100;
 
             if (payment.order) {
@@ -283,7 +283,7 @@ export class ShiftsService {
 
                 totalCost += cost * qty;
 
-                const catName = item.product?.category?.display_name || "เธญเธทเนเธเน";
+                const catName = item.product?.category?.display_name || "อื่นๆ";
                 categoryCounts[catName] = (categoryCounts[catName] || 0) + qty;
 
                 const pId = item.product?.id;
@@ -294,7 +294,7 @@ export class ShiftsService {
                             name: item.product.display_name,
                             quantity: 0,
                             revenue: 0,
-                            unit: item.product.unit?.display_name || "เธเธดเนเธ"
+                            unit: item.product.unit?.display_name || "ชิ้น"
                         };
                     }
                     productSales[pId].quantity += qty;
@@ -471,5 +471,4 @@ export class ShiftsService {
         };
     }
 }
-
 

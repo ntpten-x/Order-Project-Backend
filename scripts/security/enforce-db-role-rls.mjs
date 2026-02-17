@@ -10,6 +10,7 @@ function quoteIdent(value) {
 async function main() {
   const shouldFix = process.argv.includes("--fix") || process.env.FIX_BYPASSRLS === "1";
   const allowSuperuser = process.env.ALLOW_SUPERUSER_DB_ROLE === "1";
+  const allowBypassRls = process.env.ALLOW_BYPASSRLS === "1";
   const useSsl = process.env.DATABASE_SSL === "true" || process.env.DATABASE_SSL === "1";
 
   const client = new Client({
@@ -46,6 +47,14 @@ async function main() {
       `[db-role-rls] role=${roleName} superuser=${isSuperuser ? "true" : "false"} bypassrls=${hasBypassRls ? "true" : "false"}`
     );
 
+    if (roleName.toLowerCase() === "postgres" && !allowSuperuser) {
+      console.error(
+        "[db-role-rls] FAIL current DB role is postgres. Runtime must use a dedicated app role (NOSUPERUSER + NOBYPASSRLS)."
+      );
+      process.exitCode = 1;
+      return;
+    }
+
     if (isSuperuser && !allowSuperuser) {
       console.error(
         "[db-role-rls] FAIL current DB role is superuser; use a dedicated non-superuser app role for real RLS isolation."
@@ -54,12 +63,14 @@ async function main() {
       return;
     }
 
-    if (!hasBypassRls) {
+    if (!hasBypassRls || allowBypassRls) {
       console.log("[db-role-rls] PASS role does not have BYPASSRLS.");
-      return;
+      if (!isSuperuser || allowSuperuser) {
+        return;
+      }
     }
 
-    if (!shouldFix) {
+    if (!shouldFix && hasBypassRls && !allowBypassRls) {
       console.error(
         "[db-role-rls] FAIL role has BYPASSRLS. Re-run with --fix or set FIX_BYPASSRLS=1 to apply ALTER ROLE ... NOBYPASSRLS."
       );
@@ -75,8 +86,8 @@ async function main() {
       return;
     }
 
-    await client.query(`ALTER ROLE ${quoteIdent(roleName)} NOBYPASSRLS`);
-    console.log(`[db-role-rls] FIXED applied ALTER ROLE ${roleName} NOBYPASSRLS`);
+    await client.query(`ALTER ROLE ${quoteIdent(roleName)} NOSUPERUSER NOBYPASSRLS`);
+    console.log(`[db-role-rls] FIXED applied ALTER ROLE ${roleName} NOSUPERUSER NOBYPASSRLS`);
   } finally {
     await client.end();
   }

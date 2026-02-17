@@ -180,7 +180,8 @@ for (const file of files) {
 
     const resource = permissionMatch[1];
     const action = permissionMatch[2];
-    const hasScopeMiddleware = /enforce[A-Za-z0-9_]*Scope\(/.test(args);
+    const hasScopeMiddleware =
+      /enforce[A-Za-z0-9_]*Scope\(/.test(args) || args.includes("enforceAllScopeOnly(");
     const line = lineOfIndex(source, match.index);
 
     const criticalRule = criticalScopeRules.find(

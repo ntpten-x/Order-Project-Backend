@@ -290,7 +290,8 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
         // Admin branch switching:
         // - Non-admins are always scoped to their own branch_id.
         // - Admins can optionally set a selected branch via the "active_branch_id" cookie.
-        //   If not set, admin operates with no branch context (RLS allows full access).
+        //   If not set (or invalid), admin falls back to assigned branch_id.
+        //   Admins without assigned branch run without branch context.
         const cookieBranchIdRaw = typeof req.cookies?.active_branch_id === "string" ? req.cookies.active_branch_id : "";
         const cookieBranchId = cookieBranchIdRaw.trim();
         const effectiveBranchId =
@@ -347,7 +348,7 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
             method: req.method,
             details: { reason: 'System error', error: (err as any).message }
         });
-        return ApiResponses.internalError(res, "Authentication system error", { error: (err as any).message });
+        return ApiResponses.internalError(res, "Authentication system error");
     }
 };
 
