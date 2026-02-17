@@ -8,17 +8,14 @@ import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../../util
 import { getClientIp } from "../../utils/securityLogger";
 import { setPrivateSwrHeaders } from "../../utils/cacheHeaders";
 import { parseCreatedSort } from "../../utils/sortCreated";
+import { normalizeImageSourceInput } from "../../utils/imageSource";
 
 function normalizeDescription(value: unknown): string {
     return typeof value === "string" ? value.trim() : "";
 }
 
 function normalizeImageUrl(value: unknown): string | null {
-    if (typeof value !== "string") {
-        return null;
-    }
-    const normalized = value.trim();
-    return normalized.length > 0 ? normalized : null;
+    return normalizeImageSourceInput(value);
 }
 
 /**

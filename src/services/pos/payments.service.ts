@@ -261,12 +261,13 @@ export class PaymentsService {
                 if (payment.order_id) {
                     await this.refreshOrderPaymentSummary(payment.order_id, manager, branchId);
                 }
+                return payment.branch_id || branchId || null;
             } catch (error) {
                 throw error
             }
-        }).then(() => {
-            if (branchId) {
-                this.socketService.emitToBranch(branchId, RealtimeEvents.payments.delete, { id })
+        }).then((emitBranchId) => {
+            if (emitBranchId) {
+                this.socketService.emitToBranch(emitBranchId, RealtimeEvents.payments.delete, { id })
             }
         })
     }

@@ -49,7 +49,8 @@ import { buildCorsOriginChecker, resolveAllowedOrigins } from "./src/utils/cors"
 const app = express();
 const httpServer = createServer(app); // Wrap express with HTTP server
 const port = process.env.PORT || 4000;
-const bodyLimitMb = Number(process.env.REQUEST_BODY_LIMIT_MB || 5);
+const rawBodyLimitMb = Number(process.env.REQUEST_BODY_LIMIT_MB || 20);
+const bodyLimitMb = Number.isFinite(rawBodyLimitMb) && rawBodyLimitMb > 0 ? rawBodyLimitMb : 20;
 const enablePerfLogs = process.env.ENABLE_PERF_LOG === "true";
 const frontendUrl = process.env.FRONTEND_URL || "";
 const cookieSecureOverride = process.env.COOKIE_SECURE;
