@@ -2,9 +2,8 @@ import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { AppDataSource } from "../database/database";
 import { Users } from "../entity/Users";
-import { Branch } from "../entity/Branch";
 import { securityLogger, getClientIp } from "../utils/securityLogger";
-import { getRepository, runWithDbContext } from "../database/dbContext";
+import { runWithDbContext } from "../database/dbContext";
 import { ApiResponses } from "../utils/ApiResponse";
 import { getRedisClient, getSessionKey, isRedisConfigured } from "../lib/redisClient";
 import { normalizeRoleName } from "../utils/role";
@@ -18,7 +17,118 @@ export interface AuthRequest extends Request {
 
 // Session timeout in milliseconds (default: 8 hours)
 const SESSION_TIMEOUT = Number(process.env.SESSION_TIMEOUT_MS) || 8 * 60 * 60 * 1000;
+const AUTH_USER_DB_REVALIDATE_MS = Number(process.env.AUTH_USER_DB_REVALIDATE_MS || 5 * 60 * 1000);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+type AuthSessionRecord = {
+    userId?: string;
+    username?: string;
+    name?: string | null;
+    role?: string;
+    roleDisplayName?: string;
+    rolesId?: string;
+    branchId?: string | null;
+    isUse?: boolean;
+    isActive?: boolean;
+    createdAt?: number;
+    lastValidatedAt?: number;
+};
+
+type AuthUserSnapshot = {
+    id: string;
+    username: string;
+    name: string | null;
+    rolesId: string;
+    roleName: string;
+    roleDisplayName: string;
+    branchId: string | null;
+    isUse: boolean;
+    isActive: boolean;
+};
+
+function toBoolean(value: unknown): boolean {
+    if (value === true || value === "true" || value === 1 || value === "1" || value === "t") return true;
+    return false;
+}
+
+function toUsersFromSnapshot(snapshot: AuthUserSnapshot): Users {
+    return {
+        id: snapshot.id,
+        username: snapshot.username,
+        name: snapshot.name ?? undefined,
+        roles_id: snapshot.rolesId,
+        branch_id: snapshot.branchId ?? undefined,
+        is_use: snapshot.isUse,
+        is_active: snapshot.isActive,
+        roles: {
+            id: snapshot.rolesId,
+            roles_name: snapshot.roleName,
+            display_name: snapshot.roleDisplayName,
+        } as any,
+    } as Users;
+}
+
+async function getSessionWithSlidingTtl(redis: any, sessionKey: string): Promise<string | null> {
+    if (typeof redis.getEx === "function") {
+        try {
+            return await redis.getEx(sessionKey, { PX: SESSION_TIMEOUT });
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            if (!/unknown command|wrong number of arguments/i.test(message)) {
+                throw error;
+            }
+        }
+    }
+
+    const sessionJson = await redis.get(sessionKey);
+    if (sessionJson) {
+        await redis.pExpire(sessionKey, SESSION_TIMEOUT);
+    }
+    return sessionJson;
+}
+
+async function loadAuthUserSnapshot(userId: string): Promise<AuthUserSnapshot | null> {
+    const row = await AppDataSource.getRepository(Users)
+        .createQueryBuilder("u")
+        .leftJoin("u.roles", "r")
+        .select("u.id", "id")
+        .addSelect("u.username", "username")
+        .addSelect("u.name", "name")
+        .addSelect("u.roles_id", "rolesId")
+        .addSelect("u.branch_id", "branchId")
+        .addSelect("u.is_use", "isUse")
+        .addSelect("u.is_active", "isActive")
+        .addSelect("r.roles_name", "roleName")
+        .addSelect("r.display_name", "roleDisplayName")
+        .where("u.id = :userId", { userId })
+        .getRawOne<{
+            id: string;
+            username: string;
+            name: string | null;
+            rolesId: string;
+            branchId: string | null;
+            isUse: boolean | string | number;
+            isActive: boolean | string | number;
+            roleName: string;
+            roleDisplayName: string;
+        }>();
+
+    if (!row) return null;
+    const normalizedRole = normalizeRoleName(row.roleName);
+    if (!normalizedRole) return null;
+
+    return {
+        id: row.id,
+        username: row.username,
+        name: row.name ?? null,
+        rolesId: row.rolesId,
+        roleName: normalizedRole,
+        roleDisplayName: row.roleDisplayName || normalizedRole,
+        branchId: row.branchId ?? null,
+        isUse: toBoolean(row.isUse),
+        isActive: toBoolean(row.isActive),
+    };
+}
 
 export const authenticateToken = async (req: AuthRequest, res: Response, next: NextFunction) => {
     // 1. Get token from cookies
@@ -57,25 +167,93 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
         }
 
         const redis = await getRedisClient();
+        let userSnapshot: AuthUserSnapshot | null = null;
+
         if (redis) {
             const sessionKey = getSessionKey(jti);
-            const sessionJson = await redis.get(sessionKey);
+            const sessionJson = await getSessionWithSlidingTtl(redis, sessionKey);
             if (!sessionJson) {
                 return ApiResponses.unauthorized(res, "Session expired or revoked");
             }
+
+            let session: AuthSessionRecord;
             try {
-                const session = JSON.parse(sessionJson) as { userId?: string };
-                if (session.userId && session.userId !== decoded.id) {
-                    return ApiResponses.unauthorized(res, "Session mismatch");
-                }
+                session = JSON.parse(sessionJson) as AuthSessionRecord;
             } catch {
                 return ApiResponses.unauthorized(res, "Session invalid");
             }
-            // Sliding expiration: refresh TTL to session timeout
-            await redis.pExpire(sessionKey, SESSION_TIMEOUT);
+
+            if (session.userId && session.userId !== decoded.id) {
+                return ApiResponses.unauthorized(res, "Session mismatch");
+            }
+
+            const normalizedSessionRole = normalizeRoleName(session.role);
+            const sessionIncomplete =
+                !normalizedSessionRole ||
+                !session.rolesId ||
+                !session.username ||
+                typeof session.isUse !== "boolean" ||
+                typeof session.isActive !== "boolean";
+            const lastValidatedAt = Number(session.lastValidatedAt || 0);
+            const shouldRevalidateFromDb =
+                sessionIncomplete ||
+                AUTH_USER_DB_REVALIDATE_MS <= 0 ||
+                !Number.isFinite(lastValidatedAt) ||
+                Date.now() - lastValidatedAt >= AUTH_USER_DB_REVALIDATE_MS;
+
+            if (shouldRevalidateFromDb) {
+                const freshSnapshot = await loadAuthUserSnapshot(decoded.id);
+                if (!freshSnapshot) {
+                    await redis.del(sessionKey);
+                    return ApiResponses.unauthorized(res, "User not found");
+                }
+                if (!freshSnapshot.isUse) {
+                    await redis.del(sessionKey);
+                    return ApiResponses.forbidden(res, "Account disabled");
+                }
+
+                userSnapshot = freshSnapshot;
+                const updatedSession: AuthSessionRecord = {
+                    ...session,
+                    userId: freshSnapshot.id,
+                    username: freshSnapshot.username,
+                    name: freshSnapshot.name ?? null,
+                    role: freshSnapshot.roleName,
+                    roleDisplayName: freshSnapshot.roleDisplayName,
+                    rolesId: freshSnapshot.rolesId,
+                    branchId: freshSnapshot.branchId ?? null,
+                    isUse: freshSnapshot.isUse,
+                    isActive: freshSnapshot.isActive,
+                    lastValidatedAt: Date.now(),
+                };
+                await redis.set(sessionKey, JSON.stringify(updatedSession), { PX: SESSION_TIMEOUT });
+            } else {
+                if (!session.isUse) {
+                    return ApiResponses.forbidden(res, "Account disabled");
+                }
+                userSnapshot = {
+                    id: decoded.id,
+                    username: session.username!,
+                    name: session.name ?? null,
+                    rolesId: session.rolesId!,
+                    roleName: normalizedSessionRole!,
+                    roleDisplayName: session.roleDisplayName || normalizedSessionRole!,
+                    branchId: session.branchId ?? null,
+                    isUse: session.isUse!,
+                    isActive: session.isActive!,
+                };
+            }
         } else if (isRedisConfigured()) {
             // If Redis URL is configured but client unavailable, fail closed
             return ApiResponses.internalError(res, "Session store unavailable");
+        } else {
+            userSnapshot = await loadAuthUserSnapshot(decoded.id);
+            if (!userSnapshot) {
+                return ApiResponses.unauthorized(res, "User not found");
+            }
+            if (!userSnapshot.isUse) {
+                return ApiResponses.forbidden(res, "Account disabled");
+            }
         }
 
         // Check token expiry (session timeout)
@@ -98,41 +276,12 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
         }
 
         // 3. Attach user to request
-        const userRepository = AppDataSource.getRepository(Users);
-        const user = await userRepository.findOne({
-            where: { id: decoded.id },
-            relations: ["roles"]
-        });
-
-        if (!user) {
-            const ip = getClientIp(req);
-            securityLogger.log({
-                type: 'AUTH_FAILURE',
-                userId: decoded.id,
-                ip,
-                userAgent: req.headers['user-agent'],
-                path: req.path,
-                method: req.method,
-                details: { reason: 'User not found' }
-            });
+        if (!userSnapshot) {
             return ApiResponses.unauthorized(res, "User not found");
         }
-        if (!user.is_use) {
-            const ip = getClientIp(req);
-            securityLogger.log({
-                type: 'UNAUTHORIZED_ACCESS',
-                userId: user.id,
-                ip,
-                userAgent: req.headers['user-agent'],
-                path: req.path,
-                method: req.method,
-                details: { reason: 'Account disabled' }
-            });
-            return ApiResponses.forbidden(res, "Account disabled");
-        }
-
-        const normalizedRole = normalizeRoleName(user.roles?.roles_name);
-        if (!normalizedRole) {
+        const user = toUsersFromSnapshot(userSnapshot);
+        const normalizedRole = normalizeRoleName(userSnapshot.roleName);
+        if (!normalizedRole || !user.roles) {
             return ApiResponses.forbidden(res, "Invalid role configuration");
         }
         user.roles.roles_name = normalizedRole;
@@ -145,18 +294,15 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
         const cookieBranchIdRaw = typeof req.cookies?.active_branch_id === "string" ? req.cookies.active_branch_id : "";
         const cookieBranchId = cookieBranchIdRaw.trim();
         const effectiveBranchId =
-            isAdmin ? (cookieBranchId && UUID_RE.test(cookieBranchId) ? cookieBranchId : user.branch_id) : user.branch_id;
+            isAdmin
+                ? (cookieBranchId && UUID_RE.test(cookieBranchId) ? cookieBranchId : userSnapshot.branchId ?? user.branch_id)
+                : (userSnapshot.branchId ?? user.branch_id);
 
         // Run the rest of the request inside a DB context so Postgres RLS (if enabled)
         // can enforce branch isolation even if a future query forgets branch_id filters.
         return runWithDbContext(
             { branchId: effectiveBranchId, userId: user.id, role: normalizedRole, isAdmin },
             async () => {
-                if (user.branch_id) {
-                    const branch = await getRepository(Branch).findOneBy({ id: user.branch_id });
-                    if (branch) user.branch = branch;
-                }
-
                 req.user = user;
                 req.tokenExpiry = tokenIssuedAt + SESSION_TIMEOUT;
 

@@ -44,15 +44,25 @@ export const enforceUserManagementPolicy = async (req: AuthRequest, res: Respons
         return ApiResponses.unauthorized(res, "Authentication required");
     }
 
-    // Admin: unrestricted
-    if (actorRole === ROLE_ADMIN) return next();
+    const method = req.method.toUpperCase();
+
+    // Admin: enforce create branch from current DB context (active branch cookie / assigned branch).
+    // This prevents clients from spoofing branch_id in payload.
+    if (actorRole === ROLE_ADMIN) {
+        if (method === "POST") {
+            const ctx = getDbContext();
+            if (!ctx?.branchId) {
+                return ApiResponses.forbidden(res, "Access denied: No active branch selected");
+            }
+            (req.body as any).branch_id = ctx.branchId;
+        }
+        return next();
+    }
 
     // Non-manager roles have no business touching /users routes.
     if (actorRole !== ROLE_MANAGER) {
         return ApiResponses.forbidden(res, "Access denied: Insufficient permissions");
     }
-
-    const method = req.method.toUpperCase();
 
     // Manager can list/read within branch (branch scoping is enforced by DB context / queries).
     if (method === "GET") return next();

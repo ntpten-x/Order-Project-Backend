@@ -5,6 +5,7 @@ import { AppDataSource } from "../database/database";
 import { getRedisClient, isRedisConfigured } from "../lib/redisClient";
 import { monitoringService } from "../utils/monitoring";
 import { SocketService } from "./socket.service";
+import { resolveAllowedOrigins } from "../utils/cors";
 
 export type HealthLevel = "ok" | "warn" | "error";
 
@@ -23,6 +24,17 @@ type IndexCheck = {
     columns: string[];
     matched: boolean;
     reason: string;
+};
+
+type SlowEndpointCheck = {
+    method: string;
+    path: string;
+    requestCount: number;
+    averageResponseMs: number;
+    p95ResponseMs: number;
+    p99ResponseMs: number;
+    maxResponseMs: number;
+    errorRatePercent: number;
 };
 
 type RetentionLogSummary = {
@@ -56,6 +68,7 @@ export type SystemHealthReport = {
         p95ResponseMs: number;
         p99ResponseMs: number;
         sampleSize: number;
+        topSlowEndpoints: SlowEndpointCheck[];
         indexChecks: IndexCheck[];
     };
     integration: {
@@ -70,12 +83,11 @@ export type SystemHealthReport = {
     warnings: string[];
 };
 
-const DEFAULT_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://localhost:3001",
-    "http://127.0.0.1:3000",
-    "http://13.239.29.168:3001",
-];
+export type SystemHealthReportOptions = {
+    slowEndpointMethod?: string;
+    slowEndpointMinSamples?: number;
+};
+
 const CSRF_EXCLUDED_PATHS = ["/auth/login", "/auth/logout", "/health", "/csrf-token", "/metrics"];
 const DEFAULT_ALLOWED_PROXY_PATHS = [
     "/auth/*",
@@ -90,6 +102,7 @@ const DEFAULT_ALLOWED_PROXY_PATHS = [
     "/metrics",
     "/csrf-token",
 ];
+const DEFAULT_PERFORMANCE_EXCLUDED_PATHS = ["/health", "/metrics", "/csrf-token", "/system/health"];
 
 const LEVEL_RANK: Record<HealthLevel, number> = {
     ok: 0,
@@ -123,14 +136,7 @@ function parseNumberEnv(value: string | undefined, fallback: number): number {
 }
 
 function resolveAllowedFrontendOrigins(): string[] {
-    const values = [...DEFAULT_ALLOWED_ORIGINS, process.env.FRONTEND_URL || ""];
-    return Array.from(
-        new Set(
-            values
-                .map((value) => value.trim())
-                .filter(Boolean)
-        )
-    );
+    return resolveAllowedOrigins();
 }
 
 function parseListEnv(value: string | undefined): string[] {
@@ -280,7 +286,7 @@ function indexDefinitionIncludesColumns(indexDefinition: string, columns: string
 }
 
 export class SystemHealthService {
-    async getReport(): Promise<SystemHealthReport> {
+    async getReport(options?: SystemHealthReportOptions): Promise<SystemHealthReport> {
         const checkedAt = toIsoNow();
         const allowedFrontendOrigins = resolveAllowedFrontendOrigins();
         const allowedProxyPaths = resolveAllowedProxyPaths();
@@ -289,7 +295,7 @@ export class SystemHealthService {
         const readiness = await this.collectReadiness(checkedAt, allowedFrontendOrigins);
         const security = this.collectSecurity(checkedAt, allowedFrontendOrigins);
         const jobs = await this.collectRetentionJobs(checkedAt, staleThresholdHours);
-        const performance = await this.collectPerformance();
+        const performance = await this.collectPerformance(options);
 
         const overallLevel = maxLevel([
             ...readiness.map((item) => item.level),
@@ -438,8 +444,17 @@ export class SystemHealthService {
             details: {
                 initialized: socketHealth.initialized,
                 connectedClients: socketHealth.connectedClients,
+                socketPath: (process.env.SOCKET_IO_PATH || "/socket.io").trim() || "/socket.io",
+                totalConnections: socketHealth.totalConnections,
+                authErrorCount: socketHealth.authErrorCount,
+                lastAuthErrorMessage: socketHealth.lastAuthErrorMessage,
+                connectErrorCount: socketHealth.connectErrorCount,
+                lastConnectErrorMessage: socketHealth.lastConnectErrorMessage,
+                lastDisconnectReason: socketHealth.lastDisconnectReason,
                 redisAdapterEnabled: socketHealth.redisAdapterEnabled,
                 redisAdapterReady: socketHealth.redisAdapterReady,
+                lastAuthErrorAt: socketHealth.lastAuthErrorAt,
+                lastConnectErrorAt: socketHealth.lastConnectErrorAt,
             },
         });
 
@@ -619,7 +634,7 @@ export class SystemHealthService {
             },
             buildRetentionJobCheck({
                 key: "retention-pos",
-                title: "POS Order Retention (30 days)",
+                title: `POS Order Retention (${orderDays} days)`,
                 enabled: orderEnabled,
                 dryRun: orderDryRun,
                 retentionDays: orderDays,
@@ -631,7 +646,7 @@ export class SystemHealthService {
             }),
             buildRetentionJobCheck({
                 key: "retention-stock",
-                title: "Stock Order Retention (7 days)",
+                title: `Stock Order Retention (${stockDays} days)`,
                 enabled: stockEnabled,
                 dryRun: stockDryRun,
                 retentionDays: stockDays,
@@ -643,7 +658,7 @@ export class SystemHealthService {
             }),
             buildRetentionJobCheck({
                 key: "retention-audit",
-                title: "Audit Retention (7 days)",
+                title: `Audit Retention (${auditDays} days)`,
                 enabled: auditEnabled,
                 dryRun: auditDryRun,
                 retentionDays: auditDays,
@@ -656,11 +671,50 @@ export class SystemHealthService {
         ];
     }
 
-    private async collectPerformance(): Promise<SystemHealthReport["performance"]> {
-        const averageResponseMs = Number(monitoringService.getPerformanceStats().averageResponseTime.toFixed(2));
-        const p95ResponseMs = Number(monitoringService.getPerformanceStats().p95ResponseTime.toFixed(2));
-        const p99ResponseMs = Number(monitoringService.getPerformanceStats().p99ResponseTime.toFixed(2));
-        const sampleSize = monitoringService.getRecentMetrics(500).length;
+    private async collectPerformance(options?: SystemHealthReportOptions): Promise<SystemHealthReport["performance"]> {
+        const configuredExcludedPaths = parseListEnv(process.env.HEALTH_PERF_EXCLUDED_PATHS);
+        const excludedPaths = configuredExcludedPaths.length > 0
+            ? configuredExcludedPaths
+            : DEFAULT_PERFORMANCE_EXCLUDED_PATHS;
+        const methodFilterRaw = options?.slowEndpointMethod?.trim().toUpperCase();
+        const methodFilter = methodFilterRaw && methodFilterRaw !== "ALL" ? methodFilterRaw : undefined;
+        const topEndpointsLimit = Math.max(
+            1,
+            Math.trunc(parseNumberEnv(process.env.HEALTH_TOP_SLOW_ENDPOINTS_LIMIT, 5))
+        );
+        const minSamplesFromOptions = Number(options?.slowEndpointMinSamples);
+        const topEndpointsMinSamples = Number.isFinite(minSamplesFromOptions)
+            ? Math.max(1, Math.trunc(minSamplesFromOptions))
+            : Math.max(1, Math.trunc(parseNumberEnv(process.env.HEALTH_TOP_SLOW_ENDPOINTS_MIN_SAMPLES, 3)));
+
+        const performanceStats = monitoringService.getPerformanceStats({
+            name: "http_request",
+            excludePaths: excludedPaths,
+            limit: 500,
+        });
+        const averageResponseMs = Number(performanceStats.averageResponseTime.toFixed(2));
+        const p95ResponseMs = Number(performanceStats.p95ResponseTime.toFixed(2));
+        const p99ResponseMs = Number(performanceStats.p99ResponseTime.toFixed(2));
+        const sampleSize = performanceStats.sampleSize;
+        const topSlowEndpoints = monitoringService
+            .getEndpointPerformanceStats({
+                name: "http_request",
+                excludePaths: excludedPaths,
+                limit: 500,
+                topN: topEndpointsLimit,
+                minSamples: topEndpointsMinSamples,
+                methods: methodFilter ? [methodFilter] : undefined,
+            })
+            .map((item) => ({
+                method: item.method,
+                path: item.path,
+                requestCount: item.requestCount,
+                averageResponseMs: Number(item.averageResponseMs.toFixed(2)),
+                p95ResponseMs: Number(item.p95ResponseMs.toFixed(2)),
+                p99ResponseMs: Number(item.p99ResponseMs.toFixed(2)),
+                maxResponseMs: Number(item.maxResponseMs.toFixed(2)),
+                errorRatePercent: Number(item.errorRatePercent.toFixed(2)),
+            }));
 
         const p95WarnMs = parseNumberEnv(process.env.HEALTH_P95_WARN_MS, 250);
         const p99WarnMs = parseNumberEnv(process.env.HEALTH_P99_WARN_MS, 500);
@@ -688,6 +742,7 @@ export class SystemHealthService {
             p95ResponseMs,
             p99ResponseMs,
             sampleSize,
+            topSlowEndpoints,
             indexChecks,
         };
     }

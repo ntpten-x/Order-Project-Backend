@@ -14,6 +14,25 @@ import { getRedisClient, getSessionKey, isRedisConfigured } from "../lib/redisCl
 import { normalizeRoleName } from "../utils/role";
 
 export class AuthController {
+    private static resolveCookieSecurity(req: Request): { secure: boolean; sameSite: "none" | "lax" } {
+        const forwardedProtoHeader = req.headers["x-forwarded-proto"];
+        const forwardedProto = Array.isArray(forwardedProtoHeader)
+            ? forwardedProtoHeader[0]
+            : (forwardedProtoHeader ?? "");
+        const proto = forwardedProto.split(",")[0]?.trim().toLowerCase();
+        const secureByRequest = req.secure || proto === "https";
+
+        const secureOverride = process.env.COOKIE_SECURE;
+        const secure =
+            secureOverride === "true" ||
+            (secureOverride !== "false" && secureByRequest);
+
+        return {
+            secure,
+            sameSite: secure ? "none" : "lax",
+        };
+    }
+
     private static setNoStoreHeaders(res: Response): void {
         res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
         res.setHeader("Pragma", "no-cache");
@@ -126,18 +145,33 @@ export class AuthController {
             if (redis) {
                 const sessionKey = getSessionKey(jti);
                 const ttl = Number(process.env.SESSION_TIMEOUT_MS) || 8 * 60 * 60 * 1000;
-                await redis.set(sessionKey, JSON.stringify({ userId: user.id, role, branchId: user.branch_id, createdAt: Date.now() }), {
-                    PX: ttl,
-                });
+                await redis.set(
+                    sessionKey,
+                    JSON.stringify({
+                        userId: user.id,
+                        username: user.username,
+                        name: user.name ?? null,
+                        role,
+                        roleDisplayName: user.roles?.display_name ?? role,
+                        rolesId: user.roles_id,
+                        branchId: user.branch_id ?? null,
+                        isUse: user.is_use,
+                        isActive: user.is_active,
+                        createdAt: Date.now(),
+                        lastValidatedAt: Date.now(),
+                    }),
+                    { PX: ttl }
+                );
             } else if (isRedisConfigured()) {
                 return ApiResponses.internalError(res, "Session store unavailable");
             }
 
             // Set Cookie
+            const cookieSecurity = AuthController.resolveCookieSecurity(req);
             res.cookie("token", token, {
                 httpOnly: true,
-                secure: process.env.NODE_ENV === "production", // true in production
-                sameSite: process.env.NODE_ENV === "production" ? "none" : "lax", // None for cross-site (Render subdomains)
+                secure: cookieSecurity.secure,
+                sameSite: cookieSecurity.sameSite,
                 maxAge: 36000000 // 10 hours in ms
             });
 
@@ -220,17 +254,18 @@ export class AuthController {
             }
         }
 
+        const cookieSecurity = AuthController.resolveCookieSecurity(req);
         res.clearCookie("token", {
             httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+            secure: cookieSecurity.secure,
+            sameSite: cookieSecurity.sameSite,
             path: "/"
         });
         // Clear any selected admin branch context on logout to avoid stale branch selection across sessions.
         res.clearCookie("active_branch_id", {
             httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+            secure: cookieSecurity.secure,
+            sameSite: cookieSecurity.sameSite,
             path: "/"
         });
         return ApiResponses.ok(res, { message: "ออกจากระบบสำเร็จ" });
@@ -331,10 +366,11 @@ export class AuthController {
 
         const branchId = (req.body?.branch_id ?? null) as string | null;
 
+        const cookieSecurity = AuthController.resolveCookieSecurity(req);
         const cookieOptions = {
             httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: (process.env.NODE_ENV === "production" ? "none" : "lax") as "none" | "lax",
+            secure: cookieSecurity.secure,
+            sameSite: cookieSecurity.sameSite,
             path: "/",
             maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
         };
@@ -353,4 +389,3 @@ export class AuthController {
         return ApiResponses.ok(res, { active_branch_id: branchId });
     }
 }
-
