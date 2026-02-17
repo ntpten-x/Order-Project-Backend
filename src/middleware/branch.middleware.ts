@@ -1,8 +1,9 @@
 import { Request, Response, NextFunction } from "express";
 import { AuthRequest } from "./auth.middleware";
 import { ApiResponses } from "../utils/ApiResponse";
-import { getDbContext } from "../database/dbContext";
+import { getDbContext, getDbManager, runWithDbContext } from "../database/dbContext";
 import { AppDataSource } from "../database/database";
+import { resolveRequestIsSecure } from "../utils/proxyTrust";
 
 /**
  * Branch Context Interface
@@ -49,9 +50,9 @@ async function branchExists(branchId: string): Promise<boolean> {
         return true;
     }
 
-    const rows = await AppDataSource.query(
-        `SELECT 1 FROM branches WHERE id = $1 LIMIT 1`,
-        [branchId]
+    // Validate existence under an admin DB context so RLS does not hide valid branch rows.
+    const rows = await runWithDbContext({ isAdmin: true }, async () =>
+        getDbManager().query(`SELECT 1 FROM branches WHERE id = $1 LIMIT 1`, [branchId])
     );
     const exists = Array.isArray(rows) && rows.length > 0;
     branchValidationCache.set(branchId, {
@@ -63,12 +64,7 @@ async function branchExists(branchId: string): Promise<boolean> {
 }
 
 function resolveCookieSecurity(req: Request): { secure: boolean; sameSite: "none" | "lax" } {
-    const forwardedProtoHeader = req.headers["x-forwarded-proto"];
-    const forwardedProto = Array.isArray(forwardedProtoHeader)
-        ? forwardedProtoHeader[0]
-        : (forwardedProtoHeader ?? "");
-    const proto = forwardedProto.split(",")[0]?.trim().toLowerCase();
-    const secureByRequest = req.secure || proto === "https";
+    const secureByRequest = resolveRequestIsSecure(req);
     const secureOverride = process.env.COOKIE_SECURE;
     const secure =
         secureOverride === "true" ||

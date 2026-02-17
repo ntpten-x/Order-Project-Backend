@@ -4,8 +4,25 @@ export class EnableBranchRlsPolicies1770300000000 implements MigrationInterface 
     name = "EnableBranchRlsPolicies1770300000000";
 
     public async up(queryRunner: QueryRunner): Promise<void> {
-        // Helper schema/functions used by policies
-        await queryRunner.query(`CREATE SCHEMA IF NOT EXISTS app`);
+        // Helper schema/functions used by policies.
+        // Avoid unconditional CREATE SCHEMA because PostgreSQL checks DB-level CREATE privilege
+        // even when the schema already exists.
+        await queryRunner.query(`
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'app') THEN
+                    IF has_database_privilege(current_user, current_database(), 'CREATE') THEN
+                        EXECUTE 'CREATE SCHEMA app';
+                    ELSE
+                        RAISE EXCEPTION
+                            'schema "app" is missing and role "%" lacks CREATE on database "%"',
+                            current_user,
+                            current_database();
+                    END IF;
+                END IF;
+            END
+            $$;
+        `);
 
         await queryRunner.query(`
             CREATE OR REPLACE FUNCTION app.current_branch_id()
@@ -167,4 +184,3 @@ export class EnableBranchRlsPolicies1770300000000 implements MigrationInterface 
         await queryRunner.query(`DROP FUNCTION IF EXISTS app.is_admin()`);
     }
 }
-

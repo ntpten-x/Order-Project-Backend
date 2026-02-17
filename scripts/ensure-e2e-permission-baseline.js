@@ -24,6 +24,28 @@ const RESOURCE_SEEDS = [
     },
   },
   {
+    resourceKey: "audit.page",
+    resourceName: "Audit Logs",
+    routePattern: "/audit",
+    sortOrder: 191,
+    policies: {
+      Admin: { scope: "all", access: "allow", view: "allow", create: "allow", update: "allow", delete: "allow" },
+      Manager: { scope: "branch", access: "deny", view: "deny", create: "deny", update: "deny", delete: "deny" },
+      Employee: { scope: "branch", access: "deny", view: "deny", create: "deny", update: "deny", delete: "deny" },
+    },
+  },
+  {
+    resourceKey: "health_system.page",
+    resourceName: "Health System",
+    routePattern: "/Health-System",
+    sortOrder: 192,
+    policies: {
+      Admin: { scope: "all", access: "allow", view: "allow", create: "allow", update: "allow", delete: "allow" },
+      Manager: { scope: "branch", access: "deny", view: "deny", create: "deny", update: "deny", delete: "deny" },
+      Employee: { scope: "branch", access: "deny", view: "deny", create: "deny", update: "deny", delete: "deny" },
+    },
+  },
+  {
     resourceKey: "shifts.page",
     resourceName: "Shift Management",
     routePattern: "/pos/shift",
@@ -100,31 +122,56 @@ async function ensureRolePermissions(client) {
       for (const action of ACTIONS) {
         const effect = policy[action.key];
         const scope = effect === "allow" ? policy.scope : "none";
+
+        const roleRow = await client.query(
+          `
+            SELECT id
+            FROM roles
+            WHERE lower(roles_name) = lower($1)
+            ORDER BY id ASC
+            LIMIT 1
+          `,
+          [roleName]
+        );
+        const resourceRow = await client.query(
+          `
+            SELECT id
+            FROM permission_resources
+            WHERE resource_key = $1
+            ORDER BY id ASC
+            LIMIT 1
+          `,
+          [resource.resourceKey]
+        );
+        const actionRow = await client.query(
+          `
+            SELECT id
+            FROM permission_actions
+            WHERE action_key = $1
+            ORDER BY id ASC
+            LIMIT 1
+          `,
+          [action.key]
+        );
+
+        const roleId = roleRow.rows?.[0]?.id;
+        const resourceId = resourceRow.rows?.[0]?.id;
+        const actionId = actionRow.rows?.[0]?.id;
+        if (!roleId || !resourceId || !actionId) {
+          continue;
+        }
+
         await client.query(
           `
-            WITH target AS (
-              SELECT
-                r.id AS role_id,
-                pr.id AS resource_id,
-                pa.id AS action_id
-              FROM roles r
-              INNER JOIN permission_resources pr ON pr.resource_key = $1
-              INNER JOIN permission_actions pa ON pa.action_key = $2
-              WHERE lower(r.roles_name) = lower($3)
-              LIMIT 1
-            ),
-            deleted AS (
-              DELETE FROM role_permissions rp
-              USING target t
-              WHERE rp.role_id = t.role_id
-                AND rp.resource_id = t.resource_id
-                AND rp.action_id = t.action_id
-            )
             INSERT INTO role_permissions (role_id, resource_id, action_id, effect, scope)
-            SELECT role_id, resource_id, action_id, $4::varchar, $5::varchar
-            FROM target
+            VALUES ($1, $2, $3, $4::varchar, $5::varchar)
+            ON CONFLICT (role_id, resource_id, action_id)
+            DO UPDATE SET
+              effect = EXCLUDED.effect,
+              scope = EXCLUDED.scope,
+              updated_at = now()
           `,
-          [resource.resourceKey, action.key, roleName, effect, scope]
+          [roleId, resourceId, actionId, effect, scope]
         );
       }
     }

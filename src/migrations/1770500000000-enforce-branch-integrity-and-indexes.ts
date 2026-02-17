@@ -4,6 +4,10 @@ export class EnforceBranchIntegrityAndIndexes1770500000000 implements MigrationI
     name = "EnforceBranchIntegrityAndIndexes1770500000000";
 
     public async up(queryRunner: QueryRunner): Promise<void> {
+        // Run data-fix DML under migration admin context so RLS policies do not block maintenance.
+        await queryRunner.query(`SELECT set_config('app.is_admin', 'true', true)`);
+        await queryRunner.query(`SELECT set_config('app.branch_id', '', true)`);
+
         // Performance: branch-scoped audit log queries
         await queryRunner.query(
             `CREATE INDEX IF NOT EXISTS "IDX_audit_logs_branch_created_at" ON "audit_logs" ("branch_id", "created_at")`
@@ -217,6 +221,10 @@ export class EnforceBranchIntegrityAndIndexes1770500000000 implements MigrationI
     }
 
     public async down(queryRunner: QueryRunner): Promise<void> {
+        // Run rollback DDL/DML under migration admin context so RLS policies do not block maintenance.
+        await queryRunner.query(`SELECT set_config('app.is_admin', 'true', true)`);
+        await queryRunner.query(`SELECT set_config('app.branch_id', '', true)`);
+
         await queryRunner.query(`ALTER TABLE "order_queue" DROP CONSTRAINT IF EXISTS "FK_order_queue_order_branch"`);
         await queryRunner.query(`ALTER TABLE "payments" DROP CONSTRAINT IF EXISTS "FK_payments_shift_branch"`);
         await queryRunner.query(`ALTER TABLE "payments" DROP CONSTRAINT IF EXISTS "FK_payments_payment_method_branch"`);

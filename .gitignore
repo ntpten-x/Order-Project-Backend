@@ -14,17 +14,24 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Environment files (keep template)
+# Environment files
 .env
 .env.*
-!.env.example
+.env.example
+.env.migrate-host
 deploy/aws/backend.env
+
+# Docker files
+docker-compose*
+Dockerfile
 
 # OS / editor
 .DS_Store
 Thumbs.db
 .vscode/
 .idea/
+.github/
+.deploy/
 
 # Test and performance artifacts
 soak-artifacts/

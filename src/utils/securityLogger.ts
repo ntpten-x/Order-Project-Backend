@@ -142,11 +142,16 @@ export const securityLogger = new SecurityLogger();
  * Helper function to extract IP from request
  */
 export function getClientIp(req: any): string {
-    return (
-        req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
-        req.headers['x-real-ip'] ||
-        req.connection?.remoteAddress ||
-        req.socket?.remoteAddress ||
-        'unknown'
-    );
+    const candidate =
+        req?.ip ||
+        req?.socket?.remoteAddress ||
+        req?.connection?.remoteAddress ||
+        'unknown';
+
+    if (typeof candidate !== "string") {
+        return "unknown";
+    }
+
+    // Express may return ::ffff:1.2.3.4 for IPv4-mapped IPv6.
+    return candidate.replace(/^::ffff:/, "");
 }

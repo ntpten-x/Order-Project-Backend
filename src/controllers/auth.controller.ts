@@ -12,15 +12,11 @@ import { RealtimeEvents } from "../utils/realtimeEvents";
 import { v4 as uuidv4 } from "uuid";
 import { getRedisClient, getSessionKey, isRedisConfigured } from "../lib/redisClient";
 import { normalizeRoleName } from "../utils/role";
+import { resolveRequestIsSecure } from "../utils/proxyTrust";
 
 export class AuthController {
     private static resolveCookieSecurity(req: Request): { secure: boolean; sameSite: "none" | "lax" } {
-        const forwardedProtoHeader = req.headers["x-forwarded-proto"];
-        const forwardedProto = Array.isArray(forwardedProtoHeader)
-            ? forwardedProtoHeader[0]
-            : (forwardedProtoHeader ?? "");
-        const proto = forwardedProto.split(",")[0]?.trim().toLowerCase();
-        const secureByRequest = req.secure || proto === "https";
+        const secureByRequest = resolveRequestIsSecure(req);
 
         const secureOverride = process.env.COOKIE_SECURE;
         const secure =
@@ -38,6 +34,25 @@ export class AuthController {
         res.setHeader("Pragma", "no-cache");
         res.setHeader("Expires", "0");
         res.setHeader("Vary", "Authorization, Cookie");
+    }
+
+    private static verifyTokenIgnoringExpiration(token: string): { id?: string; jti?: string } | null {
+        const secret = process.env.JWT_SECRET;
+        if (!secret) return null;
+
+        try {
+            const decoded = jwt.verify(token, secret, { ignoreExpiration: true });
+            if (!decoded || typeof decoded !== "object") return null;
+
+            const payload = decoded as jwt.JwtPayload & { id?: unknown; jti?: unknown };
+            const id = typeof payload.id === "string" ? payload.id : undefined;
+            const jti = typeof payload.jti === "string" ? payload.jti : undefined;
+
+            if (!id && !jti) return null;
+            return { id, jti };
+        } catch {
+            return null;
+        }
     }
 
     static async login(req: Request, res: Response) {
@@ -185,7 +200,6 @@ export class AuthController {
             SocketService.getInstance().emit(RealtimeEvents.users.status, { id: user.id, is_active: true });
 
             return ApiResponses.ok(res, {
-                token,
                 user: {
                     id: user.id,
                     username: user.username,
@@ -219,16 +233,16 @@ export class AuthController {
         if ((req as AuthRequest).user) {
             userId = (req as AuthRequest).user?.id;
         }
-        // 2. Fallback: Decode token from cookie (even if expired)
-        else if (req.cookies && req.cookies.token) {
-            try {
-                const decoded: any = jwt.decode(req.cookies.token);
-                if (decoded && typeof decoded === 'object' && decoded.id) {
-                    userId = decoded.id;
-                    jti = decoded.jti;
-                }
-            } catch (ignore) {
-                // Ignore decoding errors during logout
+
+        // 2. Extract trusted claims from signed token (ignore expiration only)
+        const tokenFromCookie = typeof req.cookies?.token === "string" ? req.cookies.token : undefined;
+        if (tokenFromCookie) {
+            const trustedClaims = AuthController.verifyTokenIgnoringExpiration(tokenFromCookie);
+            if (!userId && trustedClaims?.id) {
+                userId = trustedClaims.id;
+            }
+            if (trustedClaims?.jti) {
+                jti = trustedClaims.jti;
             }
         }
 
@@ -351,7 +365,8 @@ export class AuthController {
     /**
      * Admin-only: Switch the active branch context for RLS (stored in a cookie).
      * - branch_id = uuid: select branch context (admin sees only that branch)
-     * - branch_id = null/undefined: clear selection (admin sees all branches)
+     * - branch_id = null/undefined: clear selection (admin falls back to assigned branch;
+     *   if no assigned branch, admin runs without branch context)
      */
     static async switchBranch(req: AuthRequest, res: Response) {
         AuthController.setNoStoreHeaders(res);
