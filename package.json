@@ -31,6 +31,7 @@
     "test:load:smoke:deterministic": "node scripts/go-live-phase4.js",
     "soak:staging": "bash scripts/run-soak-staging.sh",
     "soak:review": "node scripts/review-soak-artifacts.mjs",
+    "soak:compare": "node scripts/compare-soak-artifacts.mjs",
     "test:go-live:phase1": "npm run lint && npm run test",
     "test:go-live:phase2": "npm run migration:run && npm run test:integration:pos-flow",
     "test:go-live:phase3": "npm run test:realtime:contract",

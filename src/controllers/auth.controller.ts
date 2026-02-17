@@ -145,9 +145,23 @@ export class AuthController {
             if (redis) {
                 const sessionKey = getSessionKey(jti);
                 const ttl = Number(process.env.SESSION_TIMEOUT_MS) || 8 * 60 * 60 * 1000;
-                await redis.set(sessionKey, JSON.stringify({ userId: user.id, role, branchId: user.branch_id, createdAt: Date.now() }), {
-                    PX: ttl,
-                });
+                await redis.set(
+                    sessionKey,
+                    JSON.stringify({
+                        userId: user.id,
+                        username: user.username,
+                        name: user.name ?? null,
+                        role,
+                        roleDisplayName: user.roles?.display_name ?? role,
+                        rolesId: user.roles_id,
+                        branchId: user.branch_id ?? null,
+                        isUse: user.is_use,
+                        isActive: user.is_active,
+                        createdAt: Date.now(),
+                        lastValidatedAt: Date.now(),
+                    }),
+                    { PX: ttl }
+                );
             } else if (isRedisConfigured()) {
                 return ApiResponses.internalError(res, "Session store unavailable");
             }

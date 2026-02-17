@@ -44,6 +44,7 @@ import { globalErrorHandler } from "./src/middleware/error.middleware";
 import { AppError } from "./src/utils/AppError";
 import { performanceMonitoring, errorTracking } from "./src/middleware/monitoring.middleware";
 import { metrics } from "./src/utils/metrics";
+import { buildCorsOriginChecker, resolveAllowedOrigins } from "./src/utils/cors";
 
 const app = express();
 const httpServer = createServer(app); // Wrap express with HTTP server
@@ -118,16 +119,12 @@ app.use("/pos/payments", paymentLimiter); // Stricter limit for payments
 // Update origin to match your frontend URL.
 // For dev, we might assume localhost:3000 or 3001.
 // If frontend is on same port or served by back, internal usage is fine.
-const allowedOrigins = [
-    "http://localhost:3000",
-    "http://localhost:3001",
-    "http://127.0.0.1:3000",
-    "http://13.239.29.168:3001",
-    frontendUrl
-].filter(Boolean) as string[];
+const allowedOrigins = resolveAllowedOrigins();
+const corsOriginChecker = buildCorsOriginChecker(allowedOrigins);
+const socketPath = (process.env.SOCKET_IO_PATH || "/socket.io").trim() || "/socket.io";
 
 app.use(cors({
-    origin: allowedOrigins,
+    origin: corsOriginChecker,
     credentials: true
 }));
 
@@ -168,8 +165,9 @@ app.use((req, res, next) => {
 
 // Initialize Socket.IO
 const io = new Server(httpServer, {
+    path: socketPath,
     cors: {
-        origin: allowedOrigins,
+        origin: corsOriginChecker,
         methods: ["GET", "POST", "PUT", "DELETE"],
         credentials: true
     }

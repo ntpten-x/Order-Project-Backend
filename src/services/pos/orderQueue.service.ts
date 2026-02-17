@@ -9,7 +9,8 @@ import { RealtimeEvents } from "../../utils/realtimeEvents";
 export class OrderQueueService {
     private socketService = SocketService.getInstance();
     private readonly CACHE_PREFIX = 'order-queue';
-    private readonly CACHE_TTL = 2 * 1000; // 2 seconds
+    // Queue state is invalidated on every write/socket event, so a longer TTL cuts repeated DB reads safely.
+    private readonly CACHE_TTL = Number(process.env.ORDER_QUEUE_CACHE_TTL_MS || 10_000);
 
     private getCacheScopeParts(branchId?: string): Array<string> {
         const ctx = getDbContext();
