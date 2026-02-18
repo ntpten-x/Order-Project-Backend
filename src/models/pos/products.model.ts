@@ -1,10 +1,9 @@
 import { Products } from "../../entity/pos/Products";
-import { 
-    paginate, 
-    addSearchCondition, 
+import {
+    addSearchCondition,
     addFilterCondition,
     addBooleanFilter,
-    PaginatedResult 
+    PaginatedResult
 } from "../../utils/dbHelpers";
 import { withCache, cacheKey, invalidateCache, queryCache } from "../../utils/cache";
 import { getDbContext, getRepository } from "../../database/dbContext";
@@ -68,31 +67,46 @@ export class ProductsModels {
         sortCreated: CreatedSort = "old"
     ): Promise<PaginatedResult<Products>> {
         const productsRepository = getRepository(Products);
-        let query = productsRepository.createQueryBuilder("products")
-            .leftJoinAndSelect("products.category", "category")
-            .leftJoinAndSelect("products.unit", "unit")
-            .orderBy("products.create_date", createdSortToOrder(sortCreated));
+        let baseQuery = productsRepository.createQueryBuilder("products");
 
         // Filter by branch_id for data isolation
         if (branchId) {
-            query.andWhere("products.branch_id = :branchId", { branchId });
+            baseQuery.andWhere("products.branch_id = :branchId", { branchId });
         }
 
         // Use indexed category_id filter
-        query = addFilterCondition(query, category_id, "category_id", "products");
-        
+        baseQuery = addFilterCondition(baseQuery, category_id, "category_id", "products");
+
         // Use indexed is_active filter
-        query = addBooleanFilter(query, is_active, "is_active", "products");
-        
+        baseQuery = addBooleanFilter(baseQuery, is_active, "is_active", "products");
+
         // Search uses indexed product_name column
-        query = addSearchCondition(
-            query, 
-            q, 
-            ["product_name", "display_name", "description"], 
+        baseQuery = addSearchCondition(
+            baseQuery,
+            q,
+            ["product_name", "display_name", "description"],
             "products"
         );
 
-        return paginate(query, { page, limit });
+        const skip = (page - 1) * limit;
+        const total = await baseQuery.clone().getCount();
+        const data = await baseQuery
+            .leftJoinAndSelect("products.category", "category")
+            .leftJoinAndSelect("products.unit", "unit")
+            .orderBy("products.create_date", createdSortToOrder(sortCreated))
+            .skip(skip)
+            .take(limit)
+            .getMany();
+
+        const last_page = Math.ceil(total / limit) || 1;
+        return {
+            data,
+            total,
+            page,
+            last_page,
+            has_next: page < last_page,
+            has_prev: page > 1,
+        };
     }
 
     /**
