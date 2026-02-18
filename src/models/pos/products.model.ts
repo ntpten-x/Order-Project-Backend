@@ -111,6 +111,35 @@ export class ProductsModels {
     }
 
     /**
+     * Count active products (count-only query, no joins)
+     * Useful for UI badges and reduces load vs calling list endpoint with limit=1.
+     */
+    async countActive(category_id?: string, branchId?: string): Promise<number> {
+        const scope = this.getCacheScopeParts(branchId);
+        const key = cacheKey(this.CACHE_PREFIX, ...scope, "active-count", category_id);
+
+        return withCache(
+            key,
+            async () => {
+                const productsRepository = getRepository(Products);
+                let baseQuery = productsRepository
+                    .createQueryBuilder("products")
+                    .where("products.is_active = :isActive", { isActive: true });
+
+                if (branchId) {
+                    baseQuery.andWhere("products.branch_id = :branchId", { branchId });
+                }
+
+                baseQuery = addFilterCondition(baseQuery, category_id, "category_id", "products");
+                return baseQuery.getCount();
+            },
+            // Keep TTL short-ish; mutations still invalidate explicitly.
+            2 * 60 * 1000,
+            queryCache as any
+        );
+    }
+
+    /**
      * Find single product by ID
      * ID is primary key (indexed)
      */
@@ -232,6 +261,7 @@ export class ProductsModels {
         const patterns = [
             cacheKey(this.CACHE_PREFIX, "branch", branchId, "list"),
             cacheKey(this.CACHE_PREFIX, "branch", branchId, "name"),
+            cacheKey(this.CACHE_PREFIX, "branch", branchId, "active-count"),
             cacheKey(this.CACHE_PREFIX, "branch", branchId, "count-by-category"),
         ];
 

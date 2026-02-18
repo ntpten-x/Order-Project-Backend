@@ -63,6 +63,14 @@ export class ProductsController {
         });
     });
 
+    activeCount = catchAsync(async (req: Request, res: Response) => {
+        const category_id = req.query.category_id as string | undefined;
+        const branchId = getBranchId(req as any);
+        const total = await this.productsService.countActive(category_id, branchId);
+        setPrivateSwrHeaders(res);
+        return ApiResponses.ok(res, { total });
+    });
+
     findOne = catchAsync(async (req: Request, res: Response) => {
         const branchId = getBranchId(req as any);
         const product = await this.productsService.findOne(req.params.id, branchId);

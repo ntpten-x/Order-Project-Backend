@@ -31,6 +31,10 @@ export class ProductsService {
         return this.productsModel.findAll(page, limit, category_id, q, is_active, branchId, sortCreated);
     }
 
+    async countActive(category_id?: string, branchId?: string): Promise<number> {
+        return this.productsModel.countActive(category_id, branchId);
+    }
+
     async findOne(id: string, branchId?: string): Promise<Products | null> {
         // Caching is handled in ProductsModel
         return this.productsModel.findOne(id, branchId);
