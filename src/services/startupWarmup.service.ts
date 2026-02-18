@@ -1,8 +1,10 @@
 import { AppDataSource } from "../database/database";
 import { Branch } from "../entity/Branch";
 import { ProductsModels } from "../models/pos/products.model";
+import { CategoryModels } from "../models/pos/category.model";
 import { runWithDbContext } from "../database/dbContext";
 import { DashboardService } from "./pos/dashboard.service";
+import { ShiftsService } from "./pos/shifts.service";
 
 function parseBooleanEnv(value: string | undefined, fallback: boolean): boolean {
     if (value === undefined) return fallback;
@@ -31,12 +33,14 @@ function toErrorMessage(error: unknown): string {
 export class StartupWarmupService {
     private readonly dashboardService = new DashboardService();
     private readonly productsModel = new ProductsModels();
+    private readonly categoryModel = new CategoryModels();
+    private readonly shiftsService = new ShiftsService();
     private started = false;
 
     private readonly enabled = parseBooleanEnv(process.env.STARTUP_WARMUP_ENABLED, true);
     private readonly delayMs = toSafeInt(
-        parseNumberEnv(process.env.STARTUP_WARMUP_DELAY_MS, 12_000),
-        12_000,
+        parseNumberEnv(process.env.STARTUP_WARMUP_DELAY_MS, 3_000),
+        3_000,
         0,
         120_000
     );
@@ -72,6 +76,26 @@ export class StartupWarmupService {
     private readonly productsActiveTotalEnabled = parseBooleanEnv(
         process.env.STARTUP_WARMUP_PRODUCTS_ACTIVE_TOTAL_ENABLED,
         true
+    );
+    private readonly categoriesEnabled = parseBooleanEnv(
+        process.env.STARTUP_WARMUP_CATEGORIES_ENABLED,
+        true
+    );
+    private readonly categoriesLimit = toSafeInt(
+        parseNumberEnv(process.env.STARTUP_WARMUP_CATEGORIES_LIMIT, 50),
+        50,
+        1,
+        200
+    );
+    private readonly shiftsEnabled = parseBooleanEnv(
+        process.env.STARTUP_WARMUP_SHIFTS_ENABLED,
+        true
+    );
+    private readonly shiftsHistoryLimit = toSafeInt(
+        parseNumberEnv(process.env.STARTUP_WARMUP_SHIFTS_HISTORY_LIMIT, 20),
+        20,
+        1,
+        200
     );
     private readonly dashboardTopLimit = toSafeInt(
         parseNumberEnv(process.env.STARTUP_WARMUP_DASHBOARD_TOP_LIMIT, 7),
@@ -182,21 +206,61 @@ export class StartupWarmupService {
                             "old"
                         ),
                 });
+
+                // Match the POS UI default page size to avoid cold-cache latency on first load.
+                if (this.productsLimit !== this.productsAllLimit) {
+                    tasks.push({
+                        name: "products.list.all.ui",
+                        run: () =>
+                            this.productsModel.findAll(
+                                1,
+                                this.productsLimit,
+                                undefined,
+                                undefined,
+                                undefined,
+                                branchId,
+                                "old"
+                            ),
+                    });
+                }
             }
 
             if (this.productsActiveTotalEnabled) {
                 tasks.push({
                     name: "products.count.active",
                     run: () =>
-                        this.productsModel.findAll(
+                        this.productsModel.countActive(undefined, branchId),
+                });
+            }
+
+            if (this.categoriesEnabled) {
+                tasks.push({
+                    name: "categories.list.page1",
+                    run: () =>
+                        this.categoryModel.findAllPaginated(
                             1,
-                            1,
+                            this.categoriesLimit,
                             undefined,
-                            undefined,
-                            true,
                             branchId,
                             "old"
                         ),
+                });
+            }
+
+            if (this.shiftsEnabled) {
+                tasks.push({
+                    name: "shifts.current",
+                    run: () => this.shiftsService.getCurrentShift(branchId),
+                });
+                tasks.push({
+                    name: "shifts.history",
+                    run: () =>
+                        this.shiftsService.getShiftHistory({
+                            branchId,
+                            page: 1,
+                            limit: this.shiftsHistoryLimit,
+                            sortCreated: "old",
+                        }),
                 });
             }
 
