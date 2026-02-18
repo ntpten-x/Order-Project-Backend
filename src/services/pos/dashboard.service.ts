@@ -72,9 +72,9 @@ export class DashboardService {
     private readonly SALES_CACHE_PREFIX = "dashboard:sales";
     private readonly TOP_ITEMS_CACHE_PREFIX = "dashboard:top-items";
     private readonly OVERVIEW_CACHE_PREFIX = "dashboard:overview";
-    private readonly SALES_CACHE_TTL = Number(process.env.DASHBOARD_SALES_CACHE_TTL_MS || 15000);
-    private readonly TOP_ITEMS_CACHE_TTL = Number(process.env.DASHBOARD_TOP_ITEMS_CACHE_TTL_MS || 15000);
-    private readonly OVERVIEW_CACHE_TTL = Number(process.env.DASHBOARD_OVERVIEW_CACHE_TTL_MS || 15000);
+    private readonly SALES_CACHE_TTL = Number(process.env.DASHBOARD_SALES_CACHE_TTL_MS || 20000);
+    private readonly TOP_ITEMS_CACHE_TTL = Number(process.env.DASHBOARD_TOP_ITEMS_CACHE_TTL_MS || 20000);
+    private readonly OVERVIEW_CACHE_TTL = Number(process.env.DASHBOARD_OVERVIEW_CACHE_TTL_MS || 20000);
 
     private observeCache(operation: string, result: "hit" | "miss", source?: "memory" | "redis"): void {
         metrics.observeCache({

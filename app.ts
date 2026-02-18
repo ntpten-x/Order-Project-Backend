@@ -45,6 +45,7 @@ import { AppError } from "./src/utils/AppError";
 import { performanceMonitoring, errorTracking } from "./src/middleware/monitoring.middleware";
 import { metrics } from "./src/utils/metrics";
 import { buildCorsOriginChecker, resolveAllowedOrigins } from "./src/utils/cors";
+import { startupWarmupService } from "./src/services/startupWarmup.service";
 
 const app = express();
 const httpServer = createServer(app); // Wrap express with HTTP server
@@ -417,5 +418,6 @@ app.use(globalErrorHandler);
 connectDatabase().then(() => {
     httpServer.listen(port, () => { // Listen on httpServer
         console.log(`Server is running on http://localhost:${port}`);
+        startupWarmupService.schedule();
     });
 });
