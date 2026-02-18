@@ -18,7 +18,8 @@ import { CreatedSort, createdSortToOrder } from "../../utils/sortCreated";
  */
 export class ProductsModels {
     private readonly CACHE_PREFIX = 'products';
-    private readonly CACHE_TTL = 2 * 60 * 1000; // 2 minutes
+    // Longer TTL reduces cold-cache latency spikes; mutations still invalidate caches explicitly.
+    private readonly CACHE_TTL = 10 * 60 * 1000; // 10 minutes
 
     private getCacheScopeParts(branchId?: string): Array<string> {
         const ctx = getDbContext();

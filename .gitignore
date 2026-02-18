@@ -42,3 +42,6 @@ load-tests/results/
 *.tgz
 *.tar
 *.tar.gz
+
+# Local scratch / temp files (never commit)
+tmp_*

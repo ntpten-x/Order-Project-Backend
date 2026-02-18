@@ -135,7 +135,9 @@ async function loadAuthUserSnapshot(userId: string): Promise<AuthUserSnapshot | 
     };
 }
 
-const AUTH_SESSION_LOCAL_CACHE_TTL_MS = Number(process.env.AUTH_SESSION_LOCAL_CACHE_TTL_MS || 15_000);
+// Cache session snapshots briefly to reduce Redis/DB round-trips on read-heavy traffic.
+// Keep the window small to avoid delaying revocation/role updates too long.
+const AUTH_SESSION_LOCAL_CACHE_TTL_MS = Number(process.env.AUTH_SESSION_LOCAL_CACHE_TTL_MS || 60_000);
 const AUTH_SESSION_LOCAL_CACHE_MAX_ENTRIES = Number(process.env.AUTH_SESSION_LOCAL_CACHE_MAX_ENTRIES || 2_000);
 const authSessionLocalCache = new Map<string, LocalAuthSessionCacheEntry>();
 

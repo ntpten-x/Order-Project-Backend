@@ -1,6 +1,7 @@
 import { AppDataSource } from "../database/database";
 import { Branch } from "../entity/Branch";
 import { ProductsModels } from "../models/pos/products.model";
+import { runWithDbContext } from "../database/dbContext";
 import { DashboardService } from "./pos/dashboard.service";
 
 function parseBooleanEnv(value: string | undefined, fallback: boolean): boolean {
@@ -57,6 +58,20 @@ export class StartupWarmupService {
         20,
         1,
         200
+    );
+    private readonly productsAllEnabled = parseBooleanEnv(
+        process.env.STARTUP_WARMUP_PRODUCTS_ALL_ENABLED,
+        true
+    );
+    private readonly productsAllLimit = toSafeInt(
+        parseNumberEnv(process.env.STARTUP_WARMUP_PRODUCTS_ALL_LIMIT, 50),
+        50,
+        1,
+        200
+    );
+    private readonly productsActiveTotalEnabled = parseBooleanEnv(
+        process.env.STARTUP_WARMUP_PRODUCTS_ACTIVE_TOTAL_ENABLED,
+        true
     );
     private readonly dashboardTopLimit = toSafeInt(
         parseNumberEnv(process.env.STARTUP_WARMUP_DASHBOARD_TOP_LIMIT, 7),
@@ -122,49 +137,83 @@ export class StartupWarmupService {
     }
 
     private async warmBranch(branchId: string): Promise<boolean> {
-        const tasks: Array<{ name: string; run: () => Promise<unknown> }> = [
-            {
-                name: "dashboard.overview",
-                run: () =>
-                    this.dashboardService.getOverview(
-                        undefined,
-                        undefined,
-                        branchId,
-                        this.dashboardTopLimit,
-                        this.dashboardRecentLimit
-                    ),
-            },
-        ];
+        return runWithDbContext({ branchId, isAdmin: true }, async () => {
+            const tasks: Array<{ name: string; run: () => Promise<unknown> }> = [
+                {
+                    name: "dashboard.overview",
+                    run: () =>
+                        this.dashboardService.getOverview(
+                            undefined,
+                            undefined,
+                            branchId,
+                            this.dashboardTopLimit,
+                            this.dashboardRecentLimit
+                        ),
+                },
+            ];
 
-        if (this.productsEnabled) {
-            tasks.push({
-                name: "products.list",
-                run: () =>
-                    this.productsModel.findAll(
-                        1,
-                        this.productsLimit,
-                        undefined,
-                        undefined,
-                        true,
-                        branchId,
-                        "old"
-                    ),
-            });
-        }
-
-        let hasError = false;
-        for (const task of tasks) {
-            try {
-                await this.runWithTimeout(task.run);
-            } catch (error) {
-                hasError = true;
-                console.warn(
-                    `[WARMUP] ${task.name} failed for branch=${branchId}: ${toErrorMessage(error)}`
-                );
+            if (this.productsEnabled) {
+                tasks.push({
+                    name: "products.list.active",
+                    run: () =>
+                        this.productsModel.findAll(
+                            1,
+                            this.productsLimit,
+                            undefined,
+                            undefined,
+                            true,
+                            branchId,
+                            "old"
+                        ),
+                });
             }
-        }
 
-        return !hasError;
+            if (this.productsAllEnabled) {
+                tasks.push({
+                    name: "products.list.all",
+                    run: () =>
+                        this.productsModel.findAll(
+                            1,
+                            this.productsAllLimit,
+                            undefined,
+                            undefined,
+                            undefined,
+                            branchId,
+                            "old"
+                        ),
+                });
+            }
+
+            if (this.productsActiveTotalEnabled) {
+                tasks.push({
+                    name: "products.count.active",
+                    run: () =>
+                        this.productsModel.findAll(
+                            1,
+                            1,
+                            undefined,
+                            undefined,
+                            true,
+                            branchId,
+                            "old"
+                        ),
+                });
+            }
+
+            let hasError = false;
+            for (const task of tasks) {
+                try {
+                    await this.runWithTimeout(task.run);
+                } catch (error) {
+                    hasError = true;
+                    console.warn(
+                        `[WARMUP] ${task.name} failed for branch=${branchId}: ${toErrorMessage(error)}`
+                    );
+                }
+            }
+
+            return !hasError;
+        });
     }
 
     private async runWithTimeout<T>(run: () => Promise<T>): Promise<T> {

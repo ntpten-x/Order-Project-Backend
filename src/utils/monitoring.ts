@@ -66,9 +66,26 @@ class MonitoringService {
 
     private static calculatePercentile(sortedValues: number[], percentile: number): number {
         if (sortedValues.length === 0) return 0;
-        const rank = Math.ceil((percentile / 100) * sortedValues.length) - 1;
-        const index = Math.min(Math.max(rank, 0), sortedValues.length - 1);
-        return sortedValues[index] ?? 0;
+        if (sortedValues.length === 1) return sortedValues[0] ?? 0;
+
+        // Linear interpolation between closest ranks (more stable for small samples).
+        // percentile=0   -> min
+        // percentile=100 -> max
+        const p = Number(percentile);
+        if (!Number.isFinite(p)) return 0;
+
+        const clamped = Math.min(100, Math.max(0, p));
+        const rank = (clamped / 100) * (sortedValues.length - 1);
+        const lowerIndex = Math.floor(rank);
+        const upperIndex = Math.ceil(rank);
+
+        const lower = sortedValues[Math.min(Math.max(lowerIndex, 0), sortedValues.length - 1)] ?? 0;
+        const upper = sortedValues[Math.min(Math.max(upperIndex, 0), sortedValues.length - 1)] ?? lower;
+
+        if (lowerIndex === upperIndex) return lower;
+
+        const fraction = rank - lowerIndex;
+        return lower + (upper - lower) * fraction;
     }
 
     private filterMetrics(options?: MetricFilterOptions): PerformanceMetric[] {
