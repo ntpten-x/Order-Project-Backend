@@ -90,7 +90,12 @@ class MonitoringService {
                 return true;
             }
 
-            const metricPathRaw = typeof metric.metadata?.path === "string" ? metric.metadata.path : "";
+            const metricPathRaw =
+                typeof metric.metadata?.routePath === "string"
+                    ? metric.metadata.routePath
+                    : typeof metric.metadata?.path === "string"
+                        ? metric.metadata.path
+                        : "";
             const metricPath = MonitoringService.normalizePath(metricPathRaw);
 
             if (
