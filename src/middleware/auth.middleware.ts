@@ -46,6 +46,11 @@ type AuthUserSnapshot = {
     isActive: boolean;
 };
 
+type LocalAuthSessionCacheEntry = {
+    snapshot: AuthUserSnapshot;
+    expiresAt: number;
+};
+
 function toBoolean(value: unknown): boolean {
     if (value === true || value === "true" || value === 1 || value === "1" || value === "t") return true;
     return false;
@@ -130,6 +135,40 @@ async function loadAuthUserSnapshot(userId: string): Promise<AuthUserSnapshot | 
     };
 }
 
+const AUTH_SESSION_LOCAL_CACHE_TTL_MS = Number(process.env.AUTH_SESSION_LOCAL_CACHE_TTL_MS || 15_000);
+const AUTH_SESSION_LOCAL_CACHE_MAX_ENTRIES = Number(process.env.AUTH_SESSION_LOCAL_CACHE_MAX_ENTRIES || 2_000);
+const authSessionLocalCache = new Map<string, LocalAuthSessionCacheEntry>();
+
+function readLocalSessionSnapshot(jti: string): AuthUserSnapshot | null {
+    if (AUTH_SESSION_LOCAL_CACHE_TTL_MS <= 0) return null;
+
+    const hit = authSessionLocalCache.get(jti);
+    if (!hit) return null;
+    if (Date.now() > hit.expiresAt) {
+        authSessionLocalCache.delete(jti);
+        return null;
+    }
+
+    authSessionLocalCache.delete(jti);
+    authSessionLocalCache.set(jti, hit);
+    return hit.snapshot;
+}
+
+function writeLocalSessionSnapshot(jti: string, snapshot: AuthUserSnapshot): void {
+    if (AUTH_SESSION_LOCAL_CACHE_TTL_MS <= 0) return;
+
+    while (authSessionLocalCache.size >= AUTH_SESSION_LOCAL_CACHE_MAX_ENTRIES) {
+        const oldestKey = authSessionLocalCache.keys().next().value;
+        if (!oldestKey) break;
+        authSessionLocalCache.delete(oldestKey);
+    }
+
+    authSessionLocalCache.set(jti, {
+        snapshot,
+        expiresAt: Date.now() + AUTH_SESSION_LOCAL_CACHE_TTL_MS,
+    });
+}
+
 export const authenticateToken = async (req: AuthRequest, res: Response, next: NextFunction) => {
     // 1. Get token from cookies
     let token = req.cookies?.token;
@@ -166,94 +205,113 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
             return ApiResponses.unauthorized(res, "Session invalid");
         }
 
-        const redis = await getRedisClient();
         let userSnapshot: AuthUserSnapshot | null = null;
+        const localSnapshot = readLocalSessionSnapshot(jti);
+        if (localSnapshot) {
+            userSnapshot = localSnapshot;
+        }
 
-        if (redis) {
-            const sessionKey = getSessionKey(jti);
-            const sessionJson = await getSessionWithSlidingTtl(redis, sessionKey);
-            if (!sessionJson) {
-                return ApiResponses.unauthorized(res, "Session expired or revoked");
-            }
+        if (!userSnapshot) {
+            const redis = await getRedisClient();
 
-            let session: AuthSessionRecord;
-            try {
-                session = JSON.parse(sessionJson) as AuthSessionRecord;
-            } catch {
-                return ApiResponses.unauthorized(res, "Session invalid");
-            }
+            if (redis) {
+                const sessionKey = getSessionKey(jti);
+                const sessionJson = await getSessionWithSlidingTtl(redis, sessionKey);
+                if (!sessionJson) {
+                    authSessionLocalCache.delete(jti);
+                    return ApiResponses.unauthorized(res, "Session expired or revoked");
+                }
 
-            if (session.userId && session.userId !== decoded.id) {
-                return ApiResponses.unauthorized(res, "Session mismatch");
-            }
+                let session: AuthSessionRecord;
+                try {
+                    session = JSON.parse(sessionJson) as AuthSessionRecord;
+                } catch {
+                    authSessionLocalCache.delete(jti);
+                    return ApiResponses.unauthorized(res, "Session invalid");
+                }
 
-            const normalizedSessionRole = normalizeRoleName(session.role);
-            const sessionIncomplete =
-                !normalizedSessionRole ||
-                !session.rolesId ||
-                !session.username ||
-                typeof session.isUse !== "boolean" ||
-                typeof session.isActive !== "boolean";
-            const lastValidatedAt = Number(session.lastValidatedAt || 0);
-            const shouldRevalidateFromDb =
-                sessionIncomplete ||
-                AUTH_USER_DB_REVALIDATE_MS <= 0 ||
-                !Number.isFinite(lastValidatedAt) ||
-                Date.now() - lastValidatedAt >= AUTH_USER_DB_REVALIDATE_MS;
+                if (session.userId && session.userId !== decoded.id) {
+                    authSessionLocalCache.delete(jti);
+                    return ApiResponses.unauthorized(res, "Session mismatch");
+                }
 
-            if (shouldRevalidateFromDb) {
-                const freshSnapshot = await loadAuthUserSnapshot(decoded.id);
-                if (!freshSnapshot) {
-                    await redis.del(sessionKey);
+                const normalizedSessionRole = normalizeRoleName(session.role);
+                const sessionIncomplete =
+                    !normalizedSessionRole ||
+                    !session.rolesId ||
+                    !session.username ||
+                    typeof session.isUse !== "boolean" ||
+                    typeof session.isActive !== "boolean";
+                const lastValidatedAt = Number(session.lastValidatedAt || 0);
+                const shouldRevalidateFromDb =
+                    sessionIncomplete ||
+                    AUTH_USER_DB_REVALIDATE_MS <= 0 ||
+                    !Number.isFinite(lastValidatedAt) ||
+                    Date.now() - lastValidatedAt >= AUTH_USER_DB_REVALIDATE_MS;
+
+                if (shouldRevalidateFromDb) {
+                    const freshSnapshot = await loadAuthUserSnapshot(decoded.id);
+                    if (!freshSnapshot) {
+                        await redis.del(sessionKey);
+                        authSessionLocalCache.delete(jti);
+                        return ApiResponses.unauthorized(res, "User not found");
+                    }
+                    if (!freshSnapshot.isUse) {
+                        await redis.del(sessionKey);
+                        authSessionLocalCache.delete(jti);
+                        return ApiResponses.forbidden(res, "Account disabled");
+                    }
+
+                    userSnapshot = freshSnapshot;
+                    const updatedSession: AuthSessionRecord = {
+                        ...session,
+                        userId: freshSnapshot.id,
+                        username: freshSnapshot.username,
+                        name: freshSnapshot.name ?? null,
+                        role: freshSnapshot.roleName,
+                        roleDisplayName: freshSnapshot.roleDisplayName,
+                        rolesId: freshSnapshot.rolesId,
+                        branchId: freshSnapshot.branchId ?? null,
+                        isUse: freshSnapshot.isUse,
+                        isActive: freshSnapshot.isActive,
+                        lastValidatedAt: Date.now(),
+                    };
+                    await redis.set(sessionKey, JSON.stringify(updatedSession), { PX: SESSION_TIMEOUT });
+                } else {
+                    if (!session.isUse) {
+                        authSessionLocalCache.delete(jti);
+                        return ApiResponses.forbidden(res, "Account disabled");
+                    }
+                    userSnapshot = {
+                        id: decoded.id,
+                        username: session.username!,
+                        name: session.name ?? null,
+                        rolesId: session.rolesId!,
+                        roleName: normalizedSessionRole!,
+                        roleDisplayName: session.roleDisplayName || normalizedSessionRole!,
+                        branchId: session.branchId ?? null,
+                        isUse: session.isUse!,
+                        isActive: session.isActive!,
+                    };
+                }
+            } else if (isRedisConfigured()) {
+                // If Redis URL is configured but client unavailable, fail closed
+                return ApiResponses.internalError(res, "Session store unavailable");
+            } else {
+                userSnapshot = await loadAuthUserSnapshot(decoded.id);
+                if (!userSnapshot) {
+                    authSessionLocalCache.delete(jti);
                     return ApiResponses.unauthorized(res, "User not found");
                 }
-                if (!freshSnapshot.isUse) {
-                    await redis.del(sessionKey);
+                if (!userSnapshot.isUse) {
+                    authSessionLocalCache.delete(jti);
                     return ApiResponses.forbidden(res, "Account disabled");
                 }
+            }
+        }
 
-                userSnapshot = freshSnapshot;
-                const updatedSession: AuthSessionRecord = {
-                    ...session,
-                    userId: freshSnapshot.id,
-                    username: freshSnapshot.username,
-                    name: freshSnapshot.name ?? null,
-                    role: freshSnapshot.roleName,
-                    roleDisplayName: freshSnapshot.roleDisplayName,
-                    rolesId: freshSnapshot.rolesId,
-                    branchId: freshSnapshot.branchId ?? null,
-                    isUse: freshSnapshot.isUse,
-                    isActive: freshSnapshot.isActive,
-                    lastValidatedAt: Date.now(),
-                };
-                await redis.set(sessionKey, JSON.stringify(updatedSession), { PX: SESSION_TIMEOUT });
-            } else {
-                if (!session.isUse) {
-                    return ApiResponses.forbidden(res, "Account disabled");
-                }
-                userSnapshot = {
-                    id: decoded.id,
-                    username: session.username!,
-                    name: session.name ?? null,
-                    rolesId: session.rolesId!,
-                    roleName: normalizedSessionRole!,
-                    roleDisplayName: session.roleDisplayName || normalizedSessionRole!,
-                    branchId: session.branchId ?? null,
-                    isUse: session.isUse!,
-                    isActive: session.isActive!,
-                };
-            }
-        } else if (isRedisConfigured()) {
-            // If Redis URL is configured but client unavailable, fail closed
-            return ApiResponses.internalError(res, "Session store unavailable");
-        } else {
-            userSnapshot = await loadAuthUserSnapshot(decoded.id);
-            if (!userSnapshot) {
-                return ApiResponses.unauthorized(res, "User not found");
-            }
-            if (!userSnapshot.isUse) {
-                return ApiResponses.forbidden(res, "Account disabled");
-            }
+        if (userSnapshot) {
+            writeLocalSessionSnapshot(jti, userSnapshot);
         }
 
         // Check token expiry (session timeout)
@@ -272,16 +330,19 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
                 method: req.method,
                 details: { tokenAge, sessionTimeout: SESSION_TIMEOUT }
             });
+            authSessionLocalCache.delete(jti);
             return ApiResponses.unauthorized(res, "Session expired. Please login again.");
         }
 
         // 3. Attach user to request
         if (!userSnapshot) {
+            authSessionLocalCache.delete(jti);
             return ApiResponses.unauthorized(res, "User not found");
         }
         const user = toUsersFromSnapshot(userSnapshot);
         const normalizedRole = normalizeRoleName(userSnapshot.roleName);
         if (!normalizedRole || !user.roles) {
+            authSessionLocalCache.delete(jti);
             return ApiResponses.forbidden(res, "Invalid role configuration");
         }
         user.roles.roles_name = normalizedRole;
