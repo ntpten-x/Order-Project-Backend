@@ -4,6 +4,7 @@ import { ApiResponses } from "../utils/ApiResponse";
 import { getDbContext, getDbManager, runWithDbContext } from "../database/dbContext";
 import { AppDataSource } from "../database/database";
 import { resolveRequestIsSecure } from "../utils/proxyTrust";
+import { resolveCookieDomainForRequest } from "../utils/cookieDomain";
 
 /**
  * Branch Context Interface
@@ -78,11 +79,13 @@ function resolveCookieSecurity(req: Request): { secure: boolean; sameSite: "none
 
 function clearActiveBranchCookie(res: Response, req: Request): void {
     const cookieSecurity = resolveCookieSecurity(req);
+    const cookieDomain = resolveCookieDomainForRequest(req);
     res.clearCookie("active_branch_id", {
         httpOnly: true,
         secure: cookieSecurity.secure,
         sameSite: cookieSecurity.sameSite,
         path: "/",
+        ...(cookieDomain ? { domain: cookieDomain } : {}),
     });
 }
 

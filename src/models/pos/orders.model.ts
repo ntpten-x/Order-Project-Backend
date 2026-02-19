@@ -14,6 +14,35 @@ type AccessContext = {
     actorUserId?: string;
 };
 
+const ORDER_STATUS_VARIANTS: Record<string, string[]> = {
+    pending: ["Pending", "pending"],
+    cooking: ["Cooking"],
+    served: ["Served"],
+    waitingforpayment: ["WaitingForPayment"],
+    paid: ["Paid"],
+    completed: ["Completed", "completed"],
+    cancelled: ["Cancelled", "cancelled"],
+};
+
+const ORDER_TYPE_VARIANTS: Record<string, string[]> = {
+    dinein: ["DineIn"],
+    takeaway: ["TakeAway"],
+    delivery: ["Delivery"],
+};
+
+function expandStatusVariants(statuses: string[]): string[] {
+    const expanded = statuses.flatMap((status) => {
+        const key = String(status).trim().toLowerCase();
+        return ORDER_STATUS_VARIANTS[key] ?? [String(status).trim()];
+    });
+    return Array.from(new Set(expanded.filter(Boolean)));
+}
+
+function expandOrderTypeVariants(orderType: string): string[] {
+    const key = String(orderType).trim().toLowerCase();
+    return ORDER_TYPE_VARIANTS[key] ?? [String(orderType).trim()];
+}
+
 export class OrdersModels {
     async findAll(
         page: number = 1,
@@ -45,11 +74,13 @@ export class OrdersModels {
             }
 
             if (statuses && statuses.length > 0) {
-                qb.andWhere("order.status IN (:...statuses)", { statuses });
+                const expandedStatuses = expandStatusVariants(statuses);
+                qb.andWhere("order.status IN (:...statuses)", { statuses: expandedStatuses });
             }
 
             if (orderType) {
-                qb.andWhere("order.order_type = :orderType", { orderType });
+                const expandedOrderTypes = expandOrderTypeVariants(orderType);
+                qb.andWhere("order.order_type IN (:...orderTypes)", { orderTypes: expandedOrderTypes });
             }
 
             if (searchTerm) {
@@ -94,13 +125,13 @@ export class OrdersModels {
             const params: any[] = [];
 
             if (statuses && statuses.length > 0) {
-                params.push(statuses);
+                params.push(expandStatusVariants(statuses));
                 whereClauses.push(`o.status::text = ANY($${params.length})`);
             }
 
             if (orderType) {
-                params.push(orderType);
-                whereClauses.push(`o.order_type::text = $${params.length}`);
+                params.push(expandOrderTypeVariants(orderType));
+                whereClauses.push(`o.order_type::text = ANY($${params.length})`);
             }
 
             if (query) {
@@ -240,11 +271,12 @@ export class OrdersModels {
 
     async getStats(statuses: string[], branchId?: string, access?: AccessContext): Promise<{ dineIn: number, takeaway: number, delivery: number, total: number }> {
         try {
+            const expandedStatuses = expandStatusVariants(statuses);
             const stats = await getRepository(SalesOrder)
                 .createQueryBuilder("order")
                 .select("order.order_type", "type")
                 .addSelect("COUNT(order.id)", "count")
-                .where("order.status IN (:...statuses)", { statuses });
+                .where("order.status IN (:...statuses)", { statuses: expandedStatuses });
 
             if (branchId) {
                 stats.andWhere("order.branch_id = :branchId", { branchId });

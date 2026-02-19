@@ -13,6 +13,7 @@ import { v4 as uuidv4 } from "uuid";
 import { getRedisClient, getSessionKey, isRedisConfigured } from "../lib/redisClient";
 import { normalizeRoleName } from "../utils/role";
 import { resolveRequestIsSecure } from "../utils/proxyTrust";
+import { resolveCookieDomainForRequest } from "../utils/cookieDomain";
 
 export class AuthController {
     private static resolveCookieSecurity(req: Request): { secure: boolean; sameSite: "none" | "lax" } {
@@ -183,11 +184,13 @@ export class AuthController {
 
             // Set Cookie
             const cookieSecurity = AuthController.resolveCookieSecurity(req);
+            const cookieDomain = resolveCookieDomainForRequest(req);
             res.cookie("token", token, {
                 httpOnly: true,
                 secure: cookieSecurity.secure,
                 sameSite: cookieSecurity.sameSite,
-                maxAge: 36000000 // 10 hours in ms
+                maxAge: 36000000, // 10 hours in ms
+                ...(cookieDomain ? { domain: cookieDomain } : {}),
             });
 
             // Update last_login_at and is_active
@@ -269,18 +272,21 @@ export class AuthController {
         }
 
         const cookieSecurity = AuthController.resolveCookieSecurity(req);
+        const cookieDomain = resolveCookieDomainForRequest(req);
         res.clearCookie("token", {
             httpOnly: true,
             secure: cookieSecurity.secure,
             sameSite: cookieSecurity.sameSite,
-            path: "/"
+            path: "/",
+            ...(cookieDomain ? { domain: cookieDomain } : {}),
         });
         // Clear any selected admin branch context on logout to avoid stale branch selection across sessions.
         res.clearCookie("active_branch_id", {
             httpOnly: true,
             secure: cookieSecurity.secure,
             sameSite: cookieSecurity.sameSite,
-            path: "/"
+            path: "/",
+            ...(cookieDomain ? { domain: cookieDomain } : {}),
         });
         return ApiResponses.ok(res, { message: "ออกจากระบบสำเร็จ" });
     }
@@ -382,12 +388,14 @@ export class AuthController {
         const branchId = (req.body?.branch_id ?? null) as string | null;
 
         const cookieSecurity = AuthController.resolveCookieSecurity(req);
+        const cookieDomain = resolveCookieDomainForRequest(req);
         const cookieOptions = {
             httpOnly: true,
             secure: cookieSecurity.secure,
             sameSite: cookieSecurity.sameSite,
             path: "/",
             maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+            ...(cookieDomain ? { domain: cookieDomain } : {}),
         };
 
         if (!branchId) {
