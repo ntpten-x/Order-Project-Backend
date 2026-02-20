@@ -344,7 +344,8 @@ export class SocketService {
             this.totalConnections += 1;
 
             const userId = user.id;
-            const branchId = user.branch_id;
+            const handshakeBranchId = socket.handshake.auth.branchId;
+            const branchId = handshakeBranchId || user.branch_id;
             const roleName = user.roles?.roles_name;
 
             // Join rooms: user-specific and branch-specific
@@ -352,6 +353,7 @@ export class SocketService {
                 await socket.join(userId);
                 if (branchId) {
                     await socket.join(`branch:${branchId}`);
+                    console.log(`User ${user.username} joined branch:${branchId}`);
                 }
                 if (roleName) {
                     await socket.join(`role:${roleName}`);
