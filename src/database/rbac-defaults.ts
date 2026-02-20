@@ -82,6 +82,8 @@ const CORE_PERMISSION_RESOURCES: Array<{
     { resourceKey: "audit.page", resourceName: "Audit Logs", routePattern: "/audit", resourceType: "page", sortOrder: 14 },
     { resourceKey: "health_system.page", resourceName: "Health System", routePattern: "/Health-System", resourceType: "page", sortOrder: 15 },
     { resourceKey: "orders.page", resourceName: "Orders", routePattern: "/pos/orders", resourceType: "page", sortOrder: 20 },
+    { resourceKey: "orders.edit.feature", resourceName: "Orders Edit Action", routePattern: "/pos/orders", resourceType: "feature", sortOrder: 20_1 },
+    { resourceKey: "orders.cancel.feature", resourceName: "Orders Cancel Action", routePattern: "/pos/orders", resourceType: "feature", sortOrder: 20_2 },
     { resourceKey: "products.page", resourceName: "Products", routePattern: "/pos/products", resourceType: "page", sortOrder: 21 },
     { resourceKey: "products_unit.page", resourceName: "Product Units", routePattern: "/pos/productsUnit", resourceType: "page", sortOrder: 22 },
     { resourceKey: "category.page", resourceName: "Category", routePattern: "/pos/category", resourceType: "page", sortOrder: 23 },
@@ -127,6 +129,8 @@ const EMPLOYEE_READ_ALLOW = new Set<string>([
 
 const EMPLOYEE_MENU_PREFIX_ALLOW = ["menu.pos."];
 const EMPLOYEE_WRITE_ALLOW = new Set<string>(["orders.page", "queue.page", "payments.page", "shifts.page"]);
+const ORDER_EDIT_FEATURE = "orders.edit.feature";
+const ORDER_CANCEL_FEATURE = "orders.cancel.feature";
 
 function normalizeRoleName(roleName: string): RoleName | null {
     const value = roleName.trim().toLowerCase();
@@ -147,6 +151,17 @@ function toPermissionPolicy(
 
     const resourceKey = resource.resource_key;
     const isMenu = resource.resource_type === "menu";
+
+    if (resourceKey === ORDER_EDIT_FEATURE) {
+        if (actionKey === "access" || actionKey === "view") {
+            return { effect: "allow", scope: "branch" };
+        }
+        return { effect: "deny", scope: "none" };
+    }
+
+    if (resourceKey === ORDER_CANCEL_FEATURE) {
+        return { effect: "deny", scope: "none" };
+    }
 
     if (roleName === "Manager") {
         if (MANAGER_RESTRICTED_RESOURCES.has(resourceKey)) {

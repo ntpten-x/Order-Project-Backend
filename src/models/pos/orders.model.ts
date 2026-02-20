@@ -44,6 +44,17 @@ function expandOrderTypeVariants(orderType: string): string[] {
 }
 
 export class OrdersModels {
+    private sanitizeCreator(order: SalesOrder | null): SalesOrder | null {
+        if (order?.created_by && typeof order.created_by === "object") {
+            delete (order.created_by as any).password;
+        }
+        return order;
+    }
+
+    private sanitizeCreators(orders: SalesOrder[]): SalesOrder[] {
+        return orders.map((order) => this.sanitizeCreator(order) as SalesOrder);
+    }
+
     async findAll(
         page: number = 1,
         limit: number = 50,
@@ -98,9 +109,10 @@ export class OrdersModels {
             }
 
             const [data, total] = await qb.getManyAndCount();
+            const sanitizedData = this.sanitizeCreators(data);
 
             return {
-                data,
+                data: sanitizedData,
                 total,
                 page,
                 limit
@@ -361,7 +373,7 @@ export class OrdersModels {
                 where.created_by_id = access.actorUserId;
             }
 
-            return getRepository(SalesOrder).findOne({
+            const order = await getRepository(SalesOrder).findOne({
                 where,
                 relations: [
                     "table",
@@ -376,6 +388,8 @@ export class OrdersModels {
                     "payments.payment_method"
                 ]
             })
+
+            return this.sanitizeCreator(order);
         } catch (error) {
             throw error
         }
@@ -477,7 +491,7 @@ export class OrdersModels {
             if (!updatedOrder) {
                 throw new Error("ไม่พบข้อมูลออเดอร์ที่ต้องการค้นหา")
             }
-            return updatedOrder
+            return this.sanitizeCreator(updatedOrder) as SalesOrder
         } catch (error) {
             throw error
         }
