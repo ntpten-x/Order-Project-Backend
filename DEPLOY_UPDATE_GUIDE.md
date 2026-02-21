@@ -1,20 +1,34 @@
 # Deploy Update Guide (Backend -> Frontend)
 
-เอกสารนี้คือขั้นตอน deploy เมื่อมีการอัปเดตโค้ด โดยเรียงลำดับ `Backend ก่อน` แล้ว `Frontend`  
-รองรับรูปแบบที่ใช้อยู่จริง:
-- Backend: `git pull + build/run` บน EC2
-- Frontend: `pull image` จาก GHCR บน EC2 (ไม่ build บน AWS)
+เอกสารนี้คือขั้นตอน deploy เมื่อมีการอัปเดตโค้ด โดยเรียงลำดับ `Backend ก่อน` แล้ว `Frontend`
+
+รูปแบบนี้ **ห้าม build บน EC2 เด็ดขาด**:
+- Local: build image ด้วย Docker แล้ว push ขึ้น GHCR
+- EC2: `docker login` + `docker pull` + `docker compose up -d` เฉพาะ service
 
 ---
 
 ## 0) ข้อมูลที่ใช้
-- EC2 Public IP: `13.239.29.168`
-- Backend path บน EC2: `/srv/order-project/backend`
-- Frontend path บน EC2: `/srv/order-project/frontend`
-- Backend port: `3000`
-- Frontend port: `3001`
+- EC2 Public IP: `54.255.216.29`
+- Backend URL: `http://54.255.216.29:3000`
+- Frontend URL: `http://54.255.216.29:3001`
+- Backend image: `ghcr.io/ntpten-x/order-project-backend:latest`
+- Frontend image: `ghcr.io/ntpten-x/order-project-frontend:latest`
 - Backend branch: `master`
 - Frontend branch: `master`
+- Compose file บน EC2: `~/docker-compose.prod.yml`
+- Env files บน EC2:
+  - `~/backend.env`
+  - `~/frontend.env`
+
+Setup ครั้งแรกบน EC2 (ทำครั้งเดียว):
+1. วาง `docker-compose.prod.yml` ไปที่ `~/docker-compose.prod.yml`
+2. สร้าง `~/backend.env` (copy มาจาก `E:\\Project\\Order-Project-Backend\\.env.example` แล้วแก้ให้ถูกต้อง)
+3. สร้าง `~/frontend.env` (ดูตัวอย่างใน repo frontend)
+4. สร้างโฟลเดอร์ logs: `mkdir -p ~/logs/backend`
+
+หมายเหตุ:
+- ถ้าเครื่อง EC2 ของคุณใช้ `docker-compose` ให้เปลี่ยนคำสั่ง `docker compose` เป็น `docker-compose`
 
 ---
 
@@ -22,7 +36,7 @@
 รันจากเครื่อง local:
 
 ```bash
-ssh -i "e:/Project/pos-key.pem" ec2-user@13.239.29.168
+ssh -i "e:/Project/pos.pem" ec2-user@54.255.216.29
 ```
 
 ข้อควรระวัง:
@@ -33,64 +47,42 @@ ssh -i "e:/Project/pos-key.pem" ec2-user@13.239.29.168
 
 ## 2) Deploy Backend (ทำก่อน)
 
-### 2.1 ไปที่โฟลเดอร์ backend และอัปเดตโค้ด
+### 2.1 ทำบนเครื่อง local: build + push backend image
 ```bash
-cd /srv/order-project/backend
-git fetch origin
-git checkout master
-git pull --ff-only origin master
+cd /e/Project/Order-Project-Backend
+
+# login ghcr (PAT ที่มี write:packages)
+docker login ghcr.io -u ntpten-x
+
+# build + push backend image
+docker build -t ghcr.io/ntpten-x/order-project-backend:latest .
+docker push ghcr.io/ntpten-x/order-project-backend:latest
 ```
 
-### 2.2 ตรวจไฟล์ env production (ห้ามทับทิ้งโดยไม่ตั้งค่าใหม่)
-ใช้ไฟล์เดิมที่ใช้งานจริงเป็นหลัก:
-
+### 2.2 ทำบน EC2: pull + restart เฉพาะ backend (compose)
 ```bash
-ls -la .env.production
+# login ghcr (PAT ที่มี read:packages)
+docker login ghcr.io -u ntpten-x
+
+# pull backend ใหม่
+docker compose -f ~/docker-compose.prod.yml pull backend
+
+# restart เฉพาะ backend จาก compose
+docker compose -f ~/docker-compose.prod.yml up -d backend
 ```
 
-ถ้าไฟล์ยังไม่มี:
+ถ้าเปลี่ยนค่า env (`~/backend.env`) ให้ใช้:
 ```bash
-cp .env.example .env.production
+# force recreate เพื่อให้ container โหลด env ใหม่
+docker compose -f ~/docker-compose.prod.yml up -d --force-recreate backend
 ```
 
-ค่าหลักที่ต้องถูกต้องใน `.env.production`:
-- `NODE_ENV=production`
-- `FRONTEND_URL=http://13.239.29.168:3001`
-- `COOKIE_SECURE=false` (กรณีใช้งานผ่าน HTTP)
-- `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_USER`, `DATABASE_PASSWORD`, `DATABASE_NAME` (RDS จริง)
-- `DATABASE_SSL=true`
-- `TYPEORM_SYNC=false`
-- `RUN_MIGRATIONS_ON_START=true`
-- `REQUIRE_NO_PENDING_MIGRATIONS=true`
-- `REDIS_URL` และ `RATE_LIMIT_REDIS_URL` เป็น Redis จริง
-
-เช็คค่าเร็ว:
+### 2.3 เช็กสถานะ backend
 ```bash
-grep -E '^(FRONTEND_URL|COOKIE_SECURE|DATABASE_HOST|DATABASE_PORT|DATABASE_USER|DATABASE_NAME|DATABASE_SSL|TYPEORM_SYNC|RUN_MIGRATIONS_ON_START|REQUIRE_NO_PENDING_MIGRATIONS|REDIS_URL|RATE_LIMIT_REDIS_URL)=' .env.production
-```
-
-### 2.3 Build image backend ใหม่บน EC2
-```bash
-docker build -t order-backend:prod .
-```
-
-### 2.4 Restart backend container
-```bash
-docker rm -f order-backend 2>/dev/null || true
-docker run -d \
-  --name order-backend \
-  --restart unless-stopped \
-  --env-file .env.production \
-  -p 3000:3000 \
-  order-backend:prod
-```
-
-### 2.5 ตรวจผล backend
-```bash
-docker ps --filter "name=order-backend"
-docker logs --tail=200 order-backend
+docker ps
+docker logs pos-backend --tail=200
 curl -i http://127.0.0.1:3000/health
-curl -i http://13.239.29.168:3000/health
+curl -i http://54.255.216.29:3000/health
 ```
 
 คาดหวัง:
@@ -103,16 +95,16 @@ curl -i http://13.239.29.168:3000/health
 
 ### 3.1 ติดตั้ง cron job
 ```bash
-mkdir -p /srv/order-project/backend/logs
+mkdir -p ~/logs/backend
 (crontab -l 2>/dev/null | grep -v "maintenance:cleanup-orders"; \
-echo "0 3 * * * cd /srv/order-project/backend && docker exec order-backend npm run maintenance:cleanup-orders >> /srv/order-project/backend/logs/retention-cron.log 2>&1") | crontab -
+echo "0 3 * * * docker exec pos-backend npm run maintenance:cleanup-orders >> $HOME/logs/backend/retention-cron.log 2>&1") | crontab -
 crontab -l
 ```
 
 ### 3.2 ทดสอบ retention ทันที 1 รอบ
 ```bash
-docker exec order-backend npm run maintenance:cleanup-orders
-docker exec order-backend sh -lc "tail -n 50 /app/logs/retention-jobs.log"
+docker exec pos-backend npm run maintenance:cleanup-orders
+tail -n 50 ~/logs/backend/retention-cron.log
 ```
 
 ---
@@ -121,16 +113,11 @@ docker exec order-backend sh -lc "tail -n 50 /app/logs/retention-jobs.log"
 ดูขั้นตอนละเอียดในไฟล์:
 - `../Order-Project-Frontend/DEPLOY_UPDATE_GUIDE.md`
 
-สรุปสั้น:
-1. Build + Push image จากเครื่อง local ไป GHCR
-2. EC2 ทำ `docker pull` ตาม tag
-3. Run `order-frontend` ด้วย `.env.production`
-
 ---
 
 ## 5) Post-Deploy Checklist
-1. เปิด `http://13.239.29.168:3001`
-2. ลบ cookie ของโดเมน `13.239.29.168` แล้ว login ใหม่
+1. เปิด `http://54.255.216.29:3001`
+2. ลบ cookie ของโดเมน `54.255.216.29` แล้ว login ใหม่
 3. ทดสอบ flow สำคัญ:
    - login/logout
    - switch branch
@@ -141,19 +128,9 @@ docker exec order-backend sh -lc "tail -n 50 /app/logs/retention-jobs.log"
 ---
 
 ## 6) Rollback แบบเร็ว (Backend)
-ถ้า release ใหม่มีปัญหา:
-1. ใช้ image เก่าที่ยังมีอยู่ในเครื่อง
-2. รัน container กลับด้วย tag เดิม
+ถ้าต้อง rollback แนะนำให้ push image เป็น tag แบบมีเวอร์ชัน (เช่น `:20260218-backend` หรือ `:sha-xxxx`) แล้วแก้ `image:` ใน `~/docker-compose.prod.yml` ชั่วคราว จากนั้น:
 
-ตัวอย่าง:
 ```bash
-docker images | head
-docker rm -f order-backend
-docker run -d \
-  --name order-backend \
-  --restart unless-stopped \
-  --env-file .env.production \
-  -p 3000:3000 \
-  <OLD_BACKEND_IMAGE_TAG>
+docker compose -f ~/docker-compose.prod.yml pull backend
+docker compose -f ~/docker-compose.prod.yml up -d backend
 ```
-

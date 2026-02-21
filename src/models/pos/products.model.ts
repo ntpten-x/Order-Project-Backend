@@ -1,10 +1,9 @@
 import { Products } from "../../entity/pos/Products";
-import { 
-    paginate, 
-    addSearchCondition, 
+import {
+    addSearchCondition,
     addFilterCondition,
     addBooleanFilter,
-    PaginatedResult 
+    PaginatedResult
 } from "../../utils/dbHelpers";
 import { withCache, cacheKey, invalidateCache, queryCache } from "../../utils/cache";
 import { getDbContext, getRepository } from "../../database/dbContext";
@@ -19,7 +18,8 @@ import { CreatedSort, createdSortToOrder } from "../../utils/sortCreated";
  */
 export class ProductsModels {
     private readonly CACHE_PREFIX = 'products';
-    private readonly CACHE_TTL = 2 * 60 * 1000; // 2 minutes
+    // Longer TTL reduces cold-cache latency spikes; mutations still invalidate caches explicitly.
+    private readonly CACHE_TTL = 10 * 60 * 1000; // 10 minutes
 
     private getCacheScopeParts(branchId?: string): Array<string> {
         const ctx = getDbContext();
@@ -68,31 +68,75 @@ export class ProductsModels {
         sortCreated: CreatedSort = "old"
     ): Promise<PaginatedResult<Products>> {
         const productsRepository = getRepository(Products);
-        let query = productsRepository.createQueryBuilder("products")
-            .leftJoinAndSelect("products.category", "category")
-            .leftJoinAndSelect("products.unit", "unit")
-            .orderBy("products.create_date", createdSortToOrder(sortCreated));
+        let baseQuery = productsRepository.createQueryBuilder("products");
 
         // Filter by branch_id for data isolation
         if (branchId) {
-            query.andWhere("products.branch_id = :branchId", { branchId });
+            baseQuery.andWhere("products.branch_id = :branchId", { branchId });
         }
 
         // Use indexed category_id filter
-        query = addFilterCondition(query, category_id, "category_id", "products");
-        
+        baseQuery = addFilterCondition(baseQuery, category_id, "category_id", "products");
+
         // Use indexed is_active filter
-        query = addBooleanFilter(query, is_active, "is_active", "products");
-        
+        baseQuery = addBooleanFilter(baseQuery, is_active, "is_active", "products");
+
         // Search uses indexed product_name column
-        query = addSearchCondition(
-            query, 
-            q, 
-            ["product_name", "display_name", "description"], 
+        baseQuery = addSearchCondition(
+            baseQuery,
+            q,
+            ["product_name", "display_name", "description"],
             "products"
         );
 
-        return paginate(query, { page, limit });
+        const skip = (page - 1) * limit;
+        const total = await baseQuery.clone().getCount();
+        const data = await baseQuery
+            .leftJoinAndSelect("products.category", "category")
+            .leftJoinAndSelect("products.unit", "unit")
+            .orderBy("products.create_date", createdSortToOrder(sortCreated))
+            .skip(skip)
+            .take(limit)
+            .getMany();
+
+        const last_page = Math.ceil(total / limit) || 1;
+        return {
+            data,
+            total,
+            page,
+            last_page,
+            has_next: page < last_page,
+            has_prev: page > 1,
+        };
+    }
+
+    /**
+     * Count active products (count-only query, no joins)
+     * Useful for UI badges and reduces load vs calling list endpoint with limit=1.
+     */
+    async countActive(category_id?: string, branchId?: string): Promise<number> {
+        const scope = this.getCacheScopeParts(branchId);
+        const key = cacheKey(this.CACHE_PREFIX, ...scope, "active-count", category_id);
+
+        return withCache(
+            key,
+            async () => {
+                const productsRepository = getRepository(Products);
+                let baseQuery = productsRepository
+                    .createQueryBuilder("products")
+                    .where("products.is_active = :isActive", { isActive: true });
+
+                if (branchId) {
+                    baseQuery.andWhere("products.branch_id = :branchId", { branchId });
+                }
+
+                baseQuery = addFilterCondition(baseQuery, category_id, "category_id", "products");
+                return baseQuery.getCount();
+            },
+            // Keep TTL short-ish; mutations still invalidate explicitly.
+            2 * 60 * 1000,
+            queryCache as any
+        );
     }
 
     /**
@@ -217,6 +261,7 @@ export class ProductsModels {
         const patterns = [
             cacheKey(this.CACHE_PREFIX, "branch", branchId, "list"),
             cacheKey(this.CACHE_PREFIX, "branch", branchId, "name"),
+            cacheKey(this.CACHE_PREFIX, "branch", branchId, "active-count"),
             cacheKey(this.CACHE_PREFIX, "branch", branchId, "count-by-category"),
         ];
 

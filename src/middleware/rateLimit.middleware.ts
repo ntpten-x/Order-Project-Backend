@@ -122,13 +122,19 @@ const createRedisStore = (getRedisClient: () => any | null, prefix: string, fail
                     return localGet(key);
                 }
                 const redisKey = withPrefix(key);
-                const rawHits = await redisClient.get(redisKey);
+                // Use MULTI to reduce Redis round-trips (important for request latency).
+                const now = Date.now();
+                const [rawHits, ttlRaw] = (await redisClient
+                    .multi()
+                    .get(redisKey)
+                    .pTTL(redisKey)
+                    .exec()) as unknown as [unknown, unknown];
                 if (rawHits === null || rawHits === undefined) {
                     return localGet(key);
                 }
                 const totalHits = Number(rawHits);
-                const ttlMs = Number(await redisClient.pTTL(redisKey));
-                const resetTime = Number.isFinite(ttlMs) && ttlMs > 0 ? new Date(Date.now() + ttlMs) : undefined;
+                const ttlMs = Number(ttlRaw);
+                const resetTime = Number.isFinite(ttlMs) && ttlMs > 0 ? new Date(now + ttlMs) : undefined;
                 return { totalHits, resetTime };
             } catch (err) {
                 logStoreError(err);
@@ -149,8 +155,14 @@ const createRedisStore = (getRedisClient: () => any | null, prefix: string, fail
                 }
                 const redisKey = withPrefix(key);
                 const now = Date.now();
-                const totalHits = Number(await redisClient.incr(redisKey));
-                let ttlMs = Number(await redisClient.pTTL(redisKey));
+                // Use MULTI to reduce Redis round-trips (INCR + PTTL in one network hop).
+                const [hitsRaw, ttlRaw] = (await redisClient
+                    .multi()
+                    .incr(redisKey)
+                    .pTTL(redisKey)
+                    .exec()) as unknown as [unknown, unknown];
+                const totalHits = Number(hitsRaw);
+                let ttlMs = Number(ttlRaw);
                 if (!Number.isFinite(ttlMs) || ttlMs < 0) {
                     await redisClient.pExpire(redisKey, windowMs);
                     ttlMs = windowMs;

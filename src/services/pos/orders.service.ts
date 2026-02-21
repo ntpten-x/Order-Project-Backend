@@ -162,7 +162,9 @@ export class OrdersService {
             item.discount_amount = discount;
             item.total_price = Math.max(0, Number(lineTotal));
             item.notes = itemData.notes;
-            item.status = itemData.status || OrderStatus.Pending;
+            item.status = itemData.status
+                ? this.ensureValidStatus(String(itemData.status))
+                : OrderStatus.Pending;
 
             const details: SalesOrderDetail[] = detailsData.map((d: any) => {
                 const detail = new SalesOrderDetail();
@@ -324,6 +326,9 @@ export class OrdersService {
     }
 
     async create(orders: SalesOrder, branchId?: string): Promise<SalesOrder> {
+        orders.status = orders.status
+            ? this.ensureValidStatus(String(orders.status))
+            : OrderStatus.Pending;
         await this.ensureActiveShift(orders.branch_id || branchId);
         return await runInTransaction(async (manager) => {
             try {
@@ -423,6 +428,8 @@ export class OrdersService {
 
             if (!orderData.status) {
                 orderData.status = OrderStatus.Pending;
+            } else {
+                orderData.status = this.ensureValidStatus(String(orderData.status));
             }
 
             const effectiveBranchId = orderData.branch_id || branchId;
@@ -545,17 +552,18 @@ export class OrdersService {
                 }
             }
 
-            if (orders.status) {
-                this.ensureValidStatus(String(orders.status));
-            }
+            const normalizedStatus = orders.status
+                ? this.ensureValidStatus(String(orders.status))
+                : undefined;
 
-            const updatedOrder = await this.ordersModel.update(id, orders, undefined, branchId)
+            const payload = normalizedStatus
+                ? ({ ...orders, status: normalizedStatus } as SalesOrder)
+                : orders;
 
-            if (orders.status) {
-                const normalizedStatus = this.ensureValidStatus(String(orders.status));
-                if (normalizedStatus === OrderStatus.Cancelled) {
-                    await this.ordersModel.updateAllItemsStatus(id, OrderStatus.Cancelled);
-                }
+            const updatedOrder = await this.ordersModel.update(id, payload, undefined, branchId)
+
+            if (normalizedStatus === OrderStatus.Cancelled) {
+                await this.ordersModel.updateAllItemsStatus(id, OrderStatus.Cancelled);
             }
 
             await recalculateOrderTotal(id);
@@ -563,7 +571,7 @@ export class OrdersService {
             const refreshedOrder = await this.ordersModel.findOne(id, branchId);
             const result = refreshedOrder ?? updatedOrder;
 
-            const finalStatus = (orders.status as OrderStatus) ?? result.status;
+            const finalStatus = normalizedStatus ?? this.ensureValidStatus(String(result.status));
             // Release table if Order is Completed or Cancelled
             if ((finalStatus === OrderStatus.Completed || finalStatus === OrderStatus.Cancelled) && result.table_id) {
                 const tablesRepo = getRepository(Tables);

@@ -25,8 +25,20 @@ export function getRepository<Entity extends ObjectLiteral>(entity: EntityTarget
     return getDbManager().getRepository(entity);
 }
 
-async function setSessionGuc(queryRunner: QueryRunner, key: string, value: string): Promise<void> {
-    await queryRunner.query(`SELECT set_config($1, $2, false)`, [key, value]);
+async function setSessionContext(
+    queryRunner: QueryRunner,
+    params: { branchId: string; userId: string; role: string; isAdmin: string }
+): Promise<void> {
+    await queryRunner.query(
+        `
+            SELECT
+                set_config('app.branch_id', $1, false),
+                set_config('app.user_id', $2, false),
+                set_config('app.user_role', $3, false),
+                set_config('app.is_admin', $4, false)
+        `,
+        [params.branchId, params.userId, params.role, params.isAdmin]
+    );
 }
 
 export async function runWithDbContext<T>(
@@ -41,10 +53,12 @@ export async function runWithDbContext<T>(
     const roleValue = params.role ?? "";
     const isAdminValue = params.isAdmin ? "true" : "false";
 
-    await setSessionGuc(queryRunner, "app.branch_id", branchValue);
-    await setSessionGuc(queryRunner, "app.user_id", userIdValue);
-    await setSessionGuc(queryRunner, "app.user_role", roleValue);
-    await setSessionGuc(queryRunner, "app.is_admin", isAdminValue);
+    await setSessionContext(queryRunner, {
+        branchId: branchValue,
+        userId: userIdValue,
+        role: roleValue,
+        isAdmin: isAdminValue,
+    });
 
     try {
         return await storage.run(
@@ -60,10 +74,12 @@ export async function runWithDbContext<T>(
         );
     } finally {
         try {
-            await setSessionGuc(queryRunner, "app.branch_id", "");
-            await setSessionGuc(queryRunner, "app.user_id", "");
-            await setSessionGuc(queryRunner, "app.user_role", "");
-            await setSessionGuc(queryRunner, "app.is_admin", "false");
+            await setSessionContext(queryRunner, {
+                branchId: "",
+                userId: "",
+                role: "",
+                isAdmin: "false",
+            });
         } catch (error) {
             console.warn("[DB] Failed to reset session context:", error);
         }

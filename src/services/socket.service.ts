@@ -191,6 +191,18 @@ export class SocketService {
                 const cookies = parseCookies(socket.handshake.headers.cookie);
                 const token = cookies['token'] || socket.handshake.auth.token; // Also check auth object
 
+                if (process.env.NODE_ENV !== "production" || process.env.SOCKET_AUTH_DEBUG === "true") {
+                    console.info("[Socket Auth Debug]", {
+                        hasCookieToken: !!cookies['token'],
+                        hasAuthToken: !!socket.handshake.auth.token,
+                        tokenType: cookies['token'] ? "cookie" : (socket.handshake.auth.token ? "handshake.auth" : "none"),
+                        cookieCount: Object.keys(cookies).length,
+                        origin: socket.handshake.headers.origin,
+                        domain: process.env.COOKIE_DOMAIN,
+                        trustProxy: process.env.TRUST_PROXY_CHAIN
+                    });
+                }
+
                 if (!token) {
                     const message = "Authentication error: No token";
                     this.recordAuthError(message);
@@ -344,7 +356,8 @@ export class SocketService {
             this.totalConnections += 1;
 
             const userId = user.id;
-            const branchId = user.branch_id;
+            const handshakeBranchId = socket.handshake.auth.branchId;
+            const branchId = handshakeBranchId || user.branch_id;
             const roleName = user.roles?.roles_name;
 
             // Join rooms: user-specific and branch-specific
@@ -352,6 +365,7 @@ export class SocketService {
                 await socket.join(userId);
                 if (branchId) {
                     await socket.join(`branch:${branchId}`);
+                    console.log(`User ${user.username} joined branch:${branchId}`);
                 }
                 if (roleName) {
                     await socket.join(`role:${roleName}`);

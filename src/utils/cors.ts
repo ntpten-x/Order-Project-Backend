@@ -2,7 +2,9 @@ const DEFAULT_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://localhost:3001",
     "http://127.0.0.1:3000",
-    "http://13.239.29.168:3001",
+    "http://127.0.0.1:3001",
+    "http://18.143.76.86:3001",
+    "https://system.pos-hub.shop",
 ];
 
 function parseListEnv(value: string | undefined): string[] {
