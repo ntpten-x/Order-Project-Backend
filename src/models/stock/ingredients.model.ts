@@ -75,11 +75,11 @@ export class IngredientsModel {
             const query = ingredientsRepository.createQueryBuilder("ingredients")
                 .leftJoinAndSelect("ingredients.unit", "unit")
                 .where("ingredients.id = :id", { id });
-            
+
             if (branchId) {
                 query.andWhere("ingredients.branch_id = :branchId", { branchId });
             }
-            
+
             return query.getOne();
         } catch (error) {
             throw error
@@ -87,16 +87,17 @@ export class IngredientsModel {
     }
 
     async findOneByName(ingredient_name: string, branchId?: string): Promise<Ingredients | null> {
+        if (!ingredient_name?.trim()) return null;
         try {
             const ingredientsRepository = getRepository(Ingredients);
             const query = ingredientsRepository.createQueryBuilder("ingredients")
                 .leftJoinAndSelect("ingredients.unit", "unit")
                 .where("ingredients.ingredient_name = :ingredient_name", { ingredient_name });
-            
+
             if (branchId) {
                 query.andWhere("ingredients.branch_id = :branchId", { branchId });
             }
-            
+
             return query.getOne();
         } catch (error) {
             throw error

@@ -85,6 +85,7 @@ export class DiscountsModels {
     }
 
     async findOneByName(discount_name: string, branchId?: string): Promise<Discounts | null> {
+        if (!discount_name?.trim()) return null;
         try {
             const discountsRepository = getRepository(Discounts);
             const where: any = { discount_name };

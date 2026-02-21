@@ -78,9 +78,10 @@ export class ProductsUnitModels {
     }
 
     async findOneByName(name: string, branchId?: string): Promise<ProductsUnit | null> {
+        if (!name?.trim()) return null;
         try {
             const productsUnitRepository = getRepository(ProductsUnit);
-            const where: any = { unit_name: name };
+            const where: any = { unit_name: name.trim() };
             if (branchId) {
                 where.branch_id = branchId;
             }

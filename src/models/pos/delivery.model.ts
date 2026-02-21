@@ -50,6 +50,7 @@ export class DeliveryModels {
     }
 
     async findOneByName(delivery_name: string, branchId?: string): Promise<Delivery | null> {
+        if (!delivery_name?.trim()) return null;
         try {
             const deliveryRepository = getRepository(Delivery);
             const where: any = { delivery_name };
