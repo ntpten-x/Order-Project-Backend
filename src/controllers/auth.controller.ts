@@ -12,13 +12,48 @@ import { RealtimeEvents } from "../utils/realtimeEvents";
 import { v4 as uuidv4 } from "uuid";
 import { getRedisClient, getSessionKey, isRedisConfigured } from "../lib/redisClient";
 import { normalizeRoleName } from "../utils/role";
+import { resolveRequestIsSecure } from "../utils/proxyTrust";
+import { resolveCookieDomainForRequest } from "../utils/cookieDomain";
 
 export class AuthController {
+    private static resolveCookieSecurity(req: Request): { secure: boolean; sameSite: "none" | "lax" } {
+        const secureByRequest = resolveRequestIsSecure(req);
+
+        const secureOverride = process.env.COOKIE_SECURE;
+        const secure =
+            secureOverride === "true" ||
+            (secureOverride !== "false" && secureByRequest);
+
+        return {
+            secure,
+            sameSite: secure ? "none" : "lax",
+        };
+    }
+
     private static setNoStoreHeaders(res: Response): void {
         res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
         res.setHeader("Pragma", "no-cache");
         res.setHeader("Expires", "0");
         res.setHeader("Vary", "Authorization, Cookie");
+    }
+
+    private static verifyTokenIgnoringExpiration(token: string): { id?: string; jti?: string } | null {
+        const secret = process.env.JWT_SECRET;
+        if (!secret) return null;
+
+        try {
+            const decoded = jwt.verify(token, secret, { ignoreExpiration: true });
+            if (!decoded || typeof decoded !== "object") return null;
+
+            const payload = decoded as jwt.JwtPayload & { id?: unknown; jti?: unknown };
+            const id = typeof payload.id === "string" ? payload.id : undefined;
+            const jti = typeof payload.jti === "string" ? payload.jti : undefined;
+
+            if (!id && !jti) return null;
+            return { id, jti };
+        } catch {
+            return null;
+        }
     }
 
     static async login(req: Request, res: Response) {
@@ -126,19 +161,36 @@ export class AuthController {
             if (redis) {
                 const sessionKey = getSessionKey(jti);
                 const ttl = Number(process.env.SESSION_TIMEOUT_MS) || 8 * 60 * 60 * 1000;
-                await redis.set(sessionKey, JSON.stringify({ userId: user.id, role, branchId: user.branch_id, createdAt: Date.now() }), {
-                    PX: ttl,
-                });
+                await redis.set(
+                    sessionKey,
+                    JSON.stringify({
+                        userId: user.id,
+                        username: user.username,
+                        name: user.name ?? null,
+                        role,
+                        roleDisplayName: user.roles?.display_name ?? role,
+                        rolesId: user.roles_id,
+                        branchId: user.branch_id ?? null,
+                        isUse: user.is_use,
+                        isActive: user.is_active,
+                        createdAt: Date.now(),
+                        lastValidatedAt: Date.now(),
+                    }),
+                    { PX: ttl }
+                );
             } else if (isRedisConfigured()) {
                 return ApiResponses.internalError(res, "Session store unavailable");
             }
 
             // Set Cookie
+            const cookieSecurity = AuthController.resolveCookieSecurity(req);
+            const cookieDomain = resolveCookieDomainForRequest(req);
             res.cookie("token", token, {
                 httpOnly: true,
-                secure: process.env.NODE_ENV === "production", // true in production
-                sameSite: process.env.NODE_ENV === "production" ? "none" : "lax", // None for cross-site (Render subdomains)
-                maxAge: 36000000 // 10 hours in ms
+                secure: cookieSecurity.secure,
+                sameSite: cookieSecurity.sameSite,
+                maxAge: 36000000, // 10 hours in ms
+                ...(cookieDomain ? { domain: cookieDomain } : {}),
             });
 
             // Update last_login_at and is_active
@@ -151,7 +203,6 @@ export class AuthController {
             SocketService.getInstance().emit(RealtimeEvents.users.status, { id: user.id, is_active: true });
 
             return ApiResponses.ok(res, {
-                token,
                 user: {
                     id: user.id,
                     username: user.username,
@@ -185,16 +236,16 @@ export class AuthController {
         if ((req as AuthRequest).user) {
             userId = (req as AuthRequest).user?.id;
         }
-        // 2. Fallback: Decode token from cookie (even if expired)
-        else if (req.cookies && req.cookies.token) {
-            try {
-                const decoded: any = jwt.decode(req.cookies.token);
-                if (decoded && typeof decoded === 'object' && decoded.id) {
-                    userId = decoded.id;
-                    jti = decoded.jti;
-                }
-            } catch (ignore) {
-                // Ignore decoding errors during logout
+
+        // 2. Extract trusted claims from signed token (ignore expiration only)
+        const tokenFromCookie = typeof req.cookies?.token === "string" ? req.cookies.token : undefined;
+        if (tokenFromCookie) {
+            const trustedClaims = AuthController.verifyTokenIgnoringExpiration(tokenFromCookie);
+            if (!userId && trustedClaims?.id) {
+                userId = trustedClaims.id;
+            }
+            if (trustedClaims?.jti) {
+                jti = trustedClaims.jti;
             }
         }
 
@@ -220,18 +271,22 @@ export class AuthController {
             }
         }
 
+        const cookieSecurity = AuthController.resolveCookieSecurity(req);
+        const cookieDomain = resolveCookieDomainForRequest(req);
         res.clearCookie("token", {
             httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-            path: "/"
+            secure: cookieSecurity.secure,
+            sameSite: cookieSecurity.sameSite,
+            path: "/",
+            ...(cookieDomain ? { domain: cookieDomain } : {}),
         });
         // Clear any selected admin branch context on logout to avoid stale branch selection across sessions.
         res.clearCookie("active_branch_id", {
             httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-            path: "/"
+            secure: cookieSecurity.secure,
+            sameSite: cookieSecurity.sameSite,
+            path: "/",
+            ...(cookieDomain ? { domain: cookieDomain } : {}),
         });
         return ApiResponses.ok(res, { message: "ออกจากระบบสำเร็จ" });
     }
@@ -316,7 +371,8 @@ export class AuthController {
     /**
      * Admin-only: Switch the active branch context for RLS (stored in a cookie).
      * - branch_id = uuid: select branch context (admin sees only that branch)
-     * - branch_id = null/undefined: clear selection (admin sees all branches)
+     * - branch_id = null/undefined: clear selection (admin falls back to assigned branch;
+     *   if no assigned branch, admin runs without branch context)
      */
     static async switchBranch(req: AuthRequest, res: Response) {
         AuthController.setNoStoreHeaders(res);
@@ -331,12 +387,15 @@ export class AuthController {
 
         const branchId = (req.body?.branch_id ?? null) as string | null;
 
+        const cookieSecurity = AuthController.resolveCookieSecurity(req);
+        const cookieDomain = resolveCookieDomainForRequest(req);
         const cookieOptions = {
             httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: (process.env.NODE_ENV === "production" ? "none" : "lax") as "none" | "lax",
+            secure: cookieSecurity.secure,
+            sameSite: cookieSecurity.sameSite,
             path: "/",
             maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+            ...(cookieDomain ? { domain: cookieDomain } : {}),
         };
 
         if (!branchId) {
@@ -353,4 +412,3 @@ export class AuthController {
         return ApiResponses.ok(res, { active_branch_id: branchId });
     }
 }
-

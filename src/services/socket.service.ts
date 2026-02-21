@@ -6,6 +6,135 @@ import { AppDataSource } from "../database/database";
 import { Users } from "../entity/Users";
 import { RealtimeEvents } from "../utils/realtimeEvents";
 import { getRedisClient, getSessionKey, isRedisConfigured, resolveRedisConfig } from "../lib/redisClient";
+import { normalizeRoleName } from "../utils/role";
+
+const SESSION_TIMEOUT = Number(process.env.SESSION_TIMEOUT_MS) || 8 * 60 * 60 * 1000;
+const AUTH_USER_DB_REVALIDATE_MS = Number(process.env.AUTH_USER_DB_REVALIDATE_MS || 5 * 60 * 1000);
+
+type AuthSessionRecord = {
+    userId?: string;
+    username?: string;
+    name?: string | null;
+    role?: string;
+    roleDisplayName?: string;
+    rolesId?: string;
+    branchId?: string | null;
+    isUse?: boolean;
+    isActive?: boolean;
+    createdAt?: number;
+    lastValidatedAt?: number;
+};
+
+type SocketUserSnapshot = {
+    id: string;
+    username: string;
+    name: string | null;
+    rolesId: string;
+    roleName: string;
+    roleDisplayName: string;
+    branchId: string | null;
+    isUse: boolean;
+    isActive: boolean;
+};
+
+export type SocketHealthSnapshot = {
+    initialized: boolean;
+    connectedClients: number;
+    redisAdapterEnabled: boolean;
+    redisAdapterReady: boolean;
+    totalConnections: number;
+    authErrorCount: number;
+    connectErrorCount: number;
+    lastAuthErrorAt: string | null;
+    lastAuthErrorMessage: string | null;
+    lastConnectErrorAt: string | null;
+    lastConnectErrorMessage: string | null;
+    lastDisconnectReason: string | null;
+};
+
+function toBoolean(value: unknown): boolean {
+    return value === true || value === "true" || value === 1 || value === "1" || value === "t";
+}
+
+function toUsersFromSnapshot(snapshot: SocketUserSnapshot): Users {
+    return {
+        id: snapshot.id,
+        username: snapshot.username,
+        name: snapshot.name ?? undefined,
+        roles_id: snapshot.rolesId,
+        branch_id: snapshot.branchId ?? undefined,
+        is_use: snapshot.isUse,
+        is_active: snapshot.isActive,
+        roles: {
+            id: snapshot.rolesId,
+            roles_name: snapshot.roleName,
+            display_name: snapshot.roleDisplayName,
+        } as any,
+    } as Users;
+}
+
+async function getSessionWithSlidingTtl(redis: any, sessionKey: string): Promise<string | null> {
+    if (typeof redis.getEx === "function") {
+        try {
+            return await redis.getEx(sessionKey, { PX: SESSION_TIMEOUT });
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            if (!/unknown command|wrong number of arguments/i.test(message)) {
+                throw error;
+            }
+        }
+    }
+
+    const sessionJson = await redis.get(sessionKey);
+    if (sessionJson) {
+        await redis.pExpire(sessionKey, SESSION_TIMEOUT);
+    }
+    return sessionJson;
+}
+
+async function loadSocketUserSnapshot(userId: string): Promise<SocketUserSnapshot | null> {
+    const row = await AppDataSource.getRepository(Users)
+        .createQueryBuilder("u")
+        .leftJoin("u.roles", "r")
+        .select("u.id", "id")
+        .addSelect("u.username", "username")
+        .addSelect("u.name", "name")
+        .addSelect("u.roles_id", "rolesId")
+        .addSelect("u.branch_id", "branchId")
+        .addSelect("u.is_use", "isUse")
+        .addSelect("u.is_active", "isActive")
+        .addSelect("r.roles_name", "roleName")
+        .addSelect("r.display_name", "roleDisplayName")
+        .where("u.id = :userId", { userId })
+        .getRawOne<{
+            id: string;
+            username: string;
+            name: string | null;
+            rolesId: string;
+            branchId: string | null;
+            isUse: boolean | string | number;
+            isActive: boolean | string | number;
+            roleName: string;
+            roleDisplayName: string;
+        }>();
+
+    if (!row) return null;
+    const normalizedRole = normalizeRoleName(row.roleName);
+    if (!normalizedRole) return null;
+
+    return {
+        id: row.id,
+        username: row.username,
+        name: row.name ?? null,
+        rolesId: row.rolesId,
+        roleName: normalizedRole,
+        roleDisplayName: row.roleDisplayName || normalizedRole,
+        branchId: row.branchId ?? null,
+        isUse: toBoolean(row.isUse),
+        isActive: toBoolean(row.isActive),
+    };
+}
+
 const parseCookies = (cookieHeader: string | undefined): { [key: string]: string } => {
     const list: { [key: string]: string } = {};
     if (!cookieHeader) return list;
@@ -26,6 +155,14 @@ export class SocketService {
     private io: Server | null = null;
     private adapterInitStarted = false;
     private redisAdapterReady = false;
+    private totalConnections = 0;
+    private authErrorCount = 0;
+    private connectErrorCount = 0;
+    private lastAuthErrorAt: string | null = null;
+    private lastAuthErrorMessage: string | null = null;
+    private lastConnectErrorAt: string | null = null;
+    private lastConnectErrorMessage: string | null = null;
+    private lastDisconnectReason: string | null = null;
 
     // Realtime event governance:
     // - "global" events are rare (system announcements only)
@@ -54,66 +191,187 @@ export class SocketService {
                 const cookies = parseCookies(socket.handshake.headers.cookie);
                 const token = cookies['token'] || socket.handshake.auth.token; // Also check auth object
 
+                if (process.env.NODE_ENV !== "production" || process.env.SOCKET_AUTH_DEBUG === "true") {
+                    console.info("[Socket Auth Debug]", {
+                        hasCookieToken: !!cookies['token'],
+                        hasAuthToken: !!socket.handshake.auth.token,
+                        tokenType: cookies['token'] ? "cookie" : (socket.handshake.auth.token ? "handshake.auth" : "none"),
+                        cookieCount: Object.keys(cookies).length,
+                        origin: socket.handshake.headers.origin,
+                        domain: process.env.COOKIE_DOMAIN,
+                        trustProxy: process.env.TRUST_PROXY_CHAIN
+                    });
+                }
+
                 if (!token) {
-                    return next(new Error("Authentication error: No token"));
+                    const message = "Authentication error: No token";
+                    this.recordAuthError(message);
+                    return next(new Error(message));
                 }
 
                 const secret = process.env.JWT_SECRET;
                 if (!secret) {
-                    return next(new Error("Server misconfiguration: JWT_SECRET missing"));
+                    const message = "Server misconfiguration: JWT_SECRET missing";
+                    this.recordAuthError(message);
+                    return next(new Error(message));
                 }
                 const decoded: any = jwt.verify(token, secret);
                 const jti = decoded.jti;
+                if (!decoded?.id) {
+                    const message = "Authentication error: Invalid token payload";
+                    this.recordAuthError(message);
+                    return next(new Error(message));
+                }
 
+                let userSnapshot: SocketUserSnapshot | null = null;
                 const redis = await getRedisClient();
                 if (redis && jti) {
                     const sessionKey = getSessionKey(jti);
-                    const session = await redis.get(sessionKey);
-                    if (!session) {
-                        return next(new Error("Authentication error: Session expired"));
+                    const sessionJson = await getSessionWithSlidingTtl(redis, sessionKey);
+                    if (!sessionJson) {
+                        const message = "Authentication error: Session expired";
+                        this.recordAuthError(message);
+                        return next(new Error(message));
                     }
-                    await redis.pExpire(sessionKey, Number(process.env.SESSION_TIMEOUT_MS) || 8 * 60 * 60 * 1000);
+
+                    let session: AuthSessionRecord;
+                    try {
+                        session = JSON.parse(sessionJson) as AuthSessionRecord;
+                    } catch {
+                        const message = "Authentication error: Session invalid";
+                        this.recordAuthError(message);
+                        return next(new Error(message));
+                    }
+
+                    if (session.userId && session.userId !== decoded.id) {
+                        const message = "Authentication error: Session mismatch";
+                        this.recordAuthError(message);
+                        return next(new Error(message));
+                    }
+
+                    const normalizedSessionRole = normalizeRoleName(session.role);
+                    const sessionIncomplete =
+                        !normalizedSessionRole ||
+                        !session.rolesId ||
+                        !session.username ||
+                        typeof session.isUse !== "boolean" ||
+                        typeof session.isActive !== "boolean";
+                    const lastValidatedAt = Number(session.lastValidatedAt || 0);
+                    const shouldRevalidateFromDb =
+                        sessionIncomplete ||
+                        AUTH_USER_DB_REVALIDATE_MS <= 0 ||
+                        !Number.isFinite(lastValidatedAt) ||
+                        Date.now() - lastValidatedAt >= AUTH_USER_DB_REVALIDATE_MS;
+
+                    if (shouldRevalidateFromDb) {
+                        const freshSnapshot = await loadSocketUserSnapshot(decoded.id);
+                        if (!freshSnapshot) {
+                            await redis.del(sessionKey);
+                            const message = "Authentication error: User not found";
+                            this.recordAuthError(message);
+                            return next(new Error(message));
+                        }
+
+                        if (!freshSnapshot.isUse) {
+                            await redis.del(sessionKey);
+                            const message = "Authentication error: Account disabled";
+                            this.recordAuthError(message);
+                            return next(new Error(message));
+                        }
+
+                        userSnapshot = freshSnapshot;
+                        const updatedSession: AuthSessionRecord = {
+                            ...session,
+                            userId: freshSnapshot.id,
+                            username: freshSnapshot.username,
+                            name: freshSnapshot.name ?? null,
+                            role: freshSnapshot.roleName,
+                            roleDisplayName: freshSnapshot.roleDisplayName,
+                            rolesId: freshSnapshot.rolesId,
+                            branchId: freshSnapshot.branchId ?? null,
+                            isUse: freshSnapshot.isUse,
+                            isActive: freshSnapshot.isActive,
+                            lastValidatedAt: Date.now(),
+                        };
+                        await redis.set(sessionKey, JSON.stringify(updatedSession), { PX: SESSION_TIMEOUT });
+                    } else {
+                        if (!session.isUse) {
+                            const message = "Authentication error: Account disabled";
+                            this.recordAuthError(message);
+                            return next(new Error(message));
+                        }
+
+                        userSnapshot = {
+                            id: decoded.id,
+                            username: session.username!,
+                            name: session.name ?? null,
+                            rolesId: session.rolesId!,
+                            roleName: normalizedSessionRole!,
+                            roleDisplayName: session.roleDisplayName || normalizedSessionRole!,
+                            branchId: session.branchId ?? null,
+                            isUse: session.isUse!,
+                            isActive: session.isActive!,
+                        };
+                    }
                 } else if (isRedisConfigured()) {
-                    return next(new Error("Authentication error: Session store unavailable"));
+                    const message = "Authentication error: Session store unavailable";
+                    this.recordAuthError(message);
+                    return next(new Error(message));
+                } else {
+                    userSnapshot = await loadSocketUserSnapshot(decoded.id);
+                    if (!userSnapshot) {
+                        const message = "Authentication error: User not found";
+                        this.recordAuthError(message);
+                        return next(new Error(message));
+                    }
+                    if (!userSnapshot.isUse) {
+                        const message = "Authentication error: Account disabled";
+                        this.recordAuthError(message);
+                        return next(new Error(message));
+                    }
                 }
 
-                // Fetch user to check is_use
-                const userRepository = AppDataSource.getRepository(Users);
-                const user = await userRepository.findOne({
-                    where: { id: decoded.id },
-                    relations: ["roles"],
-                });
-
-                if (!user) {
-                    return next(new Error("Authentication error: User not found"));
-                }
-
-                if (!user.is_use) {
-                    return next(new Error("Authentication error: Account disabled"));
+                if (!userSnapshot) {
+                    const message = "Authentication error: User not found";
+                    this.recordAuthError(message);
+                    return next(new Error(message));
                 }
 
                 // Attach user to socket
-                (socket as any).user = user;
+                (socket as any).user = toUsersFromSnapshot(userSnapshot);
                 next();
             } catch (err) {
-                console.error("Socket auth error:", err);
+                this.recordAuthError("Authentication error", err);
                 return next(new Error("Authentication error"));
             }
         });
 
         this.io.on('connection', async (socket) => {
             const user = (socket as any).user as Users;
+            if (!user?.id) {
+                this.recordConnectError("Socket user context missing after auth");
+                socket.disconnect(true);
+                return;
+            }
+            this.totalConnections += 1;
+
             const userId = user.id;
-            const branchId = user.branch_id;
+            const handshakeBranchId = socket.handshake.auth.branchId;
+            const branchId = handshakeBranchId || user.branch_id;
             const roleName = user.roles?.roles_name;
 
             // Join rooms: user-specific and branch-specific
-            await socket.join(userId);
-            if (branchId) {
-                await socket.join(`branch:${branchId}`);
-            }
-            if (roleName) {
-                await socket.join(`role:${roleName}`);
+            try {
+                await socket.join(userId);
+                if (branchId) {
+                    await socket.join(`branch:${branchId}`);
+                    console.log(`User ${user.username} joined branch:${branchId}`);
+                }
+                if (roleName) {
+                    await socket.join(`role:${roleName}`);
+                }
+            } catch (error) {
+                this.recordConnectError("Socket room join failed", error);
             }
 
             // Count sockets in this room
@@ -141,7 +399,12 @@ export class SocketService {
                 }
             });
 
+            socket.on("error", (error) => {
+                this.recordConnectError("Socket runtime error", error);
+            });
+
             socket.on('disconnect', async (reason) => {
+                this.lastDisconnectReason = String(reason || "unknown");
                 // Check remaining sockets in the room
                 const sockets = await this.io?.in(userId).fetchSockets();
                 const count = sockets?.length || 0;
@@ -195,17 +458,56 @@ export class SocketService {
         }
     }
 
-    public getHealthSnapshot(): {
-        initialized: boolean;
-        connectedClients: number;
-        redisAdapterEnabled: boolean;
-        redisAdapterReady: boolean;
-    } {
+    private recordAuthError(message: string, error?: unknown): void {
+        this.authErrorCount += 1;
+        this.lastAuthErrorAt = new Date().toISOString();
+        this.lastAuthErrorMessage = this.extractErrorMessage(error) || message;
+        if (error) {
+            console.error("Socket auth error:", error);
+        } else {
+            console.warn("Socket auth error:", message);
+        }
+    }
+
+    private recordConnectError(message: string, error?: unknown): void {
+        this.connectErrorCount += 1;
+        this.lastConnectErrorAt = new Date().toISOString();
+        this.lastConnectErrorMessage = this.extractErrorMessage(error) || message;
+        if (error) {
+            console.error("Socket connect error:", error);
+        } else {
+            console.warn("Socket connect error:", message);
+        }
+    }
+
+    private extractErrorMessage(error: unknown): string {
+        if (error instanceof Error) {
+            return error.message;
+        }
+        if (typeof error === "string") {
+            return error;
+        }
+        if (error && typeof error === "object" && "message" in error) {
+            const message = (error as { message?: unknown }).message;
+            if (typeof message === "string") return message;
+        }
+        return "";
+    }
+
+    public getHealthSnapshot(): SocketHealthSnapshot {
         return {
             initialized: Boolean(this.io),
             connectedClients: this.io?.engine?.clientsCount || 0,
             redisAdapterEnabled: process.env.SOCKET_REDIS_ADAPTER_ENABLED === "true",
             redisAdapterReady: this.redisAdapterReady,
+            totalConnections: this.totalConnections,
+            authErrorCount: this.authErrorCount,
+            connectErrorCount: this.connectErrorCount,
+            lastAuthErrorAt: this.lastAuthErrorAt,
+            lastAuthErrorMessage: this.lastAuthErrorMessage,
+            lastConnectErrorAt: this.lastConnectErrorAt,
+            lastConnectErrorMessage: this.lastConnectErrorMessage,
+            lastDisconnectReason: this.lastDisconnectReason,
         };
     }
 

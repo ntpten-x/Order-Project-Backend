@@ -61,6 +61,10 @@ type RecentOrderQueryRow = {
     delivery_code: string | null;
     table_name: string | null;
     delivery_name: string | null;
+};
+
+type RecentOrderItemCountRow = {
+    order_id: string;
     items_count: string | number;
 };
 
@@ -68,9 +72,9 @@ export class DashboardService {
     private readonly SALES_CACHE_PREFIX = "dashboard:sales";
     private readonly TOP_ITEMS_CACHE_PREFIX = "dashboard:top-items";
     private readonly OVERVIEW_CACHE_PREFIX = "dashboard:overview";
-    private readonly SALES_CACHE_TTL = Number(process.env.DASHBOARD_SALES_CACHE_TTL_MS || 15000);
-    private readonly TOP_ITEMS_CACHE_TTL = Number(process.env.DASHBOARD_TOP_ITEMS_CACHE_TTL_MS || 15000);
-    private readonly OVERVIEW_CACHE_TTL = Number(process.env.DASHBOARD_OVERVIEW_CACHE_TTL_MS || 15000);
+    private readonly SALES_CACHE_TTL = Number(process.env.DASHBOARD_SALES_CACHE_TTL_MS || 20000);
+    private readonly TOP_ITEMS_CACHE_TTL = Number(process.env.DASHBOARD_TOP_ITEMS_CACHE_TTL_MS || 20000);
+    private readonly OVERVIEW_CACHE_TTL = Number(process.env.DASHBOARD_OVERVIEW_CACHE_TTL_MS || 20000);
 
     private observeCache(operation: string, result: "hit" | "miss", source?: "memory" | "redis"): void {
         metrics.observeCache({
@@ -126,6 +130,24 @@ export class DashboardService {
     private toSafeLimit(value: number, fallback: number, max: number): number {
         if (!Number.isFinite(value)) return fallback;
         return Math.min(Math.max(Math.trunc(value), 1), max);
+    }
+
+    private toDateRangeBounds(
+        startDate?: string,
+        endDate?: string
+    ): { startDateTs?: string; endDateExclusiveTs?: string } {
+        if (!startDate || !endDate) {
+            return {};
+        }
+
+        const startDateTs = `${startDate}T00:00:00.000Z`;
+        const endDateExclusive = new Date(`${endDate}T00:00:00.000Z`);
+        endDateExclusive.setUTCDate(endDateExclusive.getUTCDate() + 1);
+
+        return {
+            startDateTs,
+            endDateExclusiveTs: endDateExclusive.toISOString(),
+        };
     }
 
     async getSalesSummary(startDate?: string, endDate?: string, branchId?: string): Promise<SalesSummaryView[]> {
@@ -227,10 +249,14 @@ export class DashboardService {
         }
 
         if (startDate && endDate) {
-            topItemsQuery.andWhere("DATE(order.create_date) BETWEEN :startDate AND :endDate", {
-                startDate,
-                endDate,
-            });
+            const bounds = this.toDateRangeBounds(startDate, endDate);
+            topItemsQuery.andWhere(
+                "order.create_date >= :startDateTs AND order.create_date < :endDateExclusiveTs",
+                {
+                    startDateTs: bounds.startDateTs,
+                    endDateExclusiveTs: bounds.endDateExclusiveTs,
+                }
+            );
         }
 
         topItemsQuery
@@ -265,11 +291,6 @@ export class DashboardService {
             .createQueryBuilder("order")
             .leftJoin("order.table", "table")
             .leftJoin("order.delivery", "delivery")
-            .leftJoin(
-                SalesOrderItem,
-                "item",
-                "item.order_id = order.id AND item.status::text NOT IN ('Cancelled', 'cancelled')"
-            )
             .select("order.id", "id")
             .addSelect("order.order_no", "order_no")
             .addSelect("order.order_type", "order_type")
@@ -279,7 +300,6 @@ export class DashboardService {
             .addSelect("order.delivery_code", "delivery_code")
             .addSelect("table.table_name", "table_name")
             .addSelect("delivery.delivery_name", "delivery_name")
-            .addSelect("COALESCE(SUM(item.quantity), 0)::int", "items_count")
             .where("order.status IN (:...statuses)", {
                 statuses: ["Paid", "Completed", "Cancelled"],
             });
@@ -289,26 +309,40 @@ export class DashboardService {
         }
 
         if (startDate && endDate) {
-            recentOrdersQuery.andWhere("DATE(order.create_date) BETWEEN :startDate AND :endDate", {
-                startDate,
-                endDate,
-            });
+            const bounds = this.toDateRangeBounds(startDate, endDate);
+            recentOrdersQuery.andWhere(
+                "order.create_date >= :startDateTs AND order.create_date < :endDateExclusiveTs",
+                {
+                    startDateTs: bounds.startDateTs,
+                    endDateExclusiveTs: bounds.endDateExclusiveTs,
+                }
+            );
         }
 
         recentOrdersQuery
-            .groupBy("order.id")
-            .addGroupBy("order.order_no")
-            .addGroupBy("order.order_type")
-            .addGroupBy("order.status")
-            .addGroupBy("order.create_date")
-            .addGroupBy("order.total_amount")
-            .addGroupBy("order.delivery_code")
-            .addGroupBy("table.table_name")
-            .addGroupBy("delivery.delivery_name")
             .orderBy("order.create_date", "DESC")
             .limit(limit);
 
         const rows = await recentOrdersQuery.getRawMany<RecentOrderQueryRow>();
+        if (rows.length === 0) {
+            return [];
+        }
+
+        const orderIds = rows.map((row) => row.id);
+        const itemCountRows = await getRepository(SalesOrderItem)
+            .createQueryBuilder("item")
+            .select("item.order_id", "order_id")
+            .addSelect("COALESCE(SUM(item.quantity), 0)::int", "items_count")
+            .where("item.order_id IN (:...orderIds)", { orderIds })
+            .andWhere("item.status::text NOT IN ('Cancelled', 'cancelled')")
+            .groupBy("item.order_id")
+            .getRawMany<RecentOrderItemCountRow>();
+
+        const itemCountByOrderId = new Map<string, number>();
+        for (const itemCountRow of itemCountRows) {
+            itemCountByOrderId.set(itemCountRow.order_id, Number(itemCountRow.items_count || 0));
+        }
+
         return rows.map((row) => ({
             id: row.id,
             order_no: row.order_no,
@@ -319,7 +353,7 @@ export class DashboardService {
             delivery_code: row.delivery_code,
             table: row.table_name ? { table_name: row.table_name } : null,
             delivery: row.delivery_name ? { delivery_name: row.delivery_name } : null,
-            items_count: Number(row.items_count || 0),
+            items_count: itemCountByOrderId.get(row.id) ?? 0,
         }));
     }
 
@@ -349,12 +383,14 @@ export class DashboardService {
             async () => {
                 const [summaryRows, topItems, recentOrders] = await Promise.all([
                     this.getSalesSummary(normalized.startDate, normalized.endDate, branchId),
-                    this.getTopSellingItemsByRange(
-                        safeTopLimit,
-                        branchId,
-                        normalized.startDate,
-                        normalized.endDate
-                    ),
+                    normalized.startDate && normalized.endDate
+                        ? this.getTopSellingItemsByRange(
+                              safeTopLimit,
+                              branchId,
+                              normalized.startDate,
+                              normalized.endDate
+                          )
+                        : this.getTopSellingItems(safeTopLimit, branchId),
                     this.getRecentOrdersSummary(
                         safeRecentLimit,
                         branchId,

@@ -5,6 +5,7 @@ import { AppDataSource } from "../database/database";
 import { getRedisClient, isRedisConfigured } from "../lib/redisClient";
 import { monitoringService } from "../utils/monitoring";
 import { SocketService } from "./socket.service";
+import { resolveAllowedOrigins } from "../utils/cors";
 
 export type HealthLevel = "ok" | "warn" | "error";
 
@@ -23,6 +24,35 @@ type IndexCheck = {
     columns: string[];
     matched: boolean;
     reason: string;
+};
+
+type SlowEndpointCheck = {
+    method: string;
+    path: string;
+    requestCount: number;
+    averageResponseMs: number;
+    p95ResponseMs: number;
+    p99ResponseMs: number;
+    maxResponseMs: number;
+    errorRatePercent: number;
+};
+
+type PerformanceTrafficSegment = {
+    level: HealthLevel;
+    summary: string;
+    averageResponseMs: number;
+    p95ResponseMs: number;
+    p99ResponseMs: number;
+    sampleSize: number;
+    topSlowEndpoints: SlowEndpointCheck[];
+};
+
+type PerformanceTrafficSnapshot = {
+    averageResponseMs: number;
+    p95ResponseMs: number;
+    p99ResponseMs: number;
+    sampleSize: number;
+    topSlowEndpoints: SlowEndpointCheck[];
 };
 
 type RetentionLogSummary = {
@@ -56,7 +86,15 @@ export type SystemHealthReport = {
         p95ResponseMs: number;
         p99ResponseMs: number;
         sampleSize: number;
+        topSlowEndpoints: SlowEndpointCheck[];
         indexChecks: IndexCheck[];
+        adminAuth: PerformanceTrafficSegment;
+        allTraffic: PerformanceTrafficSnapshot;
+        classification: {
+            userFacingIncludePaths: string[];
+            adminAuthIncludePaths: string[];
+            excludedPaths: string[];
+        };
     };
     integration: {
         frontendProxyPrefix: string;
@@ -70,12 +108,11 @@ export type SystemHealthReport = {
     warnings: string[];
 };
 
-const DEFAULT_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://localhost:3001",
-    "http://127.0.0.1:3000",
-    "http://13.239.29.168:3001",
-];
+export type SystemHealthReportOptions = {
+    slowEndpointMethod?: string;
+    slowEndpointMinSamples?: number;
+};
+
 const CSRF_EXCLUDED_PATHS = ["/auth/login", "/auth/logout", "/health", "/csrf-token", "/metrics"];
 const DEFAULT_ALLOWED_PROXY_PATHS = [
     "/auth/*",
@@ -89,6 +126,18 @@ const DEFAULT_ALLOWED_PROXY_PATHS = [
     "/health",
     "/metrics",
     "/csrf-token",
+];
+const DEFAULT_PERFORMANCE_EXCLUDED_PATHS = ["/health", "/metrics", "/csrf-token", "/system/health"];
+const DEFAULT_USER_FACING_INCLUDE_PATHS = ["/pos", "/stock"];
+const DEFAULT_ADMIN_AUTH_INCLUDE_PATHS = [
+    "/auth",
+    "/permissions",
+    "/users",
+    "/roles",
+    "/branch",
+    "/branches",
+    "/system",
+    "/audit",
 ];
 
 const LEVEL_RANK: Record<HealthLevel, number> = {
@@ -123,14 +172,7 @@ function parseNumberEnv(value: string | undefined, fallback: number): number {
 }
 
 function resolveAllowedFrontendOrigins(): string[] {
-    const values = [...DEFAULT_ALLOWED_ORIGINS, process.env.FRONTEND_URL || ""];
-    return Array.from(
-        new Set(
-            values
-                .map((value) => value.trim())
-                .filter(Boolean)
-        )
-    );
+    return resolveAllowedOrigins();
 }
 
 function parseListEnv(value: string | undefined): string[] {
@@ -139,6 +181,11 @@ function parseListEnv(value: string | undefined): string[] {
         .split(",")
         .map((item) => item.trim())
         .filter(Boolean);
+}
+
+function resolvePathListEnv(value: string | undefined, fallback: string[]): string[] {
+    const fromEnv = parseListEnv(value);
+    return fromEnv.length > 0 ? fromEnv : fallback;
 }
 
 function resolveAllowedProxyPaths(): string[] {
@@ -280,7 +327,7 @@ function indexDefinitionIncludesColumns(indexDefinition: string, columns: string
 }
 
 export class SystemHealthService {
-    async getReport(): Promise<SystemHealthReport> {
+    async getReport(options?: SystemHealthReportOptions): Promise<SystemHealthReport> {
         const checkedAt = toIsoNow();
         const allowedFrontendOrigins = resolveAllowedFrontendOrigins();
         const allowedProxyPaths = resolveAllowedProxyPaths();
@@ -289,7 +336,7 @@ export class SystemHealthService {
         const readiness = await this.collectReadiness(checkedAt, allowedFrontendOrigins);
         const security = this.collectSecurity(checkedAt, allowedFrontendOrigins);
         const jobs = await this.collectRetentionJobs(checkedAt, staleThresholdHours);
-        const performance = await this.collectPerformance();
+        const performance = await this.collectPerformance(options);
 
         const overallLevel = maxLevel([
             ...readiness.map((item) => item.level),
@@ -438,8 +485,17 @@ export class SystemHealthService {
             details: {
                 initialized: socketHealth.initialized,
                 connectedClients: socketHealth.connectedClients,
+                socketPath: (process.env.SOCKET_IO_PATH || "/socket.io").trim() || "/socket.io",
+                totalConnections: socketHealth.totalConnections,
+                authErrorCount: socketHealth.authErrorCount,
+                lastAuthErrorMessage: socketHealth.lastAuthErrorMessage,
+                connectErrorCount: socketHealth.connectErrorCount,
+                lastConnectErrorMessage: socketHealth.lastConnectErrorMessage,
+                lastDisconnectReason: socketHealth.lastDisconnectReason,
                 redisAdapterEnabled: socketHealth.redisAdapterEnabled,
                 redisAdapterReady: socketHealth.redisAdapterReady,
+                lastAuthErrorAt: socketHealth.lastAuthErrorAt,
+                lastConnectErrorAt: socketHealth.lastConnectErrorAt,
             },
         });
 
@@ -619,7 +675,7 @@ export class SystemHealthService {
             },
             buildRetentionJobCheck({
                 key: "retention-pos",
-                title: "POS Order Retention (30 days)",
+                title: `POS Order Retention (${orderDays} days)`,
                 enabled: orderEnabled,
                 dryRun: orderDryRun,
                 retentionDays: orderDays,
@@ -631,7 +687,7 @@ export class SystemHealthService {
             }),
             buildRetentionJobCheck({
                 key: "retention-stock",
-                title: "Stock Order Retention (7 days)",
+                title: `Stock Order Retention (${stockDays} days)`,
                 enabled: stockEnabled,
                 dryRun: stockDryRun,
                 retentionDays: stockDays,
@@ -643,7 +699,7 @@ export class SystemHealthService {
             }),
             buildRetentionJobCheck({
                 key: "retention-audit",
-                title: "Audit Retention (7 days)",
+                title: `Audit Retention (${auditDays} days)`,
                 enabled: auditEnabled,
                 dryRun: auditDryRun,
                 retentionDays: auditDays,
@@ -656,24 +712,158 @@ export class SystemHealthService {
         ];
     }
 
-    private async collectPerformance(): Promise<SystemHealthReport["performance"]> {
-        const averageResponseMs = Number(monitoringService.getPerformanceStats().averageResponseTime.toFixed(2));
-        const p95ResponseMs = Number(monitoringService.getPerformanceStats().p95ResponseTime.toFixed(2));
-        const p99ResponseMs = Number(monitoringService.getPerformanceStats().p99ResponseTime.toFixed(2));
-        const sampleSize = monitoringService.getRecentMetrics(500).length;
+    private collectPerformanceSnapshot(params: {
+        excludedPaths: string[];
+        includePaths?: string[];
+        limit: number;
+        topEndpointsLimit: number;
+        topEndpointsMinSamples: number;
+        methodFilter?: string;
+    }): PerformanceTrafficSnapshot {
+        const performanceStats = monitoringService.getPerformanceStats({
+            name: "http_request",
+            includePaths: params.includePaths,
+            excludePaths: params.excludedPaths,
+            limit: params.limit,
+        });
+
+        const topSlowEndpoints = monitoringService
+            .getEndpointPerformanceStats({
+                name: "http_request",
+                includePaths: params.includePaths,
+                excludePaths: params.excludedPaths,
+                limit: params.limit,
+                topN: params.topEndpointsLimit,
+                minSamples: params.topEndpointsMinSamples,
+                methods: params.methodFilter ? [params.methodFilter] : undefined,
+            })
+            .map((item) => ({
+                method: item.method,
+                path: item.path,
+                requestCount: item.requestCount,
+                averageResponseMs: Number(item.averageResponseMs.toFixed(2)),
+                p95ResponseMs: Number(item.p95ResponseMs.toFixed(2)),
+                p99ResponseMs: Number(item.p99ResponseMs.toFixed(2)),
+                maxResponseMs: Number(item.maxResponseMs.toFixed(2)),
+                errorRatePercent: Number(item.errorRatePercent.toFixed(2)),
+            }));
+
+        return {
+            averageResponseMs: Number(performanceStats.averageResponseTime.toFixed(2)),
+            p95ResponseMs: Number(performanceStats.p95ResponseTime.toFixed(2)),
+            p99ResponseMs: Number(performanceStats.p99ResponseTime.toFixed(2)),
+            sampleSize: performanceStats.sampleSize,
+            topSlowEndpoints,
+        };
+    }
+
+    private evaluatePerformanceSegment(params: {
+        segmentLabel: string;
+        snapshot: PerformanceTrafficSnapshot;
+        p95WarnMs: number;
+        p99WarnMs: number;
+        noSampleLevel: HealthLevel;
+    }): PerformanceTrafficSegment {
+        const { segmentLabel, snapshot, p95WarnMs, p99WarnMs, noSampleLevel } = params;
+        let level: HealthLevel = "ok";
+        let summary = `${segmentLabel} response time is within guard thresholds`;
+
+        if (snapshot.sampleSize === 0) {
+            level = noSampleLevel;
+            summary = `No ${segmentLabel.toLowerCase()} response-time samples collected yet`;
+        } else if (snapshot.p95ResponseMs > p95WarnMs || snapshot.p99ResponseMs > p99WarnMs) {
+            level = "warn";
+            summary = `${segmentLabel} latency exceeds threshold (p95>${p95WarnMs}ms or p99>${p99WarnMs}ms)`;
+        }
+
+        return {
+            level,
+            summary,
+            averageResponseMs: snapshot.averageResponseMs,
+            p95ResponseMs: snapshot.p95ResponseMs,
+            p99ResponseMs: snapshot.p99ResponseMs,
+            sampleSize: snapshot.sampleSize,
+            topSlowEndpoints: snapshot.topSlowEndpoints,
+        };
+    }
+
+    private async collectPerformance(options?: SystemHealthReportOptions): Promise<SystemHealthReport["performance"]> {
+        const configuredExcludedPaths = parseListEnv(process.env.HEALTH_PERF_EXCLUDED_PATHS);
+        const excludedPaths = configuredExcludedPaths.length > 0
+            ? configuredExcludedPaths
+            : DEFAULT_PERFORMANCE_EXCLUDED_PATHS;
+        const userFacingIncludePaths = resolvePathListEnv(
+            process.env.HEALTH_PERF_USER_INCLUDE_PATHS,
+            DEFAULT_USER_FACING_INCLUDE_PATHS
+        );
+        const adminAuthIncludePaths = resolvePathListEnv(
+            process.env.HEALTH_PERF_ADMIN_INCLUDE_PATHS,
+            DEFAULT_ADMIN_AUTH_INCLUDE_PATHS
+        );
+        const methodFilterRaw = options?.slowEndpointMethod?.trim().toUpperCase();
+        const methodFilter = methodFilterRaw && methodFilterRaw !== "ALL" ? methodFilterRaw : undefined;
+        const topEndpointsLimit = Math.max(
+            1,
+            Math.trunc(parseNumberEnv(process.env.HEALTH_TOP_SLOW_ENDPOINTS_LIMIT, 5))
+        );
+        const minSamplesFromOptions = Number(options?.slowEndpointMinSamples);
+        const topEndpointsMinSamples = Number.isFinite(minSamplesFromOptions)
+            ? Math.max(1, Math.trunc(minSamplesFromOptions))
+            : Math.max(1, Math.trunc(parseNumberEnv(process.env.HEALTH_TOP_SLOW_ENDPOINTS_MIN_SAMPLES, 3)));
+        const metricWindowLimit = Math.max(
+            100,
+            Math.trunc(parseNumberEnv(process.env.HEALTH_PERF_METRIC_WINDOW_LIMIT, 500))
+        );
+
+        const userFacingSnapshot = this.collectPerformanceSnapshot({
+            excludedPaths,
+            includePaths: userFacingIncludePaths,
+            limit: metricWindowLimit,
+            topEndpointsLimit,
+            topEndpointsMinSamples,
+            methodFilter,
+        });
+        const adminAuthSnapshot = this.collectPerformanceSnapshot({
+            excludedPaths,
+            includePaths: adminAuthIncludePaths,
+            limit: metricWindowLimit,
+            topEndpointsLimit,
+            topEndpointsMinSamples,
+            methodFilter,
+        });
+        const allTrafficSnapshot = this.collectPerformanceSnapshot({
+            excludedPaths,
+            limit: metricWindowLimit,
+            topEndpointsLimit,
+            topEndpointsMinSamples,
+            methodFilter,
+        });
 
         const p95WarnMs = parseNumberEnv(process.env.HEALTH_P95_WARN_MS, 250);
         const p99WarnMs = parseNumberEnv(process.env.HEALTH_P99_WARN_MS, 500);
+        const adminP95WarnMs = parseNumberEnv(process.env.HEALTH_ADMIN_P95_WARN_MS, 900);
+        const adminP99WarnMs = parseNumberEnv(process.env.HEALTH_ADMIN_P99_WARN_MS, 1500);
 
-        let level: HealthLevel = "ok";
-        let summary = "Response time is within guard thresholds";
-        if (sampleSize === 0) {
-            level = "warn";
-            summary = "No response-time samples collected yet";
-        } else if (p95ResponseMs > p95WarnMs || p99ResponseMs > p99WarnMs) {
-            level = "warn";
-            summary = `Latency exceeds threshold (p95>${p95WarnMs}ms or p99>${p99WarnMs}ms)`;
-        }
+        const userFacingSegment = this.evaluatePerformanceSegment({
+            segmentLabel: "User-facing",
+            snapshot: userFacingSnapshot,
+            p95WarnMs,
+            p99WarnMs,
+            noSampleLevel: "warn",
+        });
+        const adminAuthSegment = this.evaluatePerformanceSegment({
+            segmentLabel: "Admin/auth",
+            snapshot: adminAuthSnapshot,
+            p95WarnMs: adminP95WarnMs,
+            p99WarnMs: adminP99WarnMs,
+            noSampleLevel: "ok",
+        });
+
+        let level: HealthLevel = userFacingSegment.level;
+        let summary = userFacingSegment.summary;
+
+        const legacySnapshot =
+            userFacingSnapshot.sampleSize > 0 ? userFacingSnapshot : allTrafficSnapshot;
 
         const indexChecks = await this.collectIndexChecks();
         if (indexChecks.some((item) => !item.matched) && level === "ok") {
@@ -684,11 +874,19 @@ export class SystemHealthService {
         return {
             level,
             summary,
-            averageResponseMs,
-            p95ResponseMs,
-            p99ResponseMs,
-            sampleSize,
+            averageResponseMs: legacySnapshot.averageResponseMs,
+            p95ResponseMs: legacySnapshot.p95ResponseMs,
+            p99ResponseMs: legacySnapshot.p99ResponseMs,
+            sampleSize: legacySnapshot.sampleSize,
+            topSlowEndpoints: legacySnapshot.topSlowEndpoints,
             indexChecks,
+            adminAuth: adminAuthSegment,
+            allTraffic: allTrafficSnapshot,
+            classification: {
+                userFacingIncludePaths,
+                adminAuthIncludePaths,
+                excludedPaths,
+            },
         };
     }
 

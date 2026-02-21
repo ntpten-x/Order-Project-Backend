@@ -17,6 +17,7 @@
 - `PORT` - Server port (default: 4000)
 - `NODE_ENV` - Environment mode (development/production)
 - `FRONTEND_URL` - Frontend URL for CORS configuration
+- `TRUST_PROXY_CHAIN` - Optional trusted proxy configuration for Express (`1`, `true`, hop count, or CIDR/IP list). Keep empty when no trusted proxy chain is present.
 
 ## Optional Variables
 
@@ -37,7 +38,9 @@
 ### RLS / Migrations Safety
 - `RUN_MIGRATIONS_ON_START` - Auto-run TypeORM migrations on startup (true/false)
 - `REQUIRE_NO_PENDING_MIGRATIONS` - Fail startup if there are pending migrations (true/false). Defaults to `true` in production.
-- `ALLOW_BYPASSRLS` - Allow database roles with `BYPASSRLS` (set to `1` to override startup safety check)
+- `ENFORCE_DB_ROLE_POLICY` - Enforce runtime DB role policy (`1`/`0`, default `1`). Blocks superuser/BYPASSRLS roles.
+- `ALLOW_SUPERUSER_DB_ROLE` - Emergency override to allow superuser DB roles (`1` only when you intentionally accept reduced isolation)
+- `ALLOW_BYPASSRLS` - Emergency override to allow `BYPASSRLS` DB role (`1` only when you intentionally accept reduced isolation)
 - `BRANCH_BACKFILL_ID` - UUID branch id used by migrations to backfill legacy rows with `branch_id IS NULL` (recommended if you have >1 branch)
 - `DEFAULT_BRANCH_ID` - Fallback UUID branch id for backfills (used if `BRANCH_BACKFILL_ID` is not set)
 

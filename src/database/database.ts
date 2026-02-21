@@ -37,6 +37,8 @@ import { RolePermission } from "../entity/RolePermission"
 import { UserPermission } from "../entity/UserPermission"
 import { PermissionAudit } from "../entity/PermissionAudit"
 import { PermissionOverrideApproval } from "../entity/PermissionOverrideApproval"
+import { SalesOrderSubscriber } from "../subscribers/SalesOrderSubscriber"
+import { SalesOrderItemSubscriber } from "../subscribers/SalesOrderItemSubscriber"
 import { ensureRbacDefaults } from "./rbac-defaults"
 import * as dotenv from "dotenv"
 dotenv.config()
@@ -49,6 +51,9 @@ const syncWithNonOwnerOverride = process.env.ALLOW_TYPEORM_SYNC_WITH_NON_OWNER =
 const likelyNonOwnerDbRole = dbUser !== "" && dbUser !== "postgres"
 const synchronize = requestedSynchronize && (!likelyNonOwnerDbRole || syncWithNonOwnerOverride)
 const useSsl = process.env.DATABASE_SSL === "true" || process.env.DATABASE_SSL === "1"
+const enforceDbRolePolicy = process.env.ENFORCE_DB_ROLE_POLICY !== "0"
+const allowSuperuserDbRole = process.env.ALLOW_SUPERUSER_DB_ROLE === "1"
+const allowBypassRlsRole = process.env.ALLOW_BYPASSRLS === "1"
 const sslOptions = useSsl
     ? { rejectUnauthorized: process.env.DATABASE_SSL_REJECT_UNAUTHORIZED === "true" }
     : false
@@ -77,6 +82,7 @@ export const AppDataSource = new DataSource({
     password: process.env.DATABASE_PASSWORD,
     database: process.env.DATABASE_NAME,
     entities: [Users, Roles, Branch, IngredientsUnit, Ingredients, PurchaseOrder, StockOrdersItem, StockOrdersDetail, SalesOrder, SalesOrderItem, SalesOrderDetail, Category, Products, ProductsUnit, Tables, Delivery, Discounts, Payments, PaymentMethod, Shifts, ShopProfile, ShopPaymentAccount, SalesSummaryView, TopSellingItemsView, OrderQueue, AuditLog, PermissionResource, PermissionAction, RolePermission, UserPermission, PermissionAudit, PermissionOverrideApproval],
+    subscribers: [SalesOrderSubscriber, SalesOrderItemSubscriber],
     synchronize: synchronize as boolean,
     logging: isProd ? ["error"] : true,
     ssl: sslOptions,
@@ -120,29 +126,44 @@ export const AppDataSource = new DataSource({
 
 export const connectDatabase = async () => {
     try {
+        if (enforceDbRolePolicy && dbUser === "postgres" && !allowSuperuserDbRole) {
+            throw new Error(
+                "[DB] DATABASE_USER=postgres is blocked by DB role policy. Use a dedicated app role (NOSUPERUSER + NOBYPASSRLS)."
+            )
+        }
+
         await AppDataSource.initialize()
         console.log("Database connected successfully")
 
         // Operational safety checks for multi-tenant RLS deployments
         const isProdEnv = process.env.NODE_ENV === "production"
 
-        // 1) Prevent silent RLS bypass at the DB role level
-        try {
-            const bypassRows = await AppDataSource.query(
-                `SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user`
+        // 1) Enforce app DB role hardening (NOSUPERUSER + NOBYPASSRLS) in every environment.
+        // Emergency overrides are intentionally explicit and off by default.
+        if (enforceDbRolePolicy) {
+            const roleRows = await AppDataSource.query(
+                `SELECT rolname, rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user`
             )
-            const bypass = Boolean(bypassRows?.[0]?.rolbypassrls)
-            if (bypass && process.env.ALLOW_BYPASSRLS !== "1") {
-                const msg =
-                    "[DB] Current DB role has BYPASSRLS enabled. This can disable branch isolation. Remove BYPASSRLS or set ALLOW_BYPASSRLS=1 to override."
-                if (isProdEnv) {
-                    throw new Error(msg)
-                } else {
-                    console.warn(msg)
-                }
+            const role = roleRows?.[0]
+            if (!role) {
+                throw new Error("[DB] Unable to resolve current DB role for policy enforcement.")
             }
-        } catch (error) {
-            console.warn("[DB] Failed to check BYPASSRLS:", error)
+
+            const roleName = String(role.rolname ?? "")
+            const isSuperuser = Boolean(role.rolsuper)
+            const hasBypassRls = Boolean(role.rolbypassrls)
+
+            if (isSuperuser && !allowSuperuserDbRole) {
+                throw new Error(
+                    `[DB] Role policy violation: current role "${roleName}" is SUPERUSER. Use a dedicated app role with NOSUPERUSER.`
+                )
+            }
+
+            if (hasBypassRls && !allowBypassRlsRole) {
+                throw new Error(
+                    `[DB] Role policy violation: current role "${roleName}" has BYPASSRLS. Use NOBYPASSRLS to keep tenant isolation effective.`
+                )
+            }
         }
 
         // 2) Ensure migrations are applied (optional auto-run)

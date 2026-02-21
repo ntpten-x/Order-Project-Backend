@@ -61,6 +61,7 @@ function handleZodError(err: ZodError): { message: string; details: unknown } {
 function handleDatabaseError(err: Error): { code: ErrorCode; message: string } {
     const errorMessage = err.message.toLowerCase();
     const pgCode = (err as any)?.code || (err as any)?.driverError?.code;
+    const constraint = String((err as any)?.constraint || (err as any)?.driverError?.constraint || "").toLowerCase();
 
     // PostgreSQL duplicate key violation
     if (pgCode === '23505' || errorMessage.includes('duplicate key') || errorMessage.includes('unique constraint')) {
@@ -72,6 +73,13 @@ function handleDatabaseError(err: Error): { code: ErrorCode; message: string } {
 
     // PostgreSQL foreign key violation
     if (pgCode === '23503' || errorMessage.includes('foreign key constraint')) {
+        if (constraint.includes("branch")) {
+            return {
+                code: ErrorCodes.FORBIDDEN,
+                message: "Invalid branch context. Please re-select your branch and try again.",
+            };
+        }
+
         return {
             code: ErrorCodes.VALIDATION_ERROR,
             message: 'Referenced record does not exist',
@@ -147,6 +155,8 @@ export const globalErrorHandler = (
 
         if (dbResult.code === ErrorCodes.DUPLICATE_ENTRY) {
             statusCode = 409;
+        } else if (dbResult.code === ErrorCodes.FORBIDDEN) {
+            statusCode = 403;
         } else if (dbResult.code === ErrorCodes.VALIDATION_ERROR) {
             statusCode = 400;
         } else {

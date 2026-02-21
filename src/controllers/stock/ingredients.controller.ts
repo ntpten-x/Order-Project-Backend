@@ -7,6 +7,15 @@ import { getBranchId } from "../../middleware/branch.middleware";
 import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../../utils/auditLogger";
 import { getClientIp } from "../../utils/securityLogger";
 import { parseCreatedSort } from "../../utils/sortCreated";
+import { normalizeImageSourceInput } from "../../utils/imageSource";
+
+function normalizeDescription(value: unknown): string {
+    return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizeImageUrl(value: unknown): string | null {
+    return normalizeImageSourceInput(value);
+}
 
 /**
  * Ingredients Controller
@@ -69,6 +78,8 @@ export class IngredientsController {
         if (branchId) {
             req.body.branch_id = branchId;
         }
+        req.body.description = normalizeDescription(req.body.description);
+        req.body.img_url = normalizeImageUrl(req.body.img_url);
         const ingredient = await this.ingredientsService.create(req.body);
 
         const userInfo = getUserInfoFromRequest(req as any);
@@ -93,6 +104,12 @@ export class IngredientsController {
         const branchId = getBranchId(req as any);
         if (branchId) {
             req.body.branch_id = branchId;
+        }
+        if ("description" in req.body) {
+            req.body.description = normalizeDescription(req.body.description);
+        }
+        if ("img_url" in req.body) {
+            req.body.img_url = normalizeImageUrl(req.body.img_url);
         }
         const oldIngredient = await this.ingredientsService.findOne(req.params.id, branchId);
         const ingredient = await this.ingredientsService.update(req.params.id, req.body, branchId);

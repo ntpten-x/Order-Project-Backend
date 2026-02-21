@@ -19,7 +19,7 @@ import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../../util
 import { getClientIp } from "../../utils/securityLogger";
 import { getDbContext, getRepository, runInTransaction } from "../../database/dbContext";
 import { RealtimeEvents } from "../../utils/realtimeEvents";
-import { normalizeOrderStatus } from "../../utils/orderStatus";
+import { normalizeOrderStatus, isCancelledStatus } from "../../utils/orderStatus";
 import { metrics } from "../../utils/metrics";
 import { PermissionScope } from "../../middleware/permission.middleware";
 import { CreatedSort } from "../../utils/sortCreated";
@@ -162,7 +162,9 @@ export class OrdersService {
             item.discount_amount = discount;
             item.total_price = Math.max(0, Number(lineTotal));
             item.notes = itemData.notes;
-            item.status = itemData.status || OrderStatus.Pending;
+            item.status = itemData.status
+                ? this.ensureValidStatus(String(itemData.status))
+                : OrderStatus.Pending;
 
             const details: SalesOrderDetail[] = detailsData.map((d: any) => {
                 const detail = new SalesOrderDetail();
@@ -184,6 +186,48 @@ export class OrdersService {
         } catch {
             throw new AppError("Invalid status", 400);
         }
+    }
+
+    private canSyncFromItemStatuses(status: OrderStatus): boolean {
+        return (
+            status === OrderStatus.Pending ||
+            status === OrderStatus.Cooking ||
+            status === OrderStatus.Served
+        );
+    }
+
+    private deriveOrderStatusFromItems(items: SalesOrderItem[]): OrderStatus | null {
+        const activeItems = items.filter((item) => !isCancelledStatus(String(item.status)));
+        if (activeItems.length === 0) return null;
+
+        const statuses = activeItems.map((item) => this.ensureValidStatus(String(item.status)));
+
+        if (statuses.some((status) => status === OrderStatus.Cooking)) {
+            return OrderStatus.Cooking;
+        }
+
+        if (statuses.every((status) => status === OrderStatus.Served)) {
+            return OrderStatus.Served;
+        }
+
+        return OrderStatus.Pending;
+    }
+
+    private async syncOrderStatusFromItems(orderId: string, branchId?: string, manager?: EntityManager): Promise<void> {
+        const orderRepo = manager ? manager.getRepository(SalesOrder) : getRepository(SalesOrder);
+        const itemRepo = manager ? manager.getRepository(SalesOrderItem) : getRepository(SalesOrderItem);
+
+        const order = await orderRepo.findOne({
+            where: branchId ? ({ id: orderId, branch_id: branchId } as any) : { id: orderId },
+        });
+        if (!order) return;
+        if (!this.canSyncFromItemStatuses(order.status)) return;
+
+        const items = await itemRepo.find({ where: { order_id: orderId } });
+        const nextStatus = this.deriveOrderStatusFromItems(items);
+        if (!nextStatus || nextStatus === order.status) return;
+
+        await orderRepo.update(order.id, { status: nextStatus } as Partial<SalesOrder>);
     }
 
     async findAll(
@@ -282,6 +326,9 @@ export class OrdersService {
     }
 
     async create(orders: SalesOrder, branchId?: string): Promise<SalesOrder> {
+        orders.status = orders.status
+            ? this.ensureValidStatus(String(orders.status))
+            : OrderStatus.Pending;
         await this.ensureActiveShift(orders.branch_id || branchId);
         return await runInTransaction(async (manager) => {
             try {
@@ -381,6 +428,8 @@ export class OrdersService {
 
             if (!orderData.status) {
                 orderData.status = OrderStatus.Pending;
+            } else {
+                orderData.status = this.ensureValidStatus(String(orderData.status));
             }
 
             const effectiveBranchId = orderData.branch_id || branchId;
@@ -429,6 +478,7 @@ export class OrdersService {
             }
 
             await recalculateOrderTotal(savedOrder.id, manager);
+            await this.syncOrderStatusFromItems(savedOrder.id, effectiveBranchId, manager);
             return savedOrder;
         }).then(async (savedOrder) => {
             const fullOrder = await this.ordersModel.findOne(savedOrder.id, branchId);
@@ -502,17 +552,18 @@ export class OrdersService {
                 }
             }
 
-            if (orders.status) {
-                this.ensureValidStatus(String(orders.status));
-            }
+            const normalizedStatus = orders.status
+                ? this.ensureValidStatus(String(orders.status))
+                : undefined;
 
-            const updatedOrder = await this.ordersModel.update(id, orders, undefined, branchId)
+            const payload = normalizedStatus
+                ? ({ ...orders, status: normalizedStatus } as SalesOrder)
+                : orders;
 
-            if (orders.status) {
-                const normalizedStatus = this.ensureValidStatus(String(orders.status));
-                if (normalizedStatus === OrderStatus.Cancelled) {
-                    await this.ordersModel.updateAllItemsStatus(id, OrderStatus.Cancelled);
-                }
+            const updatedOrder = await this.ordersModel.update(id, payload, undefined, branchId)
+
+            if (normalizedStatus === OrderStatus.Cancelled) {
+                await this.ordersModel.updateAllItemsStatus(id, OrderStatus.Cancelled);
             }
 
             await recalculateOrderTotal(id);
@@ -520,7 +571,7 @@ export class OrdersService {
             const refreshedOrder = await this.ordersModel.findOne(id, branchId);
             const result = refreshedOrder ?? updatedOrder;
 
-            const finalStatus = (orders.status as OrderStatus) ?? result.status;
+            const finalStatus = normalizedStatus ?? this.ensureValidStatus(String(result.status));
             // Release table if Order is Completed or Cancelled
             if ((finalStatus === OrderStatus.Completed || finalStatus === OrderStatus.Cancelled) && result.table_id) {
                 const tablesRepo = getRepository(Tables);
@@ -600,6 +651,7 @@ export class OrdersService {
 
             await this.ordersModel.updateItemStatus(itemId, normalized)
             await recalculateOrderTotal(item.order_id);
+            await this.syncOrderStatusFromItems(item.order_id, branchId);
 
             const updatedOrder = await this.ordersModel.findOne(item.order_id, branchId);
             if (!updatedOrder) return;
@@ -636,6 +688,7 @@ export class OrdersService {
                 }
 
                 await recalculateOrderTotal(orderId, manager);
+                await this.syncOrderStatusFromItems(orderId, branchId, manager);
 
                 const updatedOrder = await this.ordersModel.findOne(orderId, branchId);
                 return updatedOrder!;
@@ -705,6 +758,7 @@ export class OrdersService {
                 }, manager);
 
                 await recalculateOrderTotal(updatedItemWithDetails.order_id, manager);
+                await this.syncOrderStatusFromItems(updatedItemWithDetails.order_id, branchId, manager);
 
                 const updatedOrder = await this.ordersModel.findOne(updatedItemWithDetails.order_id, branchId);
                 return updatedOrder!;
@@ -733,6 +787,7 @@ export class OrdersService {
                 await this.ordersModel.deleteItem(itemId, manager);
 
                 await recalculateOrderTotal(orderId, manager);
+                await this.syncOrderStatusFromItems(orderId, branchId, manager);
 
                 const updatedOrder = await this.ordersModel.findOne(orderId, branchId);
                 return updatedOrder!;

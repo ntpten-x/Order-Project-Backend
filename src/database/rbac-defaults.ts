@@ -80,19 +80,23 @@ const CORE_PERMISSION_RESOURCES: Array<{
     { resourceKey: "roles.page", resourceName: "Roles", routePattern: "/roles", resourceType: "page", sortOrder: 12 },
     { resourceKey: "branches.page", resourceName: "Branches", routePattern: "/branch", resourceType: "page", sortOrder: 13 },
     { resourceKey: "audit.page", resourceName: "Audit Logs", routePattern: "/audit", resourceType: "page", sortOrder: 14 },
+    { resourceKey: "health_system.page", resourceName: "Health System", routePattern: "/Health-System", resourceType: "page", sortOrder: 15 },
     { resourceKey: "orders.page", resourceName: "Orders", routePattern: "/pos/orders", resourceType: "page", sortOrder: 20 },
+    { resourceKey: "orders.edit.feature", resourceName: "Orders Edit Action", routePattern: "/pos/orders", resourceType: "feature", sortOrder: 20_1 },
+    { resourceKey: "orders.cancel.feature", resourceName: "Orders Cancel Action", routePattern: "/pos/orders", resourceType: "feature", sortOrder: 20_2 },
     { resourceKey: "products.page", resourceName: "Products", routePattern: "/pos/products", resourceType: "page", sortOrder: 21 },
-    { resourceKey: "category.page", resourceName: "Category", routePattern: "/pos/category", resourceType: "page", sortOrder: 22 },
-    { resourceKey: "queue.page", resourceName: "Queue", routePattern: "/pos/queue", resourceType: "page", sortOrder: 23 },
-    { resourceKey: "payments.page", resourceName: "Payments", routePattern: "/pos/payments", resourceType: "page", sortOrder: 24 },
-    { resourceKey: "delivery.page", resourceName: "Delivery", routePattern: "/pos/delivery", resourceType: "page", sortOrder: 25 },
-    { resourceKey: "discounts.page", resourceName: "Discounts", routePattern: "/pos/discounts", resourceType: "page", sortOrder: 26 },
-    { resourceKey: "payment_method.page", resourceName: "Payment Method", routePattern: "/pos/paymentMethod", resourceType: "page", sortOrder: 27 },
-    { resourceKey: "tables.page", resourceName: "Tables", routePattern: "/pos/tables", resourceType: "page", sortOrder: 28 },
-    { resourceKey: "shop_profile.page", resourceName: "Shop Profile", routePattern: "/pos/settings", resourceType: "page", sortOrder: 29 },
-    { resourceKey: "payment_accounts.page", resourceName: "Payment Accounts", routePattern: "/pos/settings/payment-accounts", resourceType: "page", sortOrder: 30 },
-    { resourceKey: "shifts.page", resourceName: "Shifts", routePattern: "/pos/shift", resourceType: "page", sortOrder: 31 },
-    { resourceKey: "reports.sales.page", resourceName: "Sales Report", routePattern: "/pos/dashboard", resourceType: "page", sortOrder: 32 },
+    { resourceKey: "products_unit.page", resourceName: "Product Units", routePattern: "/pos/productsUnit", resourceType: "page", sortOrder: 22 },
+    { resourceKey: "category.page", resourceName: "Category", routePattern: "/pos/category", resourceType: "page", sortOrder: 23 },
+    { resourceKey: "queue.page", resourceName: "Queue", routePattern: "/pos/queue", resourceType: "page", sortOrder: 24 },
+    { resourceKey: "payments.page", resourceName: "Payments", routePattern: "/pos/payments", resourceType: "page", sortOrder: 25 },
+    { resourceKey: "delivery.page", resourceName: "Delivery", routePattern: "/pos/delivery", resourceType: "page", sortOrder: 26 },
+    { resourceKey: "discounts.page", resourceName: "Discounts", routePattern: "/pos/discounts", resourceType: "page", sortOrder: 27 },
+    { resourceKey: "payment_method.page", resourceName: "Payment Method", routePattern: "/pos/paymentMethod", resourceType: "page", sortOrder: 28 },
+    { resourceKey: "tables.page", resourceName: "Tables", routePattern: "/pos/tables", resourceType: "page", sortOrder: 29 },
+    { resourceKey: "shop_profile.page", resourceName: "Shop Profile", routePattern: "/pos/settings", resourceType: "page", sortOrder: 30 },
+    { resourceKey: "payment_accounts.page", resourceName: "Payment Accounts", routePattern: "/pos/settings/payment-accounts", resourceType: "page", sortOrder: 31 },
+    { resourceKey: "shifts.page", resourceName: "Shifts", routePattern: "/pos/shift", resourceType: "page", sortOrder: 32 },
+    { resourceKey: "reports.sales.page", resourceName: "Sales Report", routePattern: "/pos/dashboard", resourceType: "page", sortOrder: 33 },
     { resourceKey: "stock.ingredients.page", resourceName: "Stock Ingredients", routePattern: "/stock/ingredients", resourceType: "page", sortOrder: 40 },
     { resourceKey: "stock.ingredients_unit.page", resourceName: "Stock Units", routePattern: "/stock/ingredientsUnit", resourceType: "page", sortOrder: 41 },
     { resourceKey: "stock.orders.page", resourceName: "Stock Orders", routePattern: "/stock/items", resourceType: "page", sortOrder: 42 },
@@ -102,12 +106,14 @@ const MANAGER_RESTRICTED_RESOURCES = new Set<string>([
     "permissions.page",
     "roles.page",
     "audit.page",
+    "health_system.page",
     "menu.module.audit",
 ]);
 
 const EMPLOYEE_READ_ALLOW = new Set<string>([
     "orders.page",
     "products.page",
+    "products_unit.page",
     "queue.page",
     "shifts.page",
     "payments.page",
@@ -123,6 +129,8 @@ const EMPLOYEE_READ_ALLOW = new Set<string>([
 
 const EMPLOYEE_MENU_PREFIX_ALLOW = ["menu.pos."];
 const EMPLOYEE_WRITE_ALLOW = new Set<string>(["orders.page", "queue.page", "payments.page", "shifts.page"]);
+const ORDER_EDIT_FEATURE = "orders.edit.feature";
+const ORDER_CANCEL_FEATURE = "orders.cancel.feature";
 
 function normalizeRoleName(roleName: string): RoleName | null {
     const value = roleName.trim().toLowerCase();
@@ -143,6 +151,17 @@ function toPermissionPolicy(
 
     const resourceKey = resource.resource_key;
     const isMenu = resource.resource_type === "menu";
+
+    if (resourceKey === ORDER_EDIT_FEATURE) {
+        if (actionKey === "access" || actionKey === "view") {
+            return { effect: "allow", scope: "branch" };
+        }
+        return { effect: "deny", scope: "none" };
+    }
+
+    if (resourceKey === ORDER_CANCEL_FEATURE) {
+        return { effect: "deny", scope: "none" };
+    }
 
     if (roleName === "Manager") {
         if (MANAGER_RESTRICTED_RESOURCES.has(resourceKey)) {

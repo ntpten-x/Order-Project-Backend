@@ -46,7 +46,7 @@ export class ProductsUnitController {
 
     findOneByName = catchAsync(async (req: Request, res: Response) => {
         const branchId = getBranchId(req as any);
-        const productsUnit = await this.productsUnitService.findOneByName(req.params.products_unit_name, branchId);
+        const productsUnit = await this.productsUnitService.findOneByName(req.params.unit_name, branchId);
         if (!productsUnit) throw AppError.notFound("Products unit");
         setPrivateSwrHeaders(res);
         return ApiResponses.ok(res, productsUnit);

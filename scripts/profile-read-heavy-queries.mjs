@@ -179,6 +179,9 @@ async function run() {
   const startDate = process.env.PROFILE_START_DATE || "";
   const endDate = process.env.PROFILE_END_DATE || "";
   const topItemsLimit = Number(process.env.PROFILE_TOP_ITEMS_LIMIT || 10);
+  const queueLimit = Number(process.env.PROFILE_QUEUE_LIMIT || 100);
+  const queueStatus = process.env.PROFILE_QUEUE_STATUS || "";
+  const authUserId = process.env.PROFILE_USER_ID || "";
 
   const baseParams = [];
   const whereSql = buildWhereSql({ statuses, orderType, query, branchId }, baseParams);
@@ -228,12 +231,46 @@ async function run() {
     LIMIT $${topItemsParams.length}
   `;
 
+  const queueParams = [];
+  const queueWhere = [];
+  if (branchId) {
+    queueParams.push(branchId);
+    queueWhere.push(`q.branch_id = $${queueParams.length}`);
+  }
+  if (queueStatus) {
+    queueParams.push(queueStatus);
+    queueWhere.push(`q.status::text = $${queueParams.length}`);
+  }
+  queueParams.push(queueLimit);
+  const queueQuery = `
+    SELECT q.id, q.order_id, q.branch_id, q.status, q.priority, q.queue_position, q.created_at
+    FROM order_queue q
+    ${queueWhere.length ? `WHERE ${queueWhere.join(" AND ")}` : ""}
+    ORDER BY q.priority DESC, q.queue_position ASC
+    LIMIT $${queueParams.length}
+  `;
+
+  const authParams = [];
+  let authQuery = `
+    SELECT u.id, u.username, u.name, u.roles_id, u.branch_id, u.is_use, u.is_active, r.roles_name, r.display_name
+    FROM users u
+    LEFT JOIN roles r ON r.id = u.roles_id
+  `;
+  if (authUserId) {
+    authParams.push(authUserId);
+    authQuery += ` WHERE u.id = $1`;
+  } else {
+    authQuery += ` ORDER BY u.last_login_at DESC NULLS LAST LIMIT 1`;
+  }
+
   const reports = [];
   try {
     reports.push(await explainAnalyze(client, "orders.summary.count", countQuery, baseParams));
     reports.push(await explainAnalyze(client, "orders.summary.data", dataQuery, dataParams));
     reports.push(await explainAnalyze(client, "dashboard.sales.summary", salesSummaryQuery, salesSummaryParams));
     reports.push(await explainAnalyze(client, "dashboard.top-items", topItemsQuery, topItemsParams));
+    reports.push(await explainAnalyze(client, "order-queue.list", queueQuery, queueParams));
+    reports.push(await explainAnalyze(client, "auth.user.lookup", authQuery, authParams));
   } finally {
     await client.end();
   }
@@ -255,6 +292,9 @@ async function run() {
       startDate: startDate || null,
       endDate: endDate || null,
       topItemsLimit,
+      queueLimit,
+      queueStatus: queueStatus || null,
+      authUserId: authUserId || null,
     },
     reports,
   };

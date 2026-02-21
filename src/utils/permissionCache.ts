@@ -111,17 +111,12 @@ export async function resolvePermissionDecisionWithCache(input: {
         return { decision: memoryHit, source: "memory" };
     }
 
-    const redisHit = await readRedis(key);
-    if (redisHit !== undefined) {
-        writeMemory(key, redisHit);
-        observeCache("hit", "redis");
-        return { decision: redisHit, source: "redis" };
-    }
-
+    // Redis round-trips can dominate request latency in some deployments.
+    // Permission reads are cheap from Postgres; prefer DB on miss and keep Redis writes best-effort.
     observeCache("miss", "none");
     const fetched = await input.fetcher();
     writeMemory(key, fetched);
-    await writeRedis(key, fetched);
+    void writeRedis(key, fetched);
     return { decision: fetched, source: "none" };
 }
 

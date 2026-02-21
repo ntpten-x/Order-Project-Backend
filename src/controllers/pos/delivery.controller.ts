@@ -8,6 +8,17 @@ import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../../util
 import { getClientIp } from "../../utils/securityLogger";
 import { setPrivateSwrHeaders } from "../../utils/cacheHeaders";
 import { parseCreatedSort } from "../../utils/sortCreated";
+import { normalizeImageSourceInput } from "../../utils/imageSource";
+
+function normalizeText(value: unknown): string | undefined {
+    if (typeof value !== "string") return undefined;
+    const normalized = value.trim();
+    return normalized.length > 0 ? normalized : undefined;
+}
+
+function normalizeLogo(value: unknown): string | null {
+    return normalizeImageSourceInput(value);
+}
 
 export class DeliveryController {
     constructor(private deliveryService: DeliveryService) { }
@@ -50,6 +61,15 @@ export class DeliveryController {
         if (branchId) {
             req.body.branch_id = branchId;
         }
+        if ("delivery_name" in req.body) {
+            req.body.delivery_name = normalizeText(req.body.delivery_name) ?? req.body.delivery_name;
+        }
+        if ("delivery_prefix" in req.body) {
+            req.body.delivery_prefix = normalizeText(req.body.delivery_prefix) ?? null;
+        }
+        if ("logo" in req.body) {
+            req.body.logo = normalizeLogo(req.body.logo);
+        }
         const delivery = await this.deliveryService.create(req.body);
 
         const userInfo = getUserInfoFromRequest(req as any);
@@ -74,6 +94,15 @@ export class DeliveryController {
         const branchId = getBranchId(req as any);
         if (branchId) {
             req.body.branch_id = branchId;
+        }
+        if ("delivery_name" in req.body) {
+            req.body.delivery_name = normalizeText(req.body.delivery_name) ?? req.body.delivery_name;
+        }
+        if ("delivery_prefix" in req.body) {
+            req.body.delivery_prefix = normalizeText(req.body.delivery_prefix) ?? null;
+        }
+        if ("logo" in req.body) {
+            req.body.logo = normalizeLogo(req.body.logo);
         }
         const oldDelivery = await this.deliveryService.findOne(req.params.id, branchId);
         const delivery = await this.deliveryService.update(req.params.id, req.body, branchId);

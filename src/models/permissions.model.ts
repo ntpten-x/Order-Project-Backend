@@ -62,6 +62,27 @@ export type PermissionOverrideApprovalRecord = {
     reviewed_at: string | null;
 };
 
+type ExpandedPermissionActionRow = {
+    resource_key: string;
+    action_key: "access" | "view" | "create" | "update" | "delete";
+    effect: "allow" | "deny";
+    scope: "none" | "own" | "branch" | "all";
+};
+
+const PERMISSION_ACTION_FLAGS: Array<{
+    actionKey: ExpandedPermissionActionRow["action_key"];
+    key: keyof Pick<
+        PermissionUpsertRow,
+        "canAccess" | "canView" | "canCreate" | "canUpdate" | "canDelete"
+    >;
+}> = [
+    { actionKey: "access", key: "canAccess" },
+    { actionKey: "view", key: "canView" },
+    { actionKey: "create", key: "canCreate" },
+    { actionKey: "update", key: "canUpdate" },
+    { actionKey: "delete", key: "canDelete" },
+];
+
 export class PermissionsModel {
     async findRoleMatrix(roleId: string): Promise<RolePermissionMatrixRecord[]> {
         return getDbManager().query(
@@ -464,40 +485,40 @@ export class PermissionsModel {
     ): Promise<void> {
         await manager.query(`DELETE FROM user_permissions WHERE user_id = $1`, [userId]);
 
-        for (const row of permissions) {
-            const actions = [
-                { actionKey: "access", enabled: row.canAccess },
-                { actionKey: "view", enabled: row.canView },
-                { actionKey: "create", enabled: row.canCreate },
-                { actionKey: "update", enabled: row.canUpdate },
-                { actionKey: "delete", enabled: row.canDelete },
-            ];
-
-            for (const action of actions) {
-                const effect = action.enabled ? "allow" : "deny";
-                const scope = action.enabled ? row.dataScope : "none";
-
-                await manager.query(
-                    `
-                        INSERT INTO user_permissions (user_id, resource_id, action_id, effect, scope)
-                        SELECT
-                            $1,
-                            pr.id,
-                            pa.id,
-                            $2::varchar,
-                            $3::varchar
-                        FROM permission_resources pr
-                        INNER JOIN permission_actions pa
-                            ON pa.action_key = $4
-                           AND pa.is_active = true
-                        WHERE pr.resource_key = $5
-                          AND pr.is_active = true
-                          AND pr.resource_type IN ('page', 'menu')
-                    `,
-                    [userId, effect, scope, action.actionKey, row.resourceKey]
-                );
-            }
+        const expanded = this.expandPermissionActions(permissions);
+        if (expanded.length === 0) {
+            return;
         }
+
+        await manager.query(
+            `
+                WITH payload AS (
+                    SELECT *
+                    FROM jsonb_to_recordset($2::jsonb) AS p(
+                        resource_key text,
+                        action_key text,
+                        effect text,
+                        scope text
+                    )
+                )
+                INSERT INTO user_permissions (user_id, resource_id, action_id, effect, scope)
+                SELECT
+                    $1::uuid,
+                    pr.id,
+                    pa.id,
+                    payload.effect::varchar,
+                    payload.scope::varchar
+                FROM payload
+                INNER JOIN permission_resources pr
+                    ON pr.resource_key = payload.resource_key
+                   AND pr.is_active = true
+                   AND pr.resource_type IN ('page', 'menu')
+                INNER JOIN permission_actions pa
+                    ON pa.action_key = payload.action_key
+                   AND pa.is_active = true
+            `,
+            [userId, JSON.stringify(expanded)]
+        );
     }
 
     private async replaceRolePermissionsWithManager(
@@ -507,39 +528,55 @@ export class PermissionsModel {
     ): Promise<void> {
         await manager.query(`DELETE FROM role_permissions WHERE role_id = $1`, [roleId]);
 
-        for (const row of permissions) {
-            const actions = [
-                { actionKey: "access", enabled: row.canAccess },
-                { actionKey: "view", enabled: row.canView },
-                { actionKey: "create", enabled: row.canCreate },
-                { actionKey: "update", enabled: row.canUpdate },
-                { actionKey: "delete", enabled: row.canDelete },
-            ];
+        const expanded = this.expandPermissionActions(permissions);
+        if (expanded.length === 0) {
+            return;
+        }
 
-            for (const action of actions) {
-                const effect = action.enabled ? "allow" : "deny";
-                const scope = action.enabled ? row.dataScope : "none";
+        await manager.query(
+            `
+                WITH payload AS (
+                    SELECT *
+                    FROM jsonb_to_recordset($2::jsonb) AS p(
+                        resource_key text,
+                        action_key text,
+                        effect text,
+                        scope text
+                    )
+                )
+                INSERT INTO role_permissions (role_id, resource_id, action_id, effect, scope)
+                SELECT
+                    $1::uuid,
+                    pr.id,
+                    pa.id,
+                    payload.effect::varchar,
+                    payload.scope::varchar
+                FROM payload
+                INNER JOIN permission_resources pr
+                    ON pr.resource_key = payload.resource_key
+                   AND pr.is_active = true
+                   AND pr.resource_type IN ('page', 'menu')
+                INNER JOIN permission_actions pa
+                    ON pa.action_key = payload.action_key
+                   AND pa.is_active = true
+            `,
+            [roleId, JSON.stringify(expanded)]
+        );
+    }
 
-                await manager.query(
-                    `
-                        INSERT INTO role_permissions (role_id, resource_id, action_id, effect, scope)
-                        SELECT
-                            $1,
-                            pr.id,
-                            pa.id,
-                            $2::varchar,
-                            $3::varchar
-                        FROM permission_resources pr
-                        INNER JOIN permission_actions pa
-                            ON pa.action_key = $4
-                           AND pa.is_active = true
-                        WHERE pr.resource_key = $5
-                          AND pr.is_active = true
-                          AND pr.resource_type IN ('page', 'menu')
-                    `,
-                    [roleId, effect, scope, action.actionKey, row.resourceKey]
-                );
+    private expandPermissionActions(permissions: PermissionUpsertRow[]): ExpandedPermissionActionRow[] {
+        const rows: ExpandedPermissionActionRow[] = [];
+        for (const permission of permissions) {
+            for (const action of PERMISSION_ACTION_FLAGS) {
+                const enabled = permission[action.key];
+                rows.push({
+                    resource_key: permission.resourceKey,
+                    action_key: action.actionKey,
+                    effect: enabled ? "allow" : "deny",
+                    scope: enabled ? permission.dataScope : "none",
+                });
             }
         }
+        return rows;
     }
 }

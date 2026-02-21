@@ -8,6 +8,15 @@ import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../../util
 import { getClientIp } from "../../utils/securityLogger";
 import { setPrivateSwrHeaders } from "../../utils/cacheHeaders";
 import { parseCreatedSort } from "../../utils/sortCreated";
+import { normalizeImageSourceInput } from "../../utils/imageSource";
+
+function normalizeDescription(value: unknown): string {
+    return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizeImageUrl(value: unknown): string | null {
+    return normalizeImageSourceInput(value);
+}
 
 /**
  * Products Controller
@@ -54,6 +63,14 @@ export class ProductsController {
         });
     });
 
+    activeCount = catchAsync(async (req: Request, res: Response) => {
+        const category_id = req.query.category_id as string | undefined;
+        const branchId = getBranchId(req as any);
+        const total = await this.productsService.countActive(category_id, branchId);
+        setPrivateSwrHeaders(res);
+        return ApiResponses.ok(res, { total });
+    });
+
     findOne = catchAsync(async (req: Request, res: Response) => {
         const branchId = getBranchId(req as any);
         const product = await this.productsService.findOne(req.params.id, branchId);
@@ -79,6 +96,8 @@ export class ProductsController {
         if (branchId) {
             req.body.branch_id = branchId;
         }
+        req.body.description = normalizeDescription(req.body.description);
+        req.body.img_url = normalizeImageUrl(req.body.img_url);
         if (req.body.price_delivery === undefined || req.body.price_delivery === null) {
             req.body.price_delivery = req.body.price ?? 0;
         }
@@ -106,6 +125,12 @@ export class ProductsController {
         const branchId = getBranchId(req as any);
         if (branchId) {
             req.body.branch_id = branchId;
+        }
+        if ("description" in req.body) {
+            req.body.description = normalizeDescription(req.body.description);
+        }
+        if ("img_url" in req.body) {
+            req.body.img_url = normalizeImageUrl(req.body.img_url);
         }
         const oldProduct = await this.productsService.findOne(req.params.id, branchId);
         const product = await this.productsService.update(req.params.id, req.body, branchId);

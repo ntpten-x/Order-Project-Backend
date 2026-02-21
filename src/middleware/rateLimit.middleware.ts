@@ -22,7 +22,13 @@ const redisUrl = rateLimitRedisDisabled
         resolveRedisConnectionUrlFromEnv() ||
         ""
     );
+const isProduction = process.env.NODE_ENV === "production";
+const enforceRedisInProduction = isProduction;
 let redisStoreFactory: ((prefix: string) => any) | undefined;
+
+const failRateLimitPolicy = (message: string): never => {
+    throw new Error(`[RateLimit] ${message}`);
+};
 
 const loadRedisDeps = () => {
     try {
@@ -59,7 +65,7 @@ const normalizeRedisScheme = (url: string, tlsEnabled: boolean) => {
     return url.replace(/^rediss:/, "redis:");
 };
 
-const createRedisStore = (getRedisClient: () => any | null, prefix: string) => {
+const createRedisStore = (getRedisClient: () => any | null, prefix: string, failWithoutRedis: boolean) => {
     let windowMs = 60 * 1000;
     const safePrefix = prefix.endsWith(":") ? prefix : `${prefix}:`;
     const withPrefix = (key: string) => `${safePrefix}${key}`;
@@ -109,29 +115,54 @@ const createRedisStore = (getRedisClient: () => any | null, prefix: string) => {
         get: async (key: string) => {
             try {
                 const redisClient = getRedisClient();
-                if (!redisClient) return localGet(key);
+                if (!redisClient) {
+                    if (failWithoutRedis) {
+                        throw new Error("Redis client is not ready");
+                    }
+                    return localGet(key);
+                }
                 const redisKey = withPrefix(key);
-                const rawHits = await redisClient.get(redisKey);
+                // Use MULTI to reduce Redis round-trips (important for request latency).
+                const now = Date.now();
+                const [rawHits, ttlRaw] = (await redisClient
+                    .multi()
+                    .get(redisKey)
+                    .pTTL(redisKey)
+                    .exec()) as unknown as [unknown, unknown];
                 if (rawHits === null || rawHits === undefined) {
                     return localGet(key);
                 }
                 const totalHits = Number(rawHits);
-                const ttlMs = Number(await redisClient.pTTL(redisKey));
-                const resetTime = Number.isFinite(ttlMs) && ttlMs > 0 ? new Date(Date.now() + ttlMs) : undefined;
+                const ttlMs = Number(ttlRaw);
+                const resetTime = Number.isFinite(ttlMs) && ttlMs > 0 ? new Date(now + ttlMs) : undefined;
                 return { totalHits, resetTime };
             } catch (err) {
                 logStoreError(err);
+                if (failWithoutRedis) {
+                    throw err;
+                }
                 return localGet(key);
             }
         },
         increment: async (key: string) => {
             try {
                 const redisClient = getRedisClient();
-                if (!redisClient) return localIncrement(key);
+                if (!redisClient) {
+                    if (failWithoutRedis) {
+                        throw new Error("Redis client is not ready");
+                    }
+                    return localIncrement(key);
+                }
                 const redisKey = withPrefix(key);
                 const now = Date.now();
-                const totalHits = Number(await redisClient.incr(redisKey));
-                let ttlMs = Number(await redisClient.pTTL(redisKey));
+                // Use MULTI to reduce Redis round-trips (INCR + PTTL in one network hop).
+                const [hitsRaw, ttlRaw] = (await redisClient
+                    .multi()
+                    .incr(redisKey)
+                    .pTTL(redisKey)
+                    .exec()) as unknown as [unknown, unknown];
+                const totalHits = Number(hitsRaw);
+                let ttlMs = Number(ttlRaw);
                 if (!Number.isFinite(ttlMs) || ttlMs < 0) {
                     await redisClient.pExpire(redisKey, windowMs);
                     ttlMs = windowMs;
@@ -140,13 +171,21 @@ const createRedisStore = (getRedisClient: () => any | null, prefix: string) => {
                 return { totalHits, resetTime };
             } catch (err) {
                 logStoreError(err);
+                if (failWithoutRedis) {
+                    throw err;
+                }
                 return localIncrement(key);
             }
         },
         decrement: async (key: string) => {
             try {
                 const redisClient = getRedisClient();
-                if (!redisClient) return localDecrement(key);
+                if (!redisClient) {
+                    if (failWithoutRedis) {
+                        throw new Error("Redis client is not ready");
+                    }
+                    return localDecrement(key);
+                }
                 const redisKey = withPrefix(key);
                 const remaining = Number(await redisClient.decr(redisKey));
                 if (!Number.isFinite(remaining) || remaining <= 0) {
@@ -154,6 +193,9 @@ const createRedisStore = (getRedisClient: () => any | null, prefix: string) => {
                 }
             } catch (err) {
                 logStoreError(err);
+                if (failWithoutRedis) {
+                    throw err;
+                }
                 localDecrement(key);
             }
         },
@@ -161,12 +203,18 @@ const createRedisStore = (getRedisClient: () => any | null, prefix: string) => {
             try {
                 const redisClient = getRedisClient();
                 if (!redisClient) {
+                    if (failWithoutRedis) {
+                        throw new Error("Redis client is not ready");
+                    }
                     localHits.delete(key);
                     return;
                 }
                 await redisClient.del(withPrefix(key));
             } catch (err) {
                 logStoreError(err);
+                if (failWithoutRedis) {
+                    throw err;
+                }
                 localHits.delete(key);
             }
         },
@@ -184,6 +232,9 @@ const createRedisStore = (getRedisClient: () => any | null, prefix: string) => {
 };
 
 if (rateLimitRedisDisabled) {
+    if (enforceRedisInProduction) {
+        failRateLimitPolicy("RATE_LIMIT_REDIS_DISABLED=true is not allowed in production.");
+    }
     console.info("[RateLimit] Redis disabled by RATE_LIMIT_REDIS_DISABLED=true. Using in-memory store.");
 } else if (redisUrl) {
     const deps = loadRedisDeps();
@@ -220,7 +271,9 @@ if (rateLimitRedisDisabled) {
         const getActiveRedisClient = () => {
             const candidate = activeRedisClient;
             if (!candidate) return null;
-            if (typeof candidate.isReady === "boolean" && candidate.isReady !== true) return null;
+            if (!enforceRedisInProduction && typeof candidate.isReady === "boolean" && candidate.isReady !== true) {
+                return null;
+            }
             return candidate;
         };
 
@@ -280,13 +333,22 @@ if (rateLimitRedisDisabled) {
 
         connectWithTlsFallback().catch((err: unknown) => {
             console.error("[RateLimit] Failed to connect to Redis:", err);
+            if (enforceRedisInProduction) {
+                process.exit(1);
+            }
         });
 
-        redisStoreFactory = (prefix: string) => createRedisStore(getActiveRedisClient, prefix);
+        redisStoreFactory = (prefix: string) => createRedisStore(getActiveRedisClient, prefix, enforceRedisInProduction);
     } else {
+        if (enforceRedisInProduction) {
+            failRateLimitPolicy("Redis URL is set but redis dependency is unavailable.");
+        }
         console.warn("[RateLimit] Redis URL set but redis deps are missing. Falling back to in-memory store.");
     }
 } else {
+    if (enforceRedisInProduction) {
+        failRateLimitPolicy("RATE_LIMIT_REDIS_URL (or REDIS_URL) is required in production.");
+    }
     console.warn("[RateLimit] Redis URL not set. Falling back to in-memory store (not suitable for multi-instance).");
 }
 

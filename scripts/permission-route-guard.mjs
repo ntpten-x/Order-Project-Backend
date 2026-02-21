@@ -11,6 +11,7 @@ const allowlist = new Set([
     "src/routes/auth.route.ts:post:/login",
     "src/routes/auth.route.ts:post:/logout",
     "src/routes/auth.route.ts:get:/me",
+    "src/routes/auth.route.ts:put:/me",
 ]);
 
 function walkRouteFiles(dir, acc = []) {
@@ -127,7 +128,10 @@ for (const file of files) {
             continue;
         }
 
-        if (!args.includes("authorizePermission(")) {
+        const hasPermissionGuard =
+            args.includes("authorizePermission(") ||
+            args.includes("authorizePermissionOrSelf(");
+        if (!hasPermissionGuard) {
             failed = true;
             const line = lineOfIndex(source, match.index);
             console.error(
