@@ -64,7 +64,6 @@ export class TablesModels {
     }
 
     async findOneByName(table_name: string, branchId?: string): Promise<Tables | null> {
-        if (!table_name?.trim()) return null;
         try {
             const where: any = { table_name };
             if (branchId) where.branch_id = branchId;

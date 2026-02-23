@@ -286,9 +286,9 @@ export class OrdersController {
         const branchId = getBranchId(req as any);
         const order = await this.ordersService.deleteItem(req.params.itemId, branchId);
 
-        // Audit log - important destructive action
+        // Audit log - item is now soft-cancelled (not hard-deleted)
         await auditLogger.log({
-            action_type: AuditActionType.ITEM_DELETE,
+            action_type: AuditActionType.ITEM_UPDATE,
             user_id: user?.id,
             username: user?.username,
             ip_address: getClientIp(req),
@@ -296,7 +296,7 @@ export class OrdersController {
             entity_type: 'SalesOrderItem',
             entity_id: req.params.itemId,
             branch_id: branchId,
-            description: order?.order_no ? `Deleted item from order ${order.order_no}` : `Deleted order item ${req.params.itemId}`,
+            description: order?.order_no ? `Cancelled item in order ${order.order_no}` : `Cancelled order item ${req.params.itemId}`,
             path: req.path,
             method: req.method,
         });

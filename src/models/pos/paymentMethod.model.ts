@@ -50,7 +50,6 @@ export class PaymentMethodModels {
     }
 
     async findOneByName(payment_method_name: string, branchId?: string): Promise<PaymentMethod | null> {
-        if (!payment_method_name?.trim()) return null;
         try {
             const paymentMethodRepository = getRepository(PaymentMethod);
             const where: any = { payment_method_name };

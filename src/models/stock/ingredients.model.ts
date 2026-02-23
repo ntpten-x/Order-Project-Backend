@@ -87,7 +87,6 @@ export class IngredientsModel {
     }
 
     async findOneByName(ingredient_name: string, branchId?: string): Promise<Ingredients | null> {
-        if (!ingredient_name?.trim()) return null;
         try {
             const ingredientsRepository = getRepository(Ingredients);
             const query = ingredientsRepository.createQueryBuilder("ingredients")

@@ -77,7 +77,6 @@ export class CategoryModels {
     }
 
     async findOneByName(category_name: string, branchId?: string): Promise<Category | null> {
-        if (!category_name?.trim()) return null;
         try {
             const categoryRepository = getRepository(Category);
             const query = categoryRepository.createQueryBuilder("category")

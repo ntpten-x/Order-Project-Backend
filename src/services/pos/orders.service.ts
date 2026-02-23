@@ -784,7 +784,10 @@ export class OrdersService {
                 if (!item) throw new Error("Item not found");
                 const orderId = item.order_id;
 
-                await this.ordersModel.deleteItem(itemId, manager);
+                // Soft-cancel instead of hard delete to keep auditability and order history.
+                if (!isCancelledStatus(item.status)) {
+                    await this.ordersModel.updateItemStatus(itemId, OrderStatus.Cancelled, manager);
+                }
 
                 await recalculateOrderTotal(orderId, manager);
                 await this.syncOrderStatusFromItems(orderId, branchId, manager);
