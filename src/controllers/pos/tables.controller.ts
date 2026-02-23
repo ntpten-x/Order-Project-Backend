@@ -9,15 +9,18 @@ import { getBranchId } from "../../middleware/branch.middleware";
 import { setPrivateSwrHeaders } from "../../utils/cacheHeaders";
 import { parseCreatedSort } from "../../utils/sortCreated";
 
-/**
- * Tables Controller
- * Following supabase-postgres-best-practices:
- * - Standardized API responses
- * - Consistent error handling
- * - Pagination support
- */
 export class TablesController {
-    constructor(private tablesService: TablesService) { }
+    constructor(private tablesService: TablesService) {}
+
+    private sanitizeIncomingPayload(body: Record<string, unknown>): void {
+        delete body.qr_code_token;
+        delete body.qr_code_expires_at;
+    }
+
+    private sanitizeTableResponse<T extends Record<string, any>>(table: T): Omit<T, "qr_code_token" | "qr_code_expires_at"> {
+        const { qr_code_token: _qrCodeToken, qr_code_expires_at: _qrCodeExpiresAt, ...rest } = table;
+        return rest;
+    }
 
     findAll = catchAsync(async (req: Request, res: Response) => {
         const page = Math.max(parseInt(req.query.page as string) || 1, 1);
@@ -28,13 +31,13 @@ export class TablesController {
         const branchId = getBranchId(req as any);
 
         const result = await this.tablesService.findAll(page, limit, q, branchId, sortCreated);
-        
-        // Check if result has pagination structure
+
         if (result.data && result.total !== undefined) {
             setPrivateSwrHeaders(res);
-            return ApiResponses.paginated(res, result.data, {
+            const sanitized = result.data.map((table) => this.sanitizeTableResponse(table as Record<string, any>));
+            return ApiResponses.paginated(res, sanitized as any[], {
                 page: result.page || page,
-                limit: limit,
+                limit,
                 total: result.total,
             });
         }
@@ -47,20 +50,64 @@ export class TablesController {
         const branchId = getBranchId(req as any);
         const table = await this.tablesService.findOne(req.params.id, branchId);
         if (!table) {
-            throw AppError.notFound("โต๊ะ");
+            throw AppError.notFound("Table");
         }
         setPrivateSwrHeaders(res);
-        return ApiResponses.ok(res, table);
+        return ApiResponses.ok(res, this.sanitizeTableResponse(table as Record<string, any>));
     });
 
     findByName = catchAsync(async (req: Request, res: Response) => {
         const branchId = getBranchId(req as any);
         const table = await this.tablesService.findOneByName(req.params.name, branchId);
         if (!table) {
-            throw AppError.notFound("โต๊ะ");
+            throw AppError.notFound("Table");
         }
         setPrivateSwrHeaders(res);
-        return ApiResponses.ok(res, table);
+        return ApiResponses.ok(res, this.sanitizeTableResponse(table as Record<string, any>));
+    });
+
+    getQrToken = catchAsync(async (req: Request, res: Response) => {
+        const branchId = getBranchId(req as any);
+        const table = await this.tablesService.ensureQrToken(req.params.id, branchId);
+        setPrivateSwrHeaders(res);
+        return ApiResponses.ok(res, {
+            table_id: table.id,
+            table_name: table.table_name,
+            qr_code_token: table.qr_code_token,
+            qr_code_expires_at: table.qr_code_expires_at,
+            customer_path: table.qr_code_token ? `/order/${table.qr_code_token}` : null,
+        });
+    });
+
+    rotateQrToken = catchAsync(async (req: Request, res: Response) => {
+        const branchId = getBranchId(req as any);
+        const table = await this.tablesService.rotateQrToken(req.params.id, branchId);
+
+        const userInfo = getUserInfoFromRequest(req as any);
+        await auditLogger.log({
+            action_type: AuditActionType.TABLE_UPDATE,
+            ...userInfo,
+            ip_address: getClientIp(req),
+            user_agent: req.get("User-Agent"),
+            entity_type: "Tables",
+            entity_id: table.id,
+            branch_id: branchId,
+            new_values: {
+                qr_code_token_rotated: true,
+                qr_code_expires_at: table.qr_code_expires_at,
+            },
+            path: req.originalUrl,
+            method: req.method,
+            description: `Rotate table QR token ${table.id}`,
+        });
+
+        return ApiResponses.ok(res, {
+            table_id: table.id,
+            table_name: table.table_name,
+            qr_code_token: table.qr_code_token,
+            qr_code_expires_at: table.qr_code_expires_at,
+            customer_path: table.qr_code_token ? `/order/${table.qr_code_token}` : null,
+        });
     });
 
     create = catchAsync(async (req: Request, res: Response) => {
@@ -68,6 +115,7 @@ export class TablesController {
         if (branchId) {
             req.body.branch_id = branchId;
         }
+        this.sanitizeIncomingPayload(req.body as Record<string, unknown>);
         const table = await this.tablesService.create(req.body);
 
         const userInfo = getUserInfoFromRequest(req as any);
@@ -85,7 +133,7 @@ export class TablesController {
             description: `Create table ${(table as any).table_name || (table as any).id}`,
         });
 
-        return ApiResponses.created(res, table);
+        return ApiResponses.created(res, this.sanitizeTableResponse(table as Record<string, any>));
     });
 
     update = catchAsync(async (req: Request, res: Response) => {
@@ -93,6 +141,7 @@ export class TablesController {
         if (branchId) {
             req.body.branch_id = branchId;
         }
+        this.sanitizeIncomingPayload(req.body as Record<string, unknown>);
         const oldTable = await this.tablesService.findOne(req.params.id, branchId);
         const table = await this.tablesService.update(req.params.id, req.body, branchId);
 
@@ -115,9 +164,9 @@ export class TablesController {
         }
 
         if (!table) {
-            throw AppError.notFound("โต๊ะ");
+            throw AppError.notFound("Table");
         }
-        return ApiResponses.ok(res, table);
+        return ApiResponses.ok(res, this.sanitizeTableResponse(table as Record<string, any>));
     });
 
     delete = catchAsync(async (req: Request, res: Response) => {
@@ -139,6 +188,6 @@ export class TablesController {
             method: req.method,
             description: `Delete table ${req.params.id}`,
         });
-        return ApiResponses.ok(res, { message: "ลบข้อมูลโต๊ะสำเร็จ" });
+        return ApiResponses.ok(res, { message: "Table deleted successfully" });
     });
 }

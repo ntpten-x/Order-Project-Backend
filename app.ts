@@ -40,6 +40,7 @@ import branchRouter from "./src/routes/branch.route";
 import orderQueueRouter from "./src/routes/pos/orderQueue.route";
 import permissionsRouter from "./src/routes/permissions.route";
 import systemRouter from "./src/routes/system.route";
+import publicTableOrderRouter from "./src/routes/public/tableOrder.route";
 import { globalErrorHandler } from "./src/middleware/error.middleware";
 import { AppError } from "./src/utils/AppError";
 import { performanceMonitoring, errorTracking } from "./src/middleware/monitoring.middleware";
@@ -138,6 +139,7 @@ app.use(compression());
 app.use(apiLimiter);
 app.use("/auth/login", authLimiter);
 app.use("/pos/orders", orderCreateLimiter); // Stricter limit for order creation
+app.use("/public/table-order", orderCreateLimiter); // Stricter limit for public table ordering
 app.use("/pos/payments", paymentLimiter); // Stricter limit for payments
 
 // CORS
@@ -232,6 +234,10 @@ const csrfExcludedPaths = new Set([
     "/metrics"
 ]);
 
+const isCsrfExcludedPath = (path: string): boolean => {
+    return csrfExcludedPaths.has(path) || path.startsWith("/public/");
+};
+
 // CSRF token endpoint - must be defined before CSRF middleware
 // This endpoint needs to initialize CSRF token generation
 // IMPORTANT: This endpoint must always work to ensure security
@@ -319,7 +325,7 @@ app.use((req, res, next) => {
     const bearerOnly = req.headers.authorization && !usesCookieAuth;
 
     // Skip CSRF for excluded paths
-    if (csrfExcludedPaths.has(req.path)) {
+    if (isCsrfExcludedPath(req.path)) {
         return next();
     }
 
@@ -403,6 +409,7 @@ app.use("/pos/queue", orderQueueRouter);
 app.use("/branches", branchRouter);
 app.use("/permissions", permissionsRouter);
 app.use("/system", systemRouter);
+app.use("/public/table-order", publicTableOrderRouter);
 
 // Handle Unhandled Routes
 app.use((req, res, next) => {

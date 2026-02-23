@@ -2,18 +2,18 @@ import { Column, Entity, PrimaryGeneratedColumn, Index, ManyToOne, JoinColumn } 
 import { Branch } from "../Branch";
 
 export enum TableStatus {
-    Available = "Available",    // ว่าง
-    Unavailable = "Unavailable" // ไม่ว่าง
+    Available = "Available",
+    Unavailable = "Unavailable"
 }
 
 @Entity()
 @Index(["table_name", "branch_id"], { unique: true })
 export class Tables {
     @PrimaryGeneratedColumn("uuid")
-    id!: string; // รหัสโต๊ะ
+    id!: string;
 
-    @Column({ type: 'varchar', length: 255 })
-    table_name!: string; // ชื่อโต๊ะ (เช่น T1, A10)
+    @Column({ type: "varchar", length: 255 })
+    table_name!: string;
 
     @Index()
     @Column({ name: "branch_id", type: "uuid" })
@@ -25,14 +25,20 @@ export class Tables {
 
     @Index()
     @Column({ type: "enum", enum: TableStatus, default: TableStatus.Available })
-    status!: TableStatus; // สถานะโต๊ะ
+    status!: TableStatus;
 
-    @Column({ type: 'timestamptz', default: () => 'CURRENT_TIMESTAMP' })
-    create_date!: Date; // วันที่สร้าง
+    @Column({ type: "timestamptz", default: () => "CURRENT_TIMESTAMP" })
+    create_date!: Date;
 
-    @Column({ type: 'timestamptz', default: () => 'CURRENT_TIMESTAMP' })
-    update_date!: Date; // วันที่แก้ไขล่าสุด
+    @Column({ type: "timestamptz", default: () => "CURRENT_TIMESTAMP" })
+    update_date!: Date;
 
-    @Column({ type: 'boolean', default: true })
-    is_active!: boolean; // สถานะการใช้งาน (เปิด/ปิด)
+    @Column({ type: "boolean", default: true })
+    is_active!: boolean;
+
+    @Column({ type: "varchar", length: 128, nullable: true })
+    qr_code_token?: string | null;
+
+    @Column({ type: "timestamptz", nullable: true })
+    qr_code_expires_at?: Date | null;
 }

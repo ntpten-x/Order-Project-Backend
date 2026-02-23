@@ -12,6 +12,10 @@ const allowlist = new Set([
     "src/routes/auth.route.ts:post:/logout",
     "src/routes/auth.route.ts:get:/me",
     "src/routes/auth.route.ts:put:/me",
+    "src/routes/public/tableOrder.route.ts:get:/:token",
+    "src/routes/public/tableOrder.route.ts:get:/:token/order",
+    "src/routes/public/tableOrder.route.ts:get:/:token/order/:orderId",
+    "src/routes/public/tableOrder.route.ts:post:/:token/order",
 ]);
 
 function walkRouteFiles(dir, acc = []) {

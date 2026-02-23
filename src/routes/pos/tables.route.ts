@@ -11,24 +11,26 @@ import {
     createTableSchema,
     tableIdParamSchema,
     tableNameParamSchema,
-    updateTableSchema
+    updateTableSchema,
 } from "../../utils/schemas/posMaster.schema";
 
-const router = Router()
+const router = Router();
 
-const tablesModel = new TablesModels()
-const tablesService = new TablesService(tablesModel)
-const tablesController = new TablesController(tablesService)
+const tablesModel = new TablesModels();
+const tablesService = new TablesService(tablesModel);
+const tablesController = new TablesController(tablesService);
 
-router.use(authenticateToken)
-router.use(requireBranch)
+router.use(authenticateToken);
+router.use(requireBranch);
 
-router.get("/", authorizePermission("tables.page", "view"), validate(paginationQuerySchema), tablesController.findAll)
-router.get("/:id", authorizePermission("tables.page", "view"), validate(tableIdParamSchema), tablesController.findOne)
-router.get("/getByName/:name", authorizePermission("tables.page", "view"), validate(tableNameParamSchema), tablesController.findByName)
+router.get("/", authorizePermission("tables.page", "view"), validate(paginationQuerySchema), tablesController.findAll);
+router.get("/getByName/:name", authorizePermission("tables.page", "view"), validate(tableNameParamSchema), tablesController.findByName);
+router.get("/:id", authorizePermission("tables.page", "view"), validate(tableIdParamSchema), tablesController.findOne);
+router.get("/:id/qr", authorizePermission("tables.page", "view"), validate(tableIdParamSchema), tablesController.getQrToken);
+router.post("/:id/qr/rotate", authorizePermission("tables.page", "update"), validate(tableIdParamSchema), tablesController.rotateQrToken);
 
-router.post("/", authorizePermission("tables.page", "create"), validate(createTableSchema), tablesController.create)
-router.put("/:id", authorizePermission("tables.page", "update"), validate(updateTableSchema), tablesController.update)
-router.delete("/:id", authorizePermission("tables.page", "delete"), validate(tableIdParamSchema), tablesController.delete)
+router.post("/", authorizePermission("tables.page", "create"), validate(createTableSchema), tablesController.create);
+router.put("/:id", authorizePermission("tables.page", "update"), validate(updateTableSchema), tablesController.update);
+router.delete("/:id", authorizePermission("tables.page", "delete"), validate(tableIdParamSchema), tablesController.delete);
 
-export default router
+export default router;
