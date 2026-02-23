@@ -4,16 +4,16 @@ import { Products } from "../../entity/pos/Products";
 import { SalesOrder } from "../../entity/pos/SalesOrder";
 import { SalesOrderItem } from "../../entity/pos/SalesOrderItem";
 import { Tables } from "../../entity/pos/Tables";
-import { getRepository, runWithDbContext } from "../../database/dbContext";
+import { getRepository, runInTransaction, runWithDbContext } from "../../database/dbContext";
 import { AppError } from "../../utils/AppError";
 import { OrdersModels } from "../../models/pos/orders.model";
 import { OrdersService } from "../pos/orders.service";
+import { EntityManager } from "typeorm";
 
 type PublicOrderItemInput = {
     product_id: string;
     quantity: number;
     notes?: string;
-    details?: Array<{ detail_name: string; extra_price?: number }>;
 };
 
 type SubmitOrderInput = {
@@ -31,6 +31,10 @@ const ACTIVE_VIEW_STATUSES: string[] = [
 
 export class PublicTableOrderService {
     private ordersService = new OrdersService(new OrdersModels());
+
+    private getSalesOrderRepository(manager?: EntityManager) {
+        return manager ? manager.getRepository(SalesOrder) : getRepository(SalesOrder);
+    }
 
     private async resolveTableByToken(token: string): Promise<Tables> {
         const table = await runWithDbContext(
@@ -61,8 +65,13 @@ export class PublicTableOrderService {
         return normalized === "pending" || normalized === "cooking" || normalized === "served";
     }
 
-    private async findLatestOrderForTable(tableId: string, branchId: string, statuses: string[]): Promise<SalesOrder | null> {
-        return getRepository(SalesOrder)
+    private async findLatestOrderForTable(
+        tableId: string,
+        branchId: string,
+        statuses: string[],
+        manager?: EntityManager,
+    ): Promise<SalesOrder | null> {
+        return this.getSalesOrderRepository(manager)
             .createQueryBuilder("order")
             .leftJoinAndSelect("order.items", "items")
             .leftJoinAndSelect("items.product", "product")
@@ -72,6 +81,64 @@ export class PublicTableOrderService {
             .andWhere("order.status IN (:...statuses)", { statuses })
             .orderBy("order.create_date", "DESC")
             .getOne();
+    }
+
+    private async findLatestOrderHeaderForTable(
+        tableId: string,
+        branchId: string,
+        statuses: string[],
+        manager?: EntityManager,
+    ): Promise<SalesOrder | null> {
+        return this.getSalesOrderRepository(manager)
+            .createQueryBuilder("order")
+            .where("order.table_id = :tableId", { tableId })
+            .andWhere("order.branch_id = :branchId", { branchId })
+            .andWhere("order.status IN (:...statuses)", { statuses })
+            .orderBy("order.create_date", "DESC")
+            .getOne();
+    }
+
+    private assertNoCustomerModifiers(items: unknown[]): void {
+        const hasDetails = items.some(
+            (item) =>
+                item &&
+                typeof item === "object" &&
+                Object.prototype.hasOwnProperty.call(item as Record<string, unknown>, "details"),
+        );
+
+        if (hasDetails) {
+            throw new AppError("QR ordering supports notes only. Modifiers are not allowed.", 400);
+        }
+    }
+
+    private async assertProductsAvailableForPublicOrder(
+        branchId: string,
+        items: PublicOrderItemInput[],
+        manager?: EntityManager,
+    ): Promise<void> {
+        const productIds = Array.from(
+            new Set(items.map((item) => item.product_id).filter((id): id is string => Boolean(id))),
+        );
+
+        if (productIds.length === 0) {
+            throw new AppError("Please add at least one item", 400);
+        }
+
+        const productRepo = manager ? manager.getRepository(Products) : getRepository(Products);
+
+        const rows = await productRepo
+            .createQueryBuilder("product")
+            .leftJoin("product.category", "category")
+            .select("product.id", "id")
+            .where("product.branch_id = :branchId", { branchId })
+            .andWhere("product.is_active = true")
+            .andWhere("category.is_active = true")
+            .andWhere("product.id IN (:...productIds)", { productIds })
+            .getRawMany<{ id: string }>();
+
+        if (rows.length !== productIds.length) {
+            throw new AppError("Some items are unavailable. Please refresh menu and try again.", 409);
+        }
     }
 
     private mapOrderItem(item: SalesOrderItem) {
@@ -184,14 +251,9 @@ export class PublicTableOrderService {
             product_id: item.product_id,
             quantity: Number(item.quantity),
             discount_amount: 0,
-            notes: item.notes || "",
+            notes: typeof item.notes === "string" ? item.notes.trim() : "",
             status: OrderStatus.Pending,
-            details: Array.isArray(item.details)
-                ? item.details.map((detail) => ({
-                      detail_name: detail.detail_name,
-                      extra_price: Number(detail.extra_price || 0),
-                  }))
-                : [],
+            details: [],
         }));
     }
 
@@ -258,67 +320,98 @@ export class PublicTableOrderService {
 
     async submitByToken(token: string, payload: SubmitOrderInput) {
         const table = await this.resolveTableByToken(token);
+        const branchId = table.branch_id!;
+        const rawItems = Array.isArray((payload as { items?: unknown[] })?.items)
+            ? ((payload as { items: unknown[] }).items ?? [])
+            : [];
+
+        if (rawItems.length === 0) {
+            throw new AppError("Please add at least one item", 400);
+        }
+
+        this.assertNoCustomerModifiers(rawItems);
+
+        const normalizedItems = this.toOrderItemsInput(payload.items || []);
 
         return runWithDbContext(
             {
-                branchId: table.branch_id,
+                branchId,
                 userId: "public-table-order",
                 role: "public",
                 isAdmin: false,
             },
             async () => {
-                const latestOrder = await this.findLatestOrderForTable(table.id, table.branch_id!, ACTIVE_VIEW_STATUSES);
+                return runInTransaction(async (manager) => {
+                    const lockedTable = await manager
+                        .getRepository(Tables)
+                        .createQueryBuilder("tables")
+                        .where("tables.id = :tableId", { tableId: table.id })
+                        .andWhere("tables.branch_id = :branchId", { branchId })
+                        .setLock("pessimistic_write")
+                        .getOne();
 
-                if (latestOrder && !this.canAddItemsToOrder(String(latestOrder.status || ""))) {
-                    throw new AppError("This table bill is locked. Please contact staff.", 409);
-                }
-
-                const normalizedItems = this.toOrderItemsInput(payload.items || []);
-
-                if (latestOrder && this.canAddItemsToOrder(String(latestOrder.status || ""))) {
-                    let updatedOrder: SalesOrder | null = latestOrder;
-                    for (const item of normalizedItems) {
-                        updatedOrder = await this.ordersService.addItem(latestOrder.id, item, table.branch_id);
+                    if (!lockedTable) {
+                        throw new AppError("Table QR is invalid or expired", 404);
                     }
 
-                    const refreshed = await this.ordersService.findOne(latestOrder.id, table.branch_id);
+                    await this.assertProductsAvailableForPublicOrder(branchId, normalizedItems, manager);
+
+                    const latestOrder = await this.findLatestOrderHeaderForTable(
+                        table.id,
+                        branchId,
+                        ACTIVE_VIEW_STATUSES,
+                        manager,
+                    );
+
+                    if (latestOrder && !this.canAddItemsToOrder(String(latestOrder.status || ""))) {
+                        throw new AppError("This table bill is locked. Please contact staff.", 409);
+                    }
+
+                    if (latestOrder && this.canAddItemsToOrder(String(latestOrder.status || ""))) {
+                        let updatedOrder: SalesOrder | null = latestOrder;
+                        for (const item of normalizedItems) {
+                            updatedOrder = await this.ordersService.addItem(latestOrder.id, item, branchId);
+                        }
+
+                        const refreshed = await this.ordersService.findOne(latestOrder.id, branchId);
+
+                        return {
+                            mode: "append",
+                            table: {
+                                id: table.id,
+                                table_name: table.table_name,
+                            },
+                            order: this.mapOrder(refreshed || updatedOrder),
+                        };
+                    }
+
+                    const created = await this.ordersService.createFullOrder(
+                        {
+                            order_type: OrderType.DineIn,
+                            table_id: table.id,
+                            status: OrderStatus.Pending,
+                            sub_total: 0,
+                            discount_amount: 0,
+                            vat: 0,
+                            total_amount: 0,
+                            received_amount: 0,
+                            change_amount: 0,
+                            items: normalizedItems,
+                        },
+                        branchId,
+                    );
+
+                    const refreshed = await this.ordersService.findOne(created.id, branchId);
 
                     return {
-                        mode: "append",
+                        mode: "create",
                         table: {
                             id: table.id,
                             table_name: table.table_name,
                         },
-                        order: this.mapOrder(refreshed || updatedOrder),
+                        order: this.mapOrder(refreshed || created),
                     };
-                }
-
-                const created = await this.ordersService.createFullOrder(
-                    {
-                        order_type: OrderType.DineIn,
-                        table_id: table.id,
-                        status: OrderStatus.Pending,
-                        sub_total: 0,
-                        discount_amount: 0,
-                        vat: 0,
-                        total_amount: 0,
-                        received_amount: 0,
-                        change_amount: 0,
-                        items: normalizedItems,
-                    },
-                    table.branch_id,
-                );
-
-                const refreshed = await this.ordersService.findOne(created.id, table.branch_id);
-
-                return {
-                    mode: "create",
-                    table: {
-                        id: table.id,
-                        table_name: table.table_name,
-                    },
-                    order: this.mapOrder(refreshed || created),
-                };
+                });
             },
         );
     }

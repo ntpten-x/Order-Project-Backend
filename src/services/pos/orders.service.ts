@@ -342,6 +342,9 @@ export class OrdersService {
                 }
 
                 const effectiveBranchId = orders.branch_id || branchId;
+                if (effectiveBranchId && !orders.branch_id) {
+                    orders.branch_id = effectiveBranchId;
+                }
 
                 // Validate foreign keys to prevent cross-branch access
                 if (effectiveBranchId) {
@@ -433,6 +436,9 @@ export class OrdersService {
             }
 
             const effectiveBranchId = orderData.branch_id || branchId;
+            if (effectiveBranchId && !orderData.branch_id) {
+                orderData.branch_id = effectiveBranchId;
+            }
 
             // Validate foreign keys to prevent cross-branch access
             if (effectiveBranchId) {
@@ -452,7 +458,7 @@ export class OrdersService {
                 }
             }
 
-            const preparedItems = await this.prepareItems(items, manager, branchId, orderData.order_type);
+            const preparedItems = await this.prepareItems(items, manager, effectiveBranchId, orderData.order_type);
 
             const orderRepo = manager.getRepository(SalesOrder);
             const itemRepo = manager.getRepository(SalesOrderItem);
@@ -481,7 +487,8 @@ export class OrdersService {
             await this.syncOrderStatusFromItems(savedOrder.id, effectiveBranchId, manager);
             return savedOrder;
         }).then(async (savedOrder) => {
-            const fullOrder = await this.ordersModel.findOne(savedOrder.id, branchId);
+            const lookupBranchId = savedOrder.branch_id || branchId;
+            const fullOrder = await this.ordersModel.findOne(savedOrder.id, lookupBranchId);
             if (fullOrder) {
                 this.invalidateReadCaches(fullOrder.branch_id || branchId);
                 const effectiveBranchId = fullOrder.branch_id || branchId;

@@ -10,11 +10,25 @@ import { ApiResponses, ErrorCodes } from "../utils/ApiResponse";
  */
 export const validate = (schema: z.Schema) => (req: Request, res: Response, next: NextFunction) => {
     try {
-        schema.parse({
+        const parsed = schema.parse({
             body: req.body,
             query: req.query,
             params: req.params,
         });
+
+        if (parsed && typeof parsed === "object") {
+            const parsedRecord = parsed as Record<string, unknown>;
+            if (Object.prototype.hasOwnProperty.call(parsedRecord, "body")) {
+                req.body = parsedRecord.body;
+            }
+            if (Object.prototype.hasOwnProperty.call(parsedRecord, "query")) {
+                req.query = parsedRecord.query as Request["query"];
+            }
+            if (Object.prototype.hasOwnProperty.call(parsedRecord, "params")) {
+                req.params = parsedRecord.params as Request["params"];
+            }
+        }
+
         next();
     } catch (error) {
         if (error instanceof ZodError) {
