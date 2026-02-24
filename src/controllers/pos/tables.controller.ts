@@ -66,6 +66,23 @@ export class TablesController {
         return ApiResponses.ok(res, this.sanitizeTableResponse(table as Record<string, any>));
     });
 
+    findAllQrCodes = catchAsync(async (req: Request, res: Response) => {
+        const page = Math.max(parseInt(req.query.page as string) || 1, 1);
+        const rawLimit = parseInt(req.query.limit as string);
+        const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
+        const q = (req.query.q as string | undefined) || undefined;
+        const sortCreated = parseCreatedSort(req.query.sort_created);
+        const branchId = getBranchId(req as any);
+
+        const result = await this.tablesService.findAllWithQrCodes(page, limit, q, branchId, sortCreated);
+        setPrivateSwrHeaders(res);
+        return ApiResponses.paginated(res, result.data, {
+            page: result.page || page,
+            limit,
+            total: result.total,
+        });
+    });
+
     getQrToken = catchAsync(async (req: Request, res: Response) => {
         const branchId = getBranchId(req as any);
         const table = await this.tablesService.ensureQrToken(req.params.id, branchId);

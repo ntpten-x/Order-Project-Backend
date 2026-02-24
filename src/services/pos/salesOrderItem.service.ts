@@ -25,13 +25,9 @@ export class SalesOrderItemService {
         const activeItems = items.filter((item) => !isCancelledStatus(String(item.status)));
         if (activeItems.length === 0) return null;
 
-        const statuses = activeItems.map((item) => normalizeOrderStatus(String(item.status)));
-        if (statuses.some((status) => status === OrderStatus.Cooking)) {
-            return OrderStatus.Cooking;
-        }
-        if (statuses.every((status) => status === OrderStatus.Served)) {
-            return OrderStatus.Served;
-        }
+        activeItems.forEach((item) => {
+            normalizeOrderStatus(String(item.status));
+        });
         return OrderStatus.Pending;
     }
 

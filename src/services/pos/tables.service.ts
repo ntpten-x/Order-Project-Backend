@@ -9,6 +9,10 @@ import { AppError } from "../../utils/AppError";
 const QR_TOKEN_BYTES = Math.max(16, Number(process.env.TABLE_QR_TOKEN_BYTES || 24));
 const QR_TOKEN_EXPIRE_DAYS = Number(process.env.TABLE_QR_TOKEN_EXPIRE_DAYS || 365);
 
+export type TableQrCodeListItem = Tables & {
+    customer_path: string | null;
+};
+
 export class TablesService {
     private socketService = SocketService.getInstance();
 
@@ -30,6 +34,13 @@ export class TablesService {
 
     async findOneByName(table_name: string, branchId?: string): Promise<Tables | null> {
         return this.tablesModel.findOneByName(table_name, branchId);
+    }
+
+    private isQrTokenExpired(expiresAt?: Date | string | null): boolean {
+        if (!expiresAt) return false;
+        const timestamp = expiresAt instanceof Date ? expiresAt.getTime() : new Date(expiresAt).getTime();
+        if (Number.isNaN(timestamp)) return true;
+        return timestamp <= Date.now();
     }
 
     private buildQrToken(): string {
@@ -78,7 +89,42 @@ export class TablesService {
         return this.rotateQrToken(id, branchId);
     }
 
-    async rotateQrToken(id: string, branchId?: string): Promise<Tables> {
+    async findAllWithQrCodes(
+        page: number,
+        limit: number,
+        q?: string,
+        branchId?: string,
+        sortCreated: CreatedSort = "old"
+    ): Promise<{ data: TableQrCodeListItem[]; total: number; page: number; last_page: number }> {
+        const result = await this.tablesModel.findAll(page, limit, q, branchId, sortCreated);
+        const data: TableQrCodeListItem[] = [];
+
+        for (const rawTable of result.data) {
+            const table = rawTable as Tables;
+            let qrToken = table.qr_code_token ?? null;
+            let qrExpiresAt = table.qr_code_expires_at ?? null;
+
+            if (!qrToken || this.isQrTokenExpired(qrExpiresAt)) {
+                const rotated = await this.rotateQrTokenInternal(table.id, branchId || table.branch_id, false);
+                qrToken = rotated.qr_code_token ?? null;
+                qrExpiresAt = rotated.qr_code_expires_at ?? null;
+            }
+
+            data.push({
+                ...table,
+                qr_code_token: qrToken,
+                qr_code_expires_at: qrExpiresAt,
+                customer_path: qrToken ? `/order/${qrToken}` : null,
+            });
+        }
+
+        return {
+            ...result,
+            data,
+        };
+    }
+
+    private async rotateQrTokenInternal(id: string, branchId?: string, emitRealtime: boolean = true): Promise<Tables> {
         const table = await this.tablesModel.findOne(id, branchId);
         if (!table) {
             throw new AppError("Table not found", 404);
@@ -89,10 +135,14 @@ export class TablesService {
 
         const updated = await this.tablesModel.updateQrToken(id, token, expiresAt, branchId || table.branch_id);
         const effectiveBranchId = updated.branch_id || branchId;
-        if (effectiveBranchId) {
+        if (emitRealtime && effectiveBranchId) {
             this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.tables.update, updated);
         }
         return updated;
+    }
+
+    async rotateQrToken(id: string, branchId?: string): Promise<Tables> {
+        return this.rotateQrTokenInternal(id, branchId, true);
     }
 
     async create(tables: Tables): Promise<Tables> {

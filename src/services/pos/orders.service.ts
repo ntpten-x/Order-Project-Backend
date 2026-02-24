@@ -200,16 +200,10 @@ export class OrdersService {
         const activeItems = items.filter((item) => !isCancelledStatus(String(item.status)));
         if (activeItems.length === 0) return null;
 
-        const statuses = activeItems.map((item) => this.ensureValidStatus(String(item.status)));
-
-        if (statuses.some((status) => status === OrderStatus.Cooking)) {
-            return OrderStatus.Cooking;
-        }
-
-        if (statuses.every((status) => status === OrderStatus.Served)) {
-            return OrderStatus.Served;
-        }
-
+        // Current flow keeps all active items under "Pending/กำลังดำเนินการ".
+        activeItems.forEach((item) => {
+            this.ensureValidStatus(String(item.status));
+        });
         return OrderStatus.Pending;
     }
 
@@ -598,7 +592,7 @@ export class OrdersService {
                 const queueItem = await queueRepo.findOne({ where: { order_id: result.id } });
 
                 if (queueItem) {
-                    if (finalStatus === OrderStatus.Cooking) {
+                    if (finalStatus === OrderStatus.Pending) {
                         await this.queueService.updateStatus(queueItem.id, QueueStatus.Processing, branchId);
                     } else if (finalStatus === OrderStatus.Completed || finalStatus === OrderStatus.Cancelled) {
                         await this.queueService.updateStatus(queueItem.id, finalStatus === OrderStatus.Completed

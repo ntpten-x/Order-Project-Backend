@@ -24,6 +24,7 @@ router.use(authenticateToken);
 router.use(requireBranch);
 
 router.get("/", authorizePermission("tables.page", "view"), validate(paginationQuerySchema), tablesController.findAll);
+router.get("/qr-codes", authorizePermission("tables.page", "view"), validate(paginationQuerySchema), tablesController.findAllQrCodes);
 router.get("/getByName/:name", authorizePermission("tables.page", "view"), validate(tableNameParamSchema), tablesController.findByName);
 router.get("/:id", authorizePermission("tables.page", "view"), validate(tableIdParamSchema), tablesController.findOne);
 router.get("/:id/qr", authorizePermission("tables.page", "view"), validate(tableIdParamSchema), tablesController.getQrToken);

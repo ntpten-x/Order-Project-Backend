@@ -156,6 +156,11 @@ export class AuthController {
                 { expiresIn: "10h" } // Token valid for 10 hours
             );
 
+            // Update user presence before writing session snapshot.
+            user.last_login_at = new Date();
+            user.is_active = true;
+            await userRepository.save(user);
+
             // Persist session in Redis with sliding TTL
             const redis = await getRedisClient();
             if (redis) {
@@ -192,11 +197,6 @@ export class AuthController {
                 maxAge: 36000000, // 10 hours in ms
                 ...(cookieDomain ? { domain: cookieDomain } : {}),
             });
-
-            // Update last_login_at and is_active
-            user.last_login_at = new Date();
-            user.is_active = true;
-            await userRepository.save(user);
 
             // Notify via Socket
             const { SocketService } = require("../services/socket.service");

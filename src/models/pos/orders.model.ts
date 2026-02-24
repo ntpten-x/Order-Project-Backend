@@ -15,9 +15,10 @@ type AccessContext = {
 };
 
 const ORDER_STATUS_VARIANTS: Record<string, string[]> = {
-    pending: ["Pending", "pending"],
-    cooking: ["Cooking"],
-    served: ["Served"],
+    // "Cooking/Served" are deprecated workflow states and are treated as Pending.
+    pending: ["Pending", "pending", "Cooking", "Served"],
+    cooking: ["Pending", "pending", "Cooking", "Served"],
+    served: ["Pending", "pending", "Cooking", "Served"],
     waitingforpayment: ["WaitingForPayment"],
     paid: ["Paid"],
     completed: ["Completed", "completed"],
