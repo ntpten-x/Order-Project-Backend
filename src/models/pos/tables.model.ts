@@ -8,7 +8,8 @@ export class TablesModels {
         limit: number = 50,
         q?: string,
         branchId?: string,
-        sortCreated: CreatedSort = "old"
+        sortCreated: CreatedSort = "old",
+        filters?: { status?: "active" | "inactive"; table_state?: "Available" | "Unavailable" }
     ): Promise<{ data: any[]; total: number; page: number; last_page: number }> {
         const skip = (page - 1) * limit;
         const tablesRepository = getRepository(Tables);
@@ -30,6 +31,41 @@ export class TablesModels {
 
         if (branchId) {
             query.andWhere("tables.branch_id = :branchId", { branchId });
+        }
+
+        if (filters?.status === "active") {
+            query.andWhere("tables.is_active = true");
+        } else if (filters?.status === "inactive") {
+            query.andWhere("tables.is_active = false");
+        }
+
+        if (filters?.table_state) {
+            // Priority: if filtering by Available/Unavailable, we need to consider the active_order as well
+            // However, the model logic handles 'status' mapping in the .map() phase.
+            // For true DB filtering on 'Available', we need to check if an active order exists.
+            if (filters.table_state === "Available") {
+                query.andWhere("tables.status = 'Available'");
+                // Also ensure no active order exists (legacy logic check)
+                query.andWhere(qb => {
+                    const subQuery = qb.subQuery()
+                        .select("so.id")
+                        .from("SalesOrder", "so")
+                        .where("so.table_id = tables.id")
+                        .andWhere("so.status NOT IN (:...soStatuses)", { soStatuses: ["Paid", "Cancelled", "cancelled", "Completed", "completed"] })
+                        .getQuery();
+                    return "NOT EXISTS " + subQuery;
+                });
+            } else if (filters.table_state === "Unavailable") {
+                query.andWhere(qb => {
+                    const subQuery = qb.subQuery()
+                        .select("so.id")
+                        .from("SalesOrder", "so")
+                        .where("so.table_id = tables.id")
+                        .andWhere("so.status NOT IN (:...soStatuses)", { soStatuses: ["Paid", "Cancelled", "cancelled", "Completed", "completed"] })
+                        .getQuery();
+                    return "(tables.status = 'Unavailable' OR EXISTS " + subQuery + ")";
+                });
+            }
         }
 
         const [rows, total] = await query.skip(skip).take(limit).getManyAndCount();

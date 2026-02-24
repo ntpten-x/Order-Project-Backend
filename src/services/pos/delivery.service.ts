@@ -14,10 +14,11 @@ export class DeliveryService {
         limit: number,
         q?: string,
         branchId?: string,
-        sortCreated: CreatedSort = "old"
+        sortCreated: CreatedSort = "old",
+        status?: "active" | "inactive"
     ): Promise<{ data: Delivery[], total: number, page: number, last_page: number }> {
         try {
-            return this.deliveryModel.findAll(page, limit, q, branchId, sortCreated)
+            return this.deliveryModel.findAll(page, limit, q, branchId, sortCreated, status)
         } catch (error) {
             throw error
         }

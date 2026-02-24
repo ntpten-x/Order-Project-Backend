@@ -10,7 +10,7 @@ import { setPrivateSwrHeaders } from "../../utils/cacheHeaders";
 import { parseCreatedSort } from "../../utils/sortCreated";
 
 export class TablesController {
-    constructor(private tablesService: TablesService) {}
+    constructor(private tablesService: TablesService) { }
 
     private sanitizeIncomingPayload(body: Record<string, unknown>): void {
         delete body.qr_code_token;
@@ -27,10 +27,14 @@ export class TablesController {
         const rawLimit = parseInt(req.query.limit as string);
         const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
         const q = (req.query.q as string | undefined) || undefined;
+        const statusRaw = (req.query.status as string | undefined) || undefined;
+        const status = statusRaw === "active" || statusRaw === "inactive" ? statusRaw : undefined;
+        const tableStateRaw = (req.query.table_state as string | undefined) || undefined;
+        const table_state = tableStateRaw === "Available" || tableStateRaw === "Unavailable" ? tableStateRaw : undefined;
         const sortCreated = parseCreatedSort(req.query.sort_created);
         const branchId = getBranchId(req as any);
 
-        const result = await this.tablesService.findAll(page, limit, q, branchId, sortCreated);
+        const result = await this.tablesService.findAll(page, limit, q, branchId, sortCreated, { status, table_state });
 
         if (result.data && result.total !== undefined) {
             setPrivateSwrHeaders(res);
@@ -71,10 +75,14 @@ export class TablesController {
         const rawLimit = parseInt(req.query.limit as string);
         const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
         const q = (req.query.q as string | undefined) || undefined;
+        const statusRaw = (req.query.status as string | undefined) || undefined;
+        const status = statusRaw === "active" || statusRaw === "inactive" ? statusRaw : undefined;
+        const tableStateRaw = (req.query.table_state as string | undefined) || undefined;
+        const table_state = tableStateRaw === "Available" || tableStateRaw === "Unavailable" ? tableStateRaw : undefined;
         const sortCreated = parseCreatedSort(req.query.sort_created);
         const branchId = getBranchId(req as any);
 
-        const result = await this.tablesService.findAllWithQrCodes(page, limit, q, branchId, sortCreated);
+        const result = await this.tablesService.findAllWithQrCodes(page, limit, q, branchId, sortCreated, { status, table_state });
         setPrivateSwrHeaders(res);
         return ApiResponses.paginated(res, result.data, {
             page: result.page || page,

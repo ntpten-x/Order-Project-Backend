@@ -16,16 +16,17 @@ export type TableQrCodeListItem = Tables & {
 export class TablesService {
     private socketService = SocketService.getInstance();
 
-    constructor(private tablesModel: TablesModels) {}
+    constructor(private tablesModel: TablesModels) { }
 
     async findAll(
         page: number,
         limit: number,
         q?: string,
         branchId?: string,
-        sortCreated: CreatedSort = "old"
+        sortCreated: CreatedSort = "old",
+        filters?: { status?: "active" | "inactive"; table_state?: "Available" | "Unavailable" }
     ): Promise<{ data: Tables[]; total: number; page: number; last_page: number }> {
-        return this.tablesModel.findAll(page, limit, q, branchId, sortCreated);
+        return this.tablesModel.findAll(page, limit, q, branchId, sortCreated, filters);
     }
 
     async findOne(id: string, branchId?: string): Promise<Tables | null> {
@@ -94,9 +95,10 @@ export class TablesService {
         limit: number,
         q?: string,
         branchId?: string,
-        sortCreated: CreatedSort = "old"
+        sortCreated: CreatedSort = "old",
+        filters?: { status?: "active" | "inactive"; table_state?: "Available" | "Unavailable" }
     ): Promise<{ data: TableQrCodeListItem[]; total: number; page: number; last_page: number }> {
-        const result = await this.tablesModel.findAll(page, limit, q, branchId, sortCreated);
+        const result = await this.tablesModel.findAll(page, limit, q, branchId, sortCreated, filters);
         const data: TableQrCodeListItem[] = [];
 
         for (const rawTable of result.data) {

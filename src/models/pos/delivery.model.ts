@@ -8,7 +8,8 @@ export class DeliveryModels {
         limit: number = 50,
         q?: string,
         branchId?: string,
-        sortCreated: CreatedSort = "old"
+        sortCreated: CreatedSort = "old",
+        status?: "active" | "inactive"
     ): Promise<{ data: Delivery[], total: number, page: number, last_page: number }> {
         try {
             const skip = (page - 1) * limit;
@@ -22,6 +23,12 @@ export class DeliveryModels {
 
             if (q && q.trim()) {
                 query.andWhere("delivery.delivery_name ILIKE :q", { q: `%${q.trim()}%` });
+            }
+
+            if (status === "active") {
+                query.andWhere("delivery.is_active = true");
+            } else if (status === "inactive") {
+                query.andWhere("delivery.is_active = false");
             }
 
             const [data, total] = await query.skip(skip).take(limit).getManyAndCount();
