@@ -20,8 +20,24 @@ export class PaymentAccountController {
         const branchId = getBranchId(req as any);
         if (!branchId) throw AppError.forbidden("Access denied: No branch assigned to user");
 
-        const accounts = await this.service.getAccounts(branchId);
-        return ApiResponses.ok(res, accounts);
+        const page = Math.max(parseInt(req.query.page as string) || 1, 1);
+        const rawLimit = parseInt(req.query.limit as string);
+        const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
+        const q = (req.query.q as string | undefined) || undefined;
+        const statusRaw = (req.query.status as string | undefined) || undefined;
+        const status = statusRaw === "active" || statusRaw === "inactive" ? statusRaw : undefined;
+
+        const result = await this.service.findAll(branchId, page, limit, q, { status });
+
+        if (result.data && result.total !== undefined) {
+            return ApiResponses.paginated(res, result.data, {
+                page: result.page || page,
+                limit,
+                total: result.total,
+            });
+        }
+
+        return ApiResponses.ok(res, result);
     });
 
     createAccount = catchAsync(async (req: Request, res: Response) => {
@@ -53,7 +69,7 @@ export class PaymentAccountController {
         if (!branchId) throw AppError.forbidden("Access denied: No branch assigned to user");
 
         const { id } = req.params;
-        const oldAccount = (await this.service.getAccounts(branchId)).find((a: any) => a.id === id);
+        const oldAccount = await this.service.findOne(branchId, id);
         const account = await this.service.updateAccount(branchId, id, req.body);
 
         const userInfo = getUserInfoFromRequest(req as any);
@@ -65,7 +81,7 @@ export class PaymentAccountController {
             entity_type: "ShopPaymentAccount",
             entity_id: id,
             branch_id: branchId,
-            old_values: oldAccount,
+            old_values: oldAccount || undefined,
             new_values: req.body,
             path: req.originalUrl,
             method: req.method,
@@ -105,7 +121,7 @@ export class PaymentAccountController {
         if (!branchId) throw AppError.forbidden("Access denied: No branch assigned to user");
 
         const { id } = req.params;
-        const oldAccount = (await this.service.getAccounts(branchId)).find((a: any) => a.id === id);
+        const oldAccount = await this.service.findOne(branchId, id);
         await this.service.deleteAccount(branchId, id);
 
         const userInfo = getUserInfoFromRequest(req as any);
@@ -117,7 +133,7 @@ export class PaymentAccountController {
             entity_type: "ShopPaymentAccount",
             entity_id: id,
             branch_id: branchId,
-            old_values: oldAccount,
+            old_values: oldAccount || undefined,
             path: req.originalUrl,
             method: req.method,
             description: `Delete payment account ${id}`,
