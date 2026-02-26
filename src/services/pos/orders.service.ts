@@ -33,6 +33,8 @@ export class OrdersService {
     private socketService = SocketService.getInstance();
     private shiftsService = new ShiftsService();
     private queueService = new OrderQueueService();
+    private readonly LIST_CACHE_PREFIX = "orders:list";
+    private readonly LIST_CACHE_TTL = Number(process.env.ORDERS_LIST_CACHE_TTL_MS || 5000);
     private readonly SUMMARY_CACHE_PREFIX = "orders:summary";
     private readonly SUMMARY_CACHE_TTL = Number(process.env.ORDERS_SUMMARY_CACHE_TTL_MS || 10000);
     private readonly STATS_CACHE_PREFIX = "orders:stats";
@@ -57,9 +59,18 @@ export class OrdersService {
         });
     }
 
+    private getAccessCacheScopeParts(access?: AccessContext): Array<string> {
+        const scope = access?.scope ?? "all";
+        if (scope === "own" && access?.actorUserId) {
+            return ["scope", "own", "user", access.actorUserId];
+        }
+        return ["scope", scope];
+    }
+
     private invalidateReadCaches(branchId?: string): void {
         const scope = this.getCacheScopeParts(branchId);
         const patterns = [
+            cacheKey(this.LIST_CACHE_PREFIX, ...scope),
             cacheKey(this.SUMMARY_CACHE_PREFIX, ...scope),
             cacheKey(this.STATS_CACHE_PREFIX, ...scope),
             cacheKey("dashboard:sales", ...scope),
@@ -234,11 +245,36 @@ export class OrdersService {
         access?: AccessContext,
         sortCreated: CreatedSort = "old"
     ): Promise<{ data: SalesOrder[], total: number, page: number, limit: number }> {
-        try {
-            return this.ordersModel.findAll(page, limit, statuses, type, query, branchId, access, sortCreated)
-        } catch (error) {
-            throw error
+        const statusKey = statuses?.length ? statuses.join(",") : "all";
+        const typeKey = type || "all";
+        const scope = this.getCacheScopeParts(branchId);
+        const accessScope = this.getAccessCacheScopeParts(access);
+        const key = cacheKey(
+            this.LIST_CACHE_PREFIX,
+            ...scope,
+            ...accessScope,
+            "list",
+            page,
+            limit,
+            statusKey,
+            typeKey,
+            sortCreated
+        );
+
+        if (query?.trim() || page > 1) {
+            return this.ordersModel.findAll(page, limit, statuses, type, query, branchId, access, sortCreated);
         }
+
+        return withCache(
+            key,
+            () => this.ordersModel.findAll(page, limit, statuses, type, query, branchId, access, sortCreated),
+            this.LIST_CACHE_TTL,
+            queryCache as any,
+            {
+                onHit: (source) => this.observeCache("orders.list.active", "hit", source),
+                onMiss: () => this.observeCache("orders.list.active", "miss"),
+            }
+        );
     }
 
     async findAllSummary(
@@ -255,7 +291,18 @@ export class OrdersService {
         const statusKey = statuses?.length ? statuses.join(",") : "all";
         const typeKey = type || "all";
         const scope = this.getCacheScopeParts(branchId);
-        const key = cacheKey(this.SUMMARY_CACHE_PREFIX, ...scope, "list", page, limit, statusKey, typeKey, sortCreated);
+        const accessScope = this.getAccessCacheScopeParts(access);
+        const key = cacheKey(
+            this.SUMMARY_CACHE_PREFIX,
+            ...scope,
+            ...accessScope,
+            "list",
+            page,
+            limit,
+            statusKey,
+            typeKey,
+            sortCreated
+        );
 
         if (options?.bypassCache || query?.trim() || page > 1) {
             return this.ordersModel.findAllSummary(page, limit, statuses, type, query, branchId, access, sortCreated);
@@ -286,7 +333,8 @@ export class OrdersService {
         }
 
         const scope = this.getCacheScopeParts(branchId);
-        const key = cacheKey(this.STATS_CACHE_PREFIX, ...scope, "active");
+        const accessScope = this.getAccessCacheScopeParts(access);
+        const key = cacheKey(this.STATS_CACHE_PREFIX, ...scope, ...accessScope, "active");
 
         return withCache(
             key,

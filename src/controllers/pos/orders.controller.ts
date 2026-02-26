@@ -12,6 +12,7 @@ import { parseCreatedSort } from "../../utils/sortCreated";
 
 export class OrdersController {
     constructor(private ordersService: OrdersService) { }
+    private readonly bypassReadCache = process.env.ORDERS_READ_BYPASS_CACHE === "true";
     private setNoStoreHeaders(res: Response): void {
         res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
         res.setHeader("Pragma", "no-cache");
@@ -57,7 +58,7 @@ export class OrdersController {
             query,
             branchId,
             { scope: req.permission?.scope, actorUserId: req.user?.id },
-            { bypassCache: true },
+            { bypassCache: this.bypassReadCache },
             sortCreated
         );
         this.setNoStoreHeaders(res);
@@ -73,7 +74,7 @@ export class OrdersController {
         const stats = await this.ordersService.getStats(
             branchId,
             { scope: req.permission?.scope, actorUserId: req.user?.id },
-            { bypassCache: true }
+            { bypassCache: this.bypassReadCache }
         );
         this.setNoStoreHeaders(res);
         return ApiResponses.ok(res, stats);

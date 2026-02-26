@@ -95,13 +95,12 @@ export class SalesOrderItemService {
             await recalculateOrderTotal(createdItem.order_id);
             const syncedOrder = await this.syncOrderStatusFromItems(createdItem.order_id, branchId);
             const effectiveBranchId = syncedOrder?.branch_id || branchId;
-            if (effectiveBranchId) {
-                this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.update, { id: createdItem.order_id } as any);
-            }
 
             const completeItem = await this.salesOrderItemModel.findOne(createdItem.id, branchId)
             if (completeItem) {
                 if (effectiveBranchId) {
+                    // salesOrderItem events are already handled as order-affecting events on the frontend.
+                    // Avoid emitting a duplicate orders:update for every item mutation.
                     this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.salesOrderItem.create, completeItem)
                 }
                 return completeItem
@@ -128,9 +127,6 @@ export class SalesOrderItemService {
             const syncedOrder = await this.syncOrderStatusFromItems(itemToUpdate.order_id, branchId);
             const effectiveBranchId = syncedOrder?.branch_id || branchId;
             if (effectiveBranchId) {
-                this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.update, { id: itemToUpdate.order_id } as any);
-            }
-            if (effectiveBranchId) {
                 this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.salesOrderItem.update, updatedItem)
             }
             return updatedItem
@@ -148,7 +144,6 @@ export class SalesOrderItemService {
                 const syncedOrder = await this.syncOrderStatusFromItems(item.order_id, branchId);
                 const effectiveBranchId = syncedOrder?.branch_id || branchId;
                 if (effectiveBranchId) {
-                    this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.update, { id: item.order_id } as any);
                     this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.salesOrderItem.delete, { id })
                 }
             } else if (branchId) {

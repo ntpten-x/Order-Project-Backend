@@ -87,6 +87,9 @@ function killProcessTree(child) {
 async function run() {
   const port = Number(process.env.GO_LIVE_PORT || (await getFreePort()));
   const baseUrl = `http://127.0.0.1:${port}`;
+  const k6Script = process.env.GO_LIVE_K6_SCRIPT || "load-tests/k6-go-live-smoke.js";
+  const k6SummaryExport = process.env.GO_LIVE_K6_SUMMARY || "";
+  const startupTimeoutMs = Number(process.env.GO_LIVE_STARTUP_TIMEOUT_MS || 180000);
   const noProxy = "127.0.0.1,localhost";
 
   const backendEnv = {
@@ -127,21 +130,20 @@ async function run() {
 
   try {
     console.log("[phase4] waiting for /health");
-    await waitForHealth(baseUrl, 60000);
-    console.log("[phase4] health ready, starting k6");
+    await waitForHealth(baseUrl, startupTimeoutMs);
+    console.log(`[phase4] health ready, starting k6 (${k6Script})`);
     const k6Code = await new Promise((resolve, reject) => {
-      const k6 =
-        process.platform === "win32"
-          ? spawn("cmd.exe", ["/d", "/s", "/c", "k6 run load-tests/k6-go-live-smoke.js"], {
-              env: k6Env,
-              stdio: "inherit",
-              shell: false,
-            })
-          : spawn("k6", ["run", "load-tests/k6-go-live-smoke.js"], {
-              env: k6Env,
-              stdio: "inherit",
-              shell: false,
-            });
+      const args = ["run"];
+      if (k6SummaryExport) {
+        args.push("--summary-export", k6SummaryExport);
+      }
+      args.push(k6Script);
+
+      const k6 = spawn("k6", args, {
+        env: k6Env,
+        stdio: "inherit",
+        shell: false,
+      });
 
       k6.on("error", reject);
       k6.on("exit", (code) => resolve(code ?? 1));

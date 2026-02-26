@@ -41,6 +41,7 @@ import { ensureRbacDefaults } from "./rbac-defaults"
 import * as dotenv from "dotenv"
 dotenv.config()
 const isProd = process.env.NODE_ENV === "production"
+const rawTypeormLogging = (process.env.TYPEORM_LOGGING || "").trim().toLowerCase()
 const requestedSynchronize = process.env.TYPEORM_SYNC
     ? process.env.TYPEORM_SYNC === "true"
     : !isProd
@@ -72,6 +73,38 @@ const migrationsDir =
         ? path.join(__dirname, "../migrations/*.js")
         : path.join(__dirname, "../migrations/*.{ts,js}")
 
+function resolveTypeormLogging():
+    | boolean
+    | Array<"query" | "error" | "schema" | "warn" | "info" | "log" | "migration"> {
+    if (!rawTypeormLogging) {
+        // Keep production on error-only and avoid noisy query logging elsewhere by default.
+        return isProd ? ["error"] : false
+    }
+
+    if (["1", "true", "all", "full"].includes(rawTypeormLogging)) {
+        return true
+    }
+
+    if (["0", "false", "off", "none"].includes(rawTypeormLogging)) {
+        return false
+    }
+
+    const explicitLevels = rawTypeormLogging
+        .split(",")
+        .map((token) => token.trim())
+        .filter((token): token is "query" | "error" | "schema" | "warn" | "info" | "log" | "migration" =>
+            ["query", "error", "schema", "warn", "info", "log", "migration"].includes(token)
+        )
+
+    if (explicitLevels.length > 0) {
+        return explicitLevels
+    }
+
+    return isProd ? ["error"] : false
+}
+
+const typeormLogging = resolveTypeormLogging()
+
 export const AppDataSource = new DataSource({
     type: "postgres",
     host: process.env.DATABASE_HOST,
@@ -81,7 +114,7 @@ export const AppDataSource = new DataSource({
     database: process.env.DATABASE_NAME,
     entities: [Users, Roles, Branch, IngredientsUnit, Ingredients, PurchaseOrder, StockOrdersItem, StockOrdersDetail, SalesOrder, SalesOrderItem, SalesOrderDetail, Category, Products, ProductsUnit, Tables, Delivery, Discounts, Payments, PaymentMethod, Shifts, ShopProfile, ShopPaymentAccount, SalesSummaryView, TopSellingItemsView, OrderQueue, AuditLog, PermissionResource, PermissionAction, RolePermission, UserPermission, PermissionAudit, PermissionOverrideApproval],
     synchronize: synchronize as boolean,
-    logging: isProd ? ["error"] : true,
+    logging: typeormLogging,
     ssl: sslOptions,
     migrations: [migrationsDir],
     poolSize,

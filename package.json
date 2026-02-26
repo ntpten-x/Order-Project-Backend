@@ -32,6 +32,7 @@
     "ensure:e2e-permission-baseline": "node scripts/ensure-e2e-permission-baseline.js",
     "ensure:e2e-domain-baseline": "node scripts/ensure-e2e-domain-baseline.js",
     "test:load:smoke": "k6 run load-tests/k6-go-live-smoke.js",
+    "test:load:pos-read": "k6 run load-tests/k6-pos-read-heavy.js",
     "test:load:smoke:deterministic": "node scripts/go-live-phase4.js",
     "soak:staging": "bash scripts/run-soak-staging.sh",
     "soak:review": "node scripts/review-soak-artifacts.mjs",
