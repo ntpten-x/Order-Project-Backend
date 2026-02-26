@@ -51,6 +51,7 @@ import { startupWarmupService } from "./src/services/startupWarmup.service";
 const app = express();
 const httpServer = createServer(app); // Wrap express with HTTP server
 const port = process.env.PORT || 4000;
+console.log(`[BOOT] Backend target port: ${port}`);
 const rawBodyLimitMb = Number(process.env.REQUEST_BODY_LIMIT_MB || 20);
 const bodyLimitMb = Number.isFinite(rawBodyLimitMb) && rawBodyLimitMb > 0 ? rawBodyLimitMb : 20;
 const enablePerfLogs = process.env.ENABLE_PERF_LOG === "true";
@@ -423,8 +424,16 @@ app.use(errorTracking);
 app.use(globalErrorHandler);
 
 connectDatabase().then(() => {
+    httpServer.on("error", (error: any) => {
+        if (error?.code === "EADDRINUSE") {
+            console.error(`[BOOT] Port ${port} is already in use.`);
+            return;
+        }
+        console.error("[BOOT] Server failed to start:", error);
+    });
+
     httpServer.listen(port, () => { // Listen on httpServer
-        console.log(`Server is running on http://localhost:${port}`);
+        console.log(`[BOOT] Server is running on http://localhost:${port}`);
         startupWarmupService.schedule();
     });
 });

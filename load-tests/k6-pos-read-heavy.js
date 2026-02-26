@@ -17,6 +17,7 @@ const resolvedThink = Number.isFinite(THINK_TIME_SECONDS) && THINK_TIME_SECONDS 
   : 0.5;
 
 export const options = {
+  summaryTrendStats: ["avg", "min", "med", "max", "p(90)", "p(95)", "p(99)"],
   scenarios: {
     pos_read_heavy: {
       executor: "ramping-vus",

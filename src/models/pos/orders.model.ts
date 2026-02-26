@@ -4,7 +4,7 @@ import { SalesOrderDetail } from "../../entity/pos/SalesOrderDetail";
 import { Products } from "../../entity/pos/Products";
 import { OrderType } from "../../entity/pos/OrderEnums";
 import { EntityManager, In, SelectQueryBuilder } from "typeorm";
-import { getDbManager, getRepository, runInTransaction } from "../../database/dbContext";
+import { getRepository, runInTransaction } from "../../database/dbContext";
 import { executeProfiledQuery } from "../../utils/queryProfiler";
 import { PermissionScope } from "../../middleware/permission.middleware";
 import { CreatedSort, createdSortToOrder } from "../../utils/sortCreated";
@@ -221,6 +221,8 @@ export class OrdersModels {
         try {
             const whereClauses: string[] = [];
             const params: any[] = [];
+            const sortOrder = createdSortToOrder(sortCreated);
+            const trimmedQuery = query?.trim();
 
             if (statuses && statuses.length > 0) {
                 params.push(expandStatusVariants(statuses));
@@ -232,14 +234,24 @@ export class OrdersModels {
                 whereClauses.push(`o.order_type::text = ANY($${params.length})`);
             }
 
-            if (query) {
-                params.push(`${query}%`);
+            if (trimmedQuery) {
+                params.push(`${trimmedQuery}%`);
                 const qIndex = params.length;
                 whereClauses.push(`(
                     o.order_no ILIKE $${qIndex}
                     OR o.delivery_code ILIKE $${qIndex}
-                    OR t.table_name ILIKE $${qIndex}
-                    OR d.delivery_name ILIKE $${qIndex}
+                    OR EXISTS (
+                        SELECT 1
+                        FROM tables t
+                        WHERE t.id = o.table_id
+                          AND t.table_name ILIKE $${qIndex}
+                    )
+                    OR EXISTS (
+                        SELECT 1
+                        FROM delivery d
+                        WHERE d.id = o.delivery_id
+                          AND d.delivery_name ILIKE $${qIndex}
+                    )
                 )`);
             }
 
@@ -260,8 +272,6 @@ export class OrdersModels {
             const countQuery = `
                 SELECT COUNT(*)::int AS total
                 FROM sales_orders o
-                LEFT JOIN tables t ON t.id = o.table_id
-                LEFT JOIN delivery d ON d.id = o.delivery_id
                 ${whereSql}
             `;
             const countResult = await executeProfiledQuery<{ total: number }>(
@@ -286,14 +296,10 @@ export class OrdersModels {
                         o.total_amount,
                         o.delivery_code,
                         o.table_id,
-                        o.delivery_id,
-                        t.table_name AS table_name,
-                        d.delivery_name AS delivery_name
+                        o.delivery_id
                     FROM sales_orders o
-                    LEFT JOIN tables t ON t.id = o.table_id
-                    LEFT JOIN delivery d ON d.id = o.delivery_id
                     ${whereSql}
-                    ORDER BY o.create_date ${createdSortToOrder(sortCreated)}
+                    ORDER BY o.create_date ${sortOrder}
                     LIMIT $${limitIndex} OFFSET $${offsetIndex}
                 ),
                 item_agg AS (
@@ -302,7 +308,7 @@ export class OrdersModels {
                         SUM(i.quantity)::int AS items_count
                     FROM sales_order_item i
                     INNER JOIN base_orders bo ON bo.id = i.order_id
-                    WHERE i.status::text NOT IN ('Cancelled', 'cancelled')
+                    WHERE i.status NOT IN ('Cancelled', 'cancelled')
                     GROUP BY order_id
                 )
                 SELECT
@@ -315,12 +321,14 @@ export class OrdersModels {
                     bo.delivery_code,
                     bo.table_id,
                     bo.delivery_id,
-                    bo.table_name,
-                    bo.delivery_name,
+                    t.table_name,
+                    d.delivery_name,
                     COALESCE(ia.items_count, 0) AS items_count
                 FROM base_orders bo
+                LEFT JOIN tables t ON t.id = bo.table_id
+                LEFT JOIN delivery d ON d.id = bo.delivery_id
                 LEFT JOIN item_agg ia ON ia.order_id = bo.id
-                ORDER BY bo.create_date ${createdSortToOrder(sortCreated)}
+                ORDER BY bo.create_date ${sortOrder}
             `;
 
             const rows = await executeProfiledQuery<any>(
@@ -357,40 +365,45 @@ export class OrdersModels {
     async getStats(statuses: string[], branchId?: string, access?: AccessContext): Promise<{ dineIn: number, takeaway: number, delivery: number, total: number }> {
         try {
             const expandedStatuses = expandStatusVariants(statuses);
-            const stats = await getRepository(SalesOrder)
-                .createQueryBuilder("order")
-                .select("order.order_type", "type")
-                .addSelect("COUNT(order.id)", "count")
-                .where("order.status IN (:...statuses)", { statuses: expandedStatuses });
+            const whereClauses: string[] = ["o.status::text = ANY($1)"];
+            const params: any[] = [expandedStatuses];
 
             if (branchId) {
-                stats.andWhere("order.branch_id = :branchId", { branchId });
+                params.push(branchId);
+                whereClauses.push(`o.branch_id = $${params.length}`);
             }
             if (access?.scope === "none") {
-                stats.andWhere("1=0");
+                whereClauses.push("1=0");
             }
             if (access?.scope === "own" && access.actorUserId) {
-                stats.andWhere("order.created_by_id = :actorUserId", { actorUserId: access.actorUserId });
+                params.push(access.actorUserId);
+                whereClauses.push(`o.created_by_id = $${params.length}`);
             }
 
-            const resultStats = await stats.groupBy("order.order_type").getRawMany();
+            const sql = `
+                SELECT
+                    COUNT(*) FILTER (WHERE o.order_type = 'DineIn')::int AS "dineIn",
+                    COUNT(*) FILTER (WHERE o.order_type = 'TakeAway')::int AS "takeaway",
+                    COUNT(*) FILTER (WHERE o.order_type = 'Delivery')::int AS "delivery",
+                    COUNT(*)::int AS "total"
+                FROM sales_orders o
+                WHERE ${whereClauses.join(" AND ")}
+            `;
 
-            const result = {
-                dineIn: 0,
-                takeaway: 0,
-                delivery: 0,
-                total: 0
+            const result = await executeProfiledQuery<{
+                dineIn: number;
+                takeaway: number;
+                delivery: number;
+                total: number;
+            }>("orders.stats.active", sql, params);
+
+            const row = result?.[0];
+            return {
+                dineIn: Number(row?.dineIn ?? 0),
+                takeaway: Number(row?.takeaway ?? 0),
+                delivery: Number(row?.delivery ?? 0),
+                total: Number(row?.total ?? 0),
             };
-
-            resultStats.forEach(stat => {
-                const count = parseInt(stat.count);
-                if (stat.type === 'DineIn') result.dineIn = count;
-                else if (stat.type === 'TakeAway') result.takeaway = count;
-                else if (stat.type === 'Delivery') result.delivery = count;
-                result.total += count;
-            });
-
-            return result;
         } catch (error) {
             throw error;
         }
