@@ -130,7 +130,7 @@ export class OrdersController {
         } else {
             order = await this.ordersService.create(req.body, branchId)
         }
-        
+
         // Audit log
         await auditLogger.log({
             action_type: AuditActionType.ORDER_CREATE,
@@ -146,7 +146,7 @@ export class OrdersController {
             path: req.path,
             method: req.method,
         });
-        
+
         return ApiResponses.created(res, order);
     })
 
@@ -160,7 +160,7 @@ export class OrdersController {
 
         const oldOrder = await this.ordersService.findOne(req.params.id, branchId);
         const order = await this.ordersService.update(req.params.id, req.body, branchId)
-        
+
         // Audit log
         await auditLogger.log({
             action_type: AuditActionType.ORDER_UPDATE,
@@ -196,7 +196,7 @@ export class OrdersController {
                 method: req.method,
             });
         }
-        
+
         return ApiResponses.ok(res, order);
     })
 
@@ -239,7 +239,7 @@ export class OrdersController {
         const user = (req as any).user;
         const branchId = getBranchId(req as any);
         const order = await this.ordersService.addItem(req.params.id, req.body, branchId);
-        
+
         // Audit log
         await auditLogger.log({
             action_type: AuditActionType.ITEM_ADD,
@@ -255,7 +255,7 @@ export class OrdersController {
             path: req.path,
             method: req.method,
         });
-        
+
         return ApiResponses.created(res, order);
     })
 

@@ -14,6 +14,15 @@ type AccessContext = {
     actorUserId?: string;
 };
 
+export interface ChannelStats {
+    dineIn: number;
+    takeaway: number;
+    takeaway_waiting_payment: number;
+    delivery: number;
+    delivery_waiting_payment: number;
+    total: number;
+}
+
 const ORDER_STATUS_VARIANTS: Record<string, string[]> = {
     // "Cooking/Served" are deprecated workflow states and are treated as Pending.
     pending: ["Pending", "pending", "Cooking", "Served"],
@@ -46,6 +55,8 @@ function expandOrderTypeVariants(orderType: string): string[] {
 
 export class OrdersModels {
     private sanitizeCreator(order: SalesOrder | null): SalesOrder | null {
+        // ... (this part is fine but I need to match the start of the file)
+
         if (order?.created_by && typeof order.created_by === "object") {
             delete (order.created_by as any).password;
         }
@@ -299,7 +310,7 @@ export class OrdersModels {
                         o.delivery_id
                     FROM sales_orders o
                     ${whereSql}
-                    ORDER BY o.create_date ${sortOrder}
+                    ORDER BY o.create_date ${sortOrder}, o.order_no ${sortOrder}, o.id ${sortOrder}
                     LIMIT $${limitIndex} OFFSET $${offsetIndex}
                 ),
                 item_agg AS (
@@ -328,7 +339,7 @@ export class OrdersModels {
                 LEFT JOIN tables t ON t.id = bo.table_id
                 LEFT JOIN delivery d ON d.id = bo.delivery_id
                 LEFT JOIN item_agg ia ON ia.order_id = bo.id
-                ORDER BY bo.create_date ${sortOrder}
+                ORDER BY bo.create_date ${sortOrder}, bo.order_no ${sortOrder}, bo.id ${sortOrder}
             `;
 
             const rows = await executeProfiledQuery<any>(
@@ -336,6 +347,10 @@ export class OrdersModels {
                 dataQuery,
                 dataParams
             );
+
+            console.error(`[DEBUG] Final SQL Query:`, dataQuery);
+            console.error(`[DEBUG] SQL Result (First 3):`, rows.slice(0, 3).map(r => ({ id: r.id, no: r.order_no, date: r.create_date })));
+
             const data = rows.map((row: any) => ({
                 id: row.id,
                 order_no: row.order_no,
@@ -362,7 +377,7 @@ export class OrdersModels {
         }
     }
 
-    async getStats(statuses: string[], branchId?: string, access?: AccessContext): Promise<{ dineIn: number, takeaway: number, delivery: number, total: number }> {
+    async getStats(statuses: string[], branchId?: string, access?: AccessContext): Promise<ChannelStats> {
         try {
             const expandedStatuses = expandStatusVariants(statuses);
             const whereClauses: string[] = ["o.status::text = ANY($1)"];
@@ -384,7 +399,9 @@ export class OrdersModels {
                 SELECT
                     COUNT(*) FILTER (WHERE o.order_type = 'DineIn')::int AS "dineIn",
                     COUNT(*) FILTER (WHERE o.order_type = 'TakeAway')::int AS "takeaway",
+                    COUNT(*) FILTER (WHERE o.order_type = 'TakeAway' AND LOWER(o.status::text) = 'waitingforpayment')::int AS "takeaway_waiting_payment",
                     COUNT(*) FILTER (WHERE o.order_type = 'Delivery')::int AS "delivery",
+                    COUNT(*) FILTER (WHERE o.order_type = 'Delivery' AND LOWER(o.status::text) = 'waitingforpayment')::int AS "delivery_waiting_payment",
                     COUNT(*)::int AS "total"
                 FROM sales_orders o
                 WHERE ${whereClauses.join(" AND ")}
@@ -393,7 +410,9 @@ export class OrdersModels {
             const result = await executeProfiledQuery<{
                 dineIn: number;
                 takeaway: number;
+                takeaway_waiting_payment: number;
                 delivery: number;
+                delivery_waiting_payment: number;
                 total: number;
             }>("orders.stats.active", sql, params);
 
@@ -401,7 +420,9 @@ export class OrdersModels {
             return {
                 dineIn: Number(row?.dineIn ?? 0),
                 takeaway: Number(row?.takeaway ?? 0),
+                takeaway_waiting_payment: Number(row?.takeaway_waiting_payment ?? 0),
                 delivery: Number(row?.delivery ?? 0),
+                delivery_waiting_payment: Number(row?.delivery_waiting_payment ?? 0),
                 total: Number(row?.total ?? 0),
             };
         } catch (error) {

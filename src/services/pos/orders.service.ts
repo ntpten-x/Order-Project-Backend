@@ -1,4 +1,4 @@
-import { OrdersModels } from "../../models/pos/orders.model";
+import { OrdersModels, ChannelStats } from "../../models/pos/orders.model";
 import { SocketService } from "../socket.service";
 import { withCache, cacheKey, queryCache, invalidateCache } from "../../utils/cache";
 import { SalesOrder } from "../../entity/pos/SalesOrder";
@@ -320,7 +320,7 @@ export class OrdersService {
         );
     }
 
-    async getStats(branchId?: string, access?: AccessContext, options?: { bypassCache?: boolean }): Promise<{ dineIn: number, takeaway: number, delivery: number, total: number }> {
+    async getStats(branchId?: string, access?: AccessContext, options?: { bypassCache?: boolean }): Promise<ChannelStats> {
         const activeStatuses = [
             OrderStatus.Pending,
             OrderStatus.Cooking,
