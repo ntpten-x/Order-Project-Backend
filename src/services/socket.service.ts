@@ -153,6 +153,7 @@ const parseCookies = (cookieHeader: string | undefined): { [key: string]: string
 export class SocketService {
     private static instance: SocketService;
     private io: Server | null = null;
+    private readonly verboseLogs = process.env.SOCKET_VERBOSE_LOG === "true";
     private adapterInitStarted = false;
     private redisAdapterReady = false;
     private totalConnections = 0;
@@ -365,7 +366,9 @@ export class SocketService {
                 await socket.join(userId);
                 if (branchId) {
                     await socket.join(`branch:${branchId}`);
-                    console.log(`User ${user.username} joined branch:${branchId}`);
+                    if (this.verboseLogs) {
+                        console.log(`User ${user.username} joined branch:${branchId}`);
+                    }
                 }
                 if (roleName) {
                     await socket.join(`role:${roleName}`);
@@ -378,7 +381,9 @@ export class SocketService {
             const sockets = await this.io?.in(userId).fetchSockets();
             const count = sockets?.length || 0;
 
-            console.log(`User connected: ${user.username} (${userId}). Total connections: ${count}`);
+            if (this.verboseLogs) {
+                console.log(`User connected: ${user.username} (${userId}). Total connections: ${count}`);
+            }
 
             // If this is the only connection (count is 1 because we just joined), set online
             if (count === 1) {
@@ -388,7 +393,9 @@ export class SocketService {
 
             // Handle reconnection
             socket.on('reconnect', async (attemptNumber) => {
-                console.log(`User reconnected: ${user.username} (${userId}). Attempt: ${attemptNumber}`);
+                if (this.verboseLogs) {
+                    console.log(`User reconnected: ${user.username} (${userId}). Attempt: ${attemptNumber}`);
+                }
                 // Rejoin rooms on reconnect
                 await socket.join(userId);
                 if (branchId) {
@@ -409,7 +416,9 @@ export class SocketService {
                 const sockets = await this.io?.in(userId).fetchSockets();
                 const count = sockets?.length || 0;
 
-                console.log(`User disconnected: ${user.username} (${userId}). Reason: ${reason}. Remaining connections: ${count}`);
+                if (this.verboseLogs) {
+                    console.log(`User disconnected: ${user.username} (${userId}). Reason: ${reason}. Remaining connections: ${count}`);
+                }
 
                 if (count === 0) {
                     await this.updateUserStatus(userId, false);

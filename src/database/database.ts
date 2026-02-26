@@ -37,8 +37,6 @@ import { RolePermission } from "../entity/RolePermission"
 import { UserPermission } from "../entity/UserPermission"
 import { PermissionAudit } from "../entity/PermissionAudit"
 import { PermissionOverrideApproval } from "../entity/PermissionOverrideApproval"
-import { SalesOrderSubscriber } from "../subscribers/SalesOrderSubscriber"
-import { SalesOrderItemSubscriber } from "../subscribers/SalesOrderItemSubscriber"
 import { ensureRbacDefaults } from "./rbac-defaults"
 import * as dotenv from "dotenv"
 dotenv.config()
@@ -82,7 +80,6 @@ export const AppDataSource = new DataSource({
     password: process.env.DATABASE_PASSWORD,
     database: process.env.DATABASE_NAME,
     entities: [Users, Roles, Branch, IngredientsUnit, Ingredients, PurchaseOrder, StockOrdersItem, StockOrdersDetail, SalesOrder, SalesOrderItem, SalesOrderDetail, Category, Products, ProductsUnit, Tables, Delivery, Discounts, Payments, PaymentMethod, Shifts, ShopProfile, ShopPaymentAccount, SalesSummaryView, TopSellingItemsView, OrderQueue, AuditLog, PermissionResource, PermissionAction, RolePermission, UserPermission, PermissionAudit, PermissionOverrideApproval],
-    subscribers: [SalesOrderSubscriber, SalesOrderItemSubscriber],
     synchronize: synchronize as boolean,
     logging: isProd ? ["error"] : true,
     ssl: sslOptions,

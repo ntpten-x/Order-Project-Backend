@@ -3,7 +3,7 @@ import { SalesOrderItem } from "../../entity/pos/SalesOrderItem";
 import { SalesOrderDetail } from "../../entity/pos/SalesOrderDetail";
 import { Products } from "../../entity/pos/Products";
 import { OrderType } from "../../entity/pos/OrderEnums";
-import { EntityManager, In } from "typeorm";
+import { EntityManager, In, SelectQueryBuilder } from "typeorm";
 import { getDbManager, getRepository, runInTransaction } from "../../database/dbContext";
 import { executeProfiledQuery } from "../../utils/queryProfiler";
 import { PermissionScope } from "../../middleware/permission.middleware";
@@ -56,6 +56,44 @@ export class OrdersModels {
         return orders.map((order) => this.sanitizeCreator(order) as SalesOrder);
     }
 
+    private applyFindAllFilters(
+        qb: SelectQueryBuilder<SalesOrder>,
+        statuses?: string[],
+        orderType?: string,
+        searchTerm?: string,
+        branchId?: string,
+        access?: AccessContext
+    ): void {
+        if (branchId) {
+            qb.andWhere("order.branch_id = :branchId", { branchId });
+        }
+
+        if (statuses && statuses.length > 0) {
+            const expandedStatuses = expandStatusVariants(statuses);
+            qb.andWhere("order.status IN (:...statuses)", { statuses: expandedStatuses });
+        }
+
+        if (orderType) {
+            const expandedOrderTypes = expandOrderTypeVariants(orderType);
+            qb.andWhere("order.order_type IN (:...orderTypes)", { orderTypes: expandedOrderTypes });
+        }
+
+        if (searchTerm) {
+            const search = `${searchTerm}%`;
+            qb.andWhere(
+                "(order.order_no ILIKE :search OR order.delivery_code ILIKE :search OR table.table_name ILIKE :search OR delivery.delivery_name ILIKE :search)",
+                { search }
+            );
+        }
+
+        if (access?.scope === "none") {
+            qb.andWhere("1=0");
+        }
+        if (access?.scope === "own" && access.actorUserId) {
+            qb.andWhere("order.created_by_id = :actorUserId", { actorUserId: access.actorUserId });
+        }
+    }
+
     async findAll(
         page: number = 1,
         limit: number = 50,
@@ -69,47 +107,94 @@ export class OrdersModels {
         try {
             const skip = (page - 1) * limit;
             const ordersRepository = getRepository(SalesOrder);
-            const qb = ordersRepository.createQueryBuilder("order")
+            const sortOrder = createdSortToOrder(sortCreated);
+
+            const baseFilterQb = ordersRepository.createQueryBuilder("order")
+                .leftJoin("order.table", "table")
+                .leftJoin("order.delivery", "delivery");
+            this.applyFindAllFilters(baseFilterQb, statuses, orderType, searchTerm, branchId, access);
+
+            const total = await baseFilterQb.clone().getCount();
+
+            if (total === 0) {
+                return {
+                    data: [],
+                    total,
+                    page,
+                    limit
+                };
+            }
+
+            const idRows = await baseFilterQb
+                .clone()
+                .select("order.id", "id")
+                .orderBy("order.create_date", sortOrder)
+                .skip(skip)
+                .take(limit)
+                .getRawMany<{ id: string }>();
+
+            const pagedIds = idRows.map((row) => row.id).filter(Boolean);
+            if (pagedIds.length === 0) {
+                return {
+                    data: [],
+                    total,
+                    page,
+                    limit
+                };
+            }
+
+            const orderById = new Map<string, number>();
+            pagedIds.forEach((id, index) => {
+                orderById.set(id, index);
+            });
+
+            const data = await ordersRepository.createQueryBuilder("order")
                 .leftJoinAndSelect("order.table", "table")
-                .leftJoinAndSelect("order.delivery", "delivery")
-                .leftJoinAndSelect("order.discount", "discount")
-                .leftJoinAndSelect("order.created_by", "created_by")
                 .leftJoinAndSelect("order.items", "items")
                 .leftJoinAndSelect("items.product", "product")
-                .leftJoinAndSelect("product.category", "category")
-                .orderBy("order.create_date", createdSortToOrder(sortCreated))
-                .skip(skip)
-                .take(limit);
+                .select([
+                    "order.id",
+                    "order.order_no",
+                    "order.order_type",
+                    "order.table_id",
+                    "order.delivery_id",
+                    "order.delivery_code",
+                    "order.sub_total",
+                    "order.discount_id",
+                    "order.discount_amount",
+                    "order.vat",
+                    "order.total_amount",
+                    "order.received_amount",
+                    "order.change_amount",
+                    "order.status",
+                    "order.created_by_id",
+                    "order.create_date",
+                    "order.update_date",
+                    "table.id",
+                    "table.table_name",
+                    "items.id",
+                    "items.order_id",
+                    "items.product_id",
+                    "items.quantity",
+                    "items.price",
+                    "items.total_price",
+                    "items.discount_amount",
+                    "items.notes",
+                    "items.status",
+                    "product.id",
+                    "product.display_name",
+                    "product.img_url",
+                    "product.price",
+                ])
+                .where("order.id IN (:...pagedIds)", { pagedIds })
+                .orderBy("order.create_date", sortOrder)
+                .getMany();
 
-            if (branchId) {
-                qb.andWhere("order.branch_id = :branchId", { branchId });
-            }
-
-            if (statuses && statuses.length > 0) {
-                const expandedStatuses = expandStatusVariants(statuses);
-                qb.andWhere("order.status IN (:...statuses)", { statuses: expandedStatuses });
-            }
-
-            if (orderType) {
-                const expandedOrderTypes = expandOrderTypeVariants(orderType);
-                qb.andWhere("order.order_type IN (:...orderTypes)", { orderTypes: expandedOrderTypes });
-            }
-
-            if (searchTerm) {
-                const search = `${searchTerm}%`;
-                qb.andWhere(
-                    "(order.order_no ILIKE :search OR order.delivery_code ILIKE :search OR table.table_name ILIKE :search OR delivery.delivery_name ILIKE :search)",
-                    { search }
-                );
-            }
-            if (access?.scope === "none") {
-                qb.andWhere("1=0");
-            }
-            if (access?.scope === "own" && access.actorUserId) {
-                qb.andWhere("order.created_by_id = :actorUserId", { actorUserId: access.actorUserId });
-            }
-
-            const [data, total] = await qb.getManyAndCount();
+            data.sort((a, b) => {
+                const left = orderById.get(a.id) ?? Number.MAX_SAFE_INTEGER;
+                const right = orderById.get(b.id) ?? Number.MAX_SAFE_INTEGER;
+                return left - right;
+            });
             const sanitizedData = this.sanitizeCreators(data);
 
             return {
@@ -211,24 +296,13 @@ export class OrdersModels {
                     ORDER BY o.create_date ${createdSortToOrder(sortCreated)}
                     LIMIT $${limitIndex} OFFSET $${offsetIndex}
                 ),
-                item_agg_raw AS (
-                    SELECT
-                        i.order_id,
-                        c.display_name AS category_name,
-                        SUM(i.quantity)::int AS qty
-                    FROM sales_order_item i
-                    INNER JOIN base_orders bo ON bo.id = i.order_id
-                    LEFT JOIN products p ON p.id = i.product_id
-                    LEFT JOIN category c ON c.id = p.category_id
-                    WHERE i.status::text NOT IN ('Cancelled', 'cancelled')
-                    GROUP BY i.order_id, c.display_name
-                ),
                 item_agg AS (
                     SELECT
                         order_id,
-                        jsonb_object_agg(category_name, qty) FILTER (WHERE category_name IS NOT NULL) AS items_summary,
-                        SUM(qty)::int AS items_count
-                    FROM item_agg_raw
+                        SUM(i.quantity)::int AS items_count
+                    FROM sales_order_item i
+                    INNER JOIN base_orders bo ON bo.id = i.order_id
+                    WHERE i.status::text NOT IN ('Cancelled', 'cancelled')
                     GROUP BY order_id
                 )
                 SELECT
@@ -243,7 +317,6 @@ export class OrdersModels {
                     bo.delivery_id,
                     bo.table_name,
                     bo.delivery_name,
-                    COALESCE(ia.items_summary, '{}'::jsonb) AS items_summary,
                     COALESCE(ia.items_count, 0) AS items_count
                 FROM base_orders bo
                 LEFT JOIN item_agg ia ON ia.order_id = bo.id
@@ -267,7 +340,6 @@ export class OrdersModels {
                 delivery_id: row.delivery_id,
                 table: row.table_name ? { table_name: row.table_name } : null,
                 delivery: row.delivery_name ? { delivery_name: row.delivery_name } : null,
-                items_summary: row.items_summary ?? {},
                 items_count: Number(row.items_count || 0),
             }));
 
