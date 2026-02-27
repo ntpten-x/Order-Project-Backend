@@ -161,6 +161,7 @@ export class OrdersModels {
 
             const data = await ordersRepository.createQueryBuilder("order")
                 .leftJoinAndSelect("order.table", "table")
+                .leftJoinAndSelect("order.delivery", "delivery")
                 .leftJoinAndSelect("order.items", "items")
                 .leftJoinAndSelect("items.product", "product")
                 .select([
@@ -183,6 +184,9 @@ export class OrdersModels {
                     "order.update_date",
                     "table.id",
                     "table.table_name",
+                    "delivery.id",
+                    "delivery.delivery_name",
+                    "delivery.logo",
                     "items.id",
                     "items.order_id",
                     "items.product_id",
@@ -334,6 +338,7 @@ export class OrdersModels {
                     bo.delivery_id,
                     t.table_name,
                     d.delivery_name,
+                    d.logo,
                     COALESCE(ia.items_count, 0) AS items_count
                 FROM base_orders bo
                 LEFT JOIN tables t ON t.id = bo.table_id
@@ -362,7 +367,7 @@ export class OrdersModels {
                 table_id: row.table_id,
                 delivery_id: row.delivery_id,
                 table: row.table_name ? { table_name: row.table_name } : null,
-                delivery: row.delivery_name ? { delivery_name: row.delivery_name } : null,
+                delivery: row.delivery_name ? { delivery_name: row.delivery_name, logo: row.logo } : null,
                 items_count: Number(row.items_count || 0),
             }));
 
