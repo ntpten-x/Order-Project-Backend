@@ -462,22 +462,3 @@ export const paymentLimiter = rateLimit({
         });
     }
 });
-
-// Very strict limit for password reset
-export const passwordResetLimiter = rateLimit({
-    windowMs: passwordResetWindowMs,
-    max: passwordResetMax,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: "Too many password reset attempts, please try again later",
-    ...(passwordStore ? { store: passwordStore } : {}),
-    handler: (req: Request, res: Response) => {
-        res.status(429).json({
-            success: false,
-            error: {
-                code: "RATE_LIMITED",
-                message: "Too many password reset attempts, please try again later"
-            }
-        });
-    }
-});

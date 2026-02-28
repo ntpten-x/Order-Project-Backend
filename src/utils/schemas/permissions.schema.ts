@@ -75,12 +75,6 @@ export const permissionAuditsQuerySchema = z.object({
     }),
 });
 
-export const permissionApprovalIdParamSchema = z.object({
-    params: z.object({
-        id: z.string().uuid(),
-    }),
-});
-
 export const permissionApprovalsQuerySchema = z.object({
     query: z.object({
         page: z.string().optional(),

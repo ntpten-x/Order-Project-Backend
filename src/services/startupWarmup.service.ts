@@ -30,7 +30,7 @@ function toErrorMessage(error: unknown): string {
     return String(error);
 }
 
-export class StartupWarmupService {
+class StartupWarmupService {
     private readonly dashboardService = new DashboardService();
     private readonly productsModel = new ProductsModels();
     private readonly categoryModel = new CategoryModels();

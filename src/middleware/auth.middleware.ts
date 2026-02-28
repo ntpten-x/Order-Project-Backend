@@ -414,22 +414,3 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
         return ApiResponses.internalError(res, "Authentication system error");
     }
 };
-
-export const authorizeRole = (allowedRoles: string[]) => {
-    return (req: AuthRequest, res: Response, next: NextFunction) => {
-        if (!req.user) {
-            return ApiResponses.unauthorized(res, "Authentication required");
-        }
-
-        const userRole = normalizeRoleName(req.user.roles?.roles_name);
-        const normalizedAllowed = allowedRoles
-            .map((role) => normalizeRoleName(role))
-            .filter((role): role is NonNullable<typeof role> => !!role);
-
-        if (!userRole || !normalizedAllowed.includes(userRole)) {
-            return ApiResponses.forbidden(res, "Access denied: Insufficient permissions");
-        }
-
-        next();
-    };
-};
