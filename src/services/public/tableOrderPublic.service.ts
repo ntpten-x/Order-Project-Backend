@@ -9,6 +9,9 @@ import { AppError } from "../../utils/AppError";
 import { OrdersModels } from "../../models/pos/orders.model";
 import { OrdersService } from "../pos/orders.service";
 import { EntityManager } from "typeorm";
+import { SocketService } from "../socket.service";
+import { buildPublicOrderRealtimePayload } from "../../utils/publicRealtime";
+import { RealtimeEvents } from "../../utils/realtimeEvents";
 
 type PublicOrderItemInput = {
     product_id: string;
@@ -31,6 +34,7 @@ const ACTIVE_VIEW_STATUSES: string[] = [
 
 export class PublicTableOrderService {
     private ordersService = new OrdersService(new OrdersModels());
+    private socketService = SocketService.getInstance();
 
     private getSalesOrderRepository(manager?: EntityManager) {
         return manager ? manager.getRepository(SalesOrder) : getRepository(SalesOrder);
@@ -257,6 +261,23 @@ export class PublicTableOrderService {
         }));
     }
 
+    private withSuppressedPublicRealtime<T>(manager: EntityManager, fn: () => Promise<T>): Promise<T> {
+        const queryRunner = manager.queryRunner;
+        if (!queryRunner) {
+            return fn();
+        }
+
+        const previousData = queryRunner.data ?? {};
+        queryRunner.data = {
+            ...previousData,
+            suppressPublicTableRealtime: true,
+        };
+
+        return fn().finally(() => {
+            queryRunner.data = previousData;
+        });
+    }
+
     async getBootstrapByToken(token: string) {
         const table = await this.resolveTableByToken(token);
 
@@ -341,7 +362,7 @@ export class PublicTableOrderService {
                 isAdmin: false,
             },
             async () => {
-                return runInTransaction(async (manager) => {
+                const result = await runInTransaction(async (manager) => {
                     const lockedTable = await manager
                         .getRepository(Tables)
                         .createQueryBuilder("tables")
@@ -368,50 +389,69 @@ export class PublicTableOrderService {
                     }
 
                     if (latestOrder && this.canAddItemsToOrder(String(latestOrder.status || ""))) {
-                        let updatedOrder: SalesOrder | null = latestOrder;
-                        for (const item of normalizedItems) {
-                            updatedOrder = await this.ordersService.addItem(latestOrder.id, item, branchId);
-                        }
+                        const refreshed = await this.withSuppressedPublicRealtime(manager, async () => {
+                            let updatedOrder: SalesOrder | null = latestOrder;
+                            for (const item of normalizedItems) {
+                                updatedOrder = await this.ordersService.addItem(latestOrder.id, item, branchId);
+                            }
 
-                        const refreshed = await this.ordersService.findOne(latestOrder.id, branchId);
+                            return (await this.ordersService.findOne(latestOrder.id, branchId)) || updatedOrder;
+                        });
 
                         return {
-                            mode: "append",
-                            table: {
-                                id: table.id,
-                                table_name: table.table_name,
+                            response: {
+                                mode: "append",
+                                table: {
+                                    id: table.id,
+                                    table_name: table.table_name,
+                                },
+                                order: this.mapOrder(refreshed),
                             },
-                            order: this.mapOrder(refreshed || updatedOrder),
+                            realtime: {
+                                event: RealtimeEvents.orders.update,
+                                payload: buildPublicOrderRealtimePayload(table.id, "update", latestOrder.id),
+                            },
                         };
                     }
 
-                    const created = await this.ordersService.createFullOrder(
-                        {
-                            order_type: OrderType.DineIn,
-                            table_id: table.id,
-                            status: OrderStatus.Pending,
-                            sub_total: 0,
-                            discount_amount: 0,
-                            vat: 0,
-                            total_amount: 0,
-                            received_amount: 0,
-                            change_amount: 0,
-                            items: normalizedItems,
-                        },
-                        branchId,
+                    const created = await this.withSuppressedPublicRealtime(manager, () =>
+                        this.ordersService.createFullOrder(
+                            {
+                                order_type: OrderType.DineIn,
+                                table_id: table.id,
+                                status: OrderStatus.Pending,
+                                sub_total: 0,
+                                discount_amount: 0,
+                                vat: 0,
+                                total_amount: 0,
+                                received_amount: 0,
+                                change_amount: 0,
+                                items: normalizedItems,
+                            },
+                            branchId,
+                        )
                     );
 
                     const refreshed = await this.ordersService.findOne(created.id, branchId);
 
                     return {
-                        mode: "create",
-                        table: {
-                            id: table.id,
-                            table_name: table.table_name,
+                        response: {
+                            mode: "create",
+                            table: {
+                                id: table.id,
+                                table_name: table.table_name,
+                            },
+                            order: this.mapOrder(refreshed || created),
                         },
-                        order: this.mapOrder(refreshed || created),
+                        realtime: {
+                            event: RealtimeEvents.orders.create,
+                            payload: buildPublicOrderRealtimePayload(table.id, "create", created.id),
+                        },
                     };
                 });
+
+                this.socketService.emitToPublicTable(table.id, result.realtime.event, result.realtime.payload);
+                return result.response;
             },
         );
     }

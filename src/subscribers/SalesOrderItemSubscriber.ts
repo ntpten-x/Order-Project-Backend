@@ -5,8 +5,10 @@ import {
     UpdateEvent,
     RemoveEvent,
 } from "typeorm";
+import { SalesOrder } from "../entity/pos/SalesOrder";
 import { SalesOrderItem } from "../entity/pos/SalesOrderItem";
 import { SocketService } from "../services/socket.service";
+import { buildPublicOrderItemRealtimePayload, buildPublicOrderRealtimePayload } from "../utils/publicRealtime";
 import { RealtimeEvents } from "../utils/realtimeEvents";
 
 @EventSubscriber()
@@ -26,26 +28,35 @@ export class SalesOrderItemSubscriber implements EntitySubscriberInterface<Sales
     // 1. If strict RealtimeEvents are used, we need to know the room (branchId).
     // 2. We can try to load the relation if it's not present.
 
-    private async getBranchId(event: InsertEvent<SalesOrderItem> | UpdateEvent<SalesOrderItem> | RemoveEvent<SalesOrderItem>, item: SalesOrderItem): Promise<string | undefined> {
+    private async getOrderRealtimeContext(
+        event: InsertEvent<SalesOrderItem> | UpdateEvent<SalesOrderItem> | RemoveEvent<SalesOrderItem>,
+        item: SalesOrderItem,
+    ): Promise<{ branchId?: string; tableId?: string }> {
         if (item.order && item.order.branch_id) {
-            return item.order.branch_id;
+            return {
+                branchId: item.order.branch_id,
+                tableId: item.order.table_id ?? undefined,
+            };
         }
 
-        // Fallback: Query the order to get branch_id
+        // Fallback: Query the order to get branch_id/table_id
         if (item.order_id) {
-            const order = await event.manager.getRepository("SalesOrder").findOne({
+            const order = await event.manager.getRepository(SalesOrder).findOne({
                 where: { id: item.order_id },
-                select: ["branch_id"]
-            }) as { branch_id?: string } | null;
+                select: ["branch_id", "table_id"]
+            }) as { branch_id?: string; table_id?: string | null } | null;
 
-            return order?.branch_id;
+            return {
+                branchId: order?.branch_id,
+                tableId: order?.table_id ?? undefined,
+            };
         }
-        return undefined;
+        return {};
     }
 
     async afterInsert(event: InsertEvent<SalesOrderItem>) {
         const item = event.entity;
-        const branchId = await this.getBranchId(event, item);
+        const { branchId, tableId } = await this.getOrderRealtimeContext(event, item);
 
         if (branchId) {
             SocketService.getInstance().emitToBranch(
@@ -60,6 +71,19 @@ export class SalesOrderItemSubscriber implements EntitySubscriberInterface<Sales
                 { id: item.order_id }
             );
         }
+
+        if (tableId && !event.queryRunner.data?.suppressPublicTableRealtime) {
+            SocketService.getInstance().emitToPublicTable(
+                tableId,
+                RealtimeEvents.salesOrderItem.create,
+                buildPublicOrderItemRealtimePayload(tableId, "create", item.order_id, item.id)
+            );
+            SocketService.getInstance().emitToPublicTable(
+                tableId,
+                RealtimeEvents.orders.update,
+                buildPublicOrderRealtimePayload(tableId, "update", item.order_id)
+            );
+        }
     }
 
     async afterUpdate(event: UpdateEvent<SalesOrderItem>) {
@@ -69,7 +93,7 @@ export class SalesOrderItemSubscriber implements EntitySubscriberInterface<Sales
         // Use databaseEntity for order_id if updated entity doesn't have it
         const effectiveItem = { ...databaseItem, ...item } as SalesOrderItem;
 
-        const branchId = await this.getBranchId(event, effectiveItem);
+        const { branchId, tableId } = await this.getOrderRealtimeContext(event, effectiveItem);
 
         if (branchId) {
             SocketService.getInstance().emitToBranch(
@@ -85,13 +109,26 @@ export class SalesOrderItemSubscriber implements EntitySubscriberInterface<Sales
                 { id: effectiveItem.order_id }
             );
         }
+
+        if (tableId && !event.queryRunner.data?.suppressPublicTableRealtime) {
+            SocketService.getInstance().emitToPublicTable(
+                tableId,
+                RealtimeEvents.salesOrderItem.update,
+                buildPublicOrderItemRealtimePayload(tableId, "update", effectiveItem.order_id, effectiveItem.id)
+            );
+            SocketService.getInstance().emitToPublicTable(
+                tableId,
+                RealtimeEvents.orders.update,
+                buildPublicOrderRealtimePayload(tableId, "update", effectiveItem.order_id)
+            );
+        }
     }
 
     async afterRemove(event: RemoveEvent<SalesOrderItem>) {
         const item = event.entity || event.databaseEntity;
         if (!item) return;
 
-        const branchId = await this.getBranchId(event, item);
+        const { branchId, tableId } = await this.getOrderRealtimeContext(event, item);
 
         if (branchId) {
             SocketService.getInstance().emitToBranch(
@@ -103,6 +140,19 @@ export class SalesOrderItemSubscriber implements EntitySubscriberInterface<Sales
                 branchId,
                 RealtimeEvents.orders.update,
                 { id: item.order_id }
+            );
+        }
+
+        if (tableId && !event.queryRunner.data?.suppressPublicTableRealtime) {
+            SocketService.getInstance().emitToPublicTable(
+                tableId,
+                RealtimeEvents.salesOrderItem.delete,
+                buildPublicOrderItemRealtimePayload(tableId, "delete", item.order_id, item.id)
+            );
+            SocketService.getInstance().emitToPublicTable(
+                tableId,
+                RealtimeEvents.orders.update,
+                buildPublicOrderRealtimePayload(tableId, "update", item.order_id)
             );
         }
     }

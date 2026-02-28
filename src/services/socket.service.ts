@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import { createClient } from "redis";
 import { AppDataSource } from "../database/database";
 import { Users } from "../entity/Users";
+import { Tables } from "../entity/pos/Tables";
 import { RealtimeEvents } from "../utils/realtimeEvents";
 import { getRedisClient, getSessionKey, isRedisConfigured, resolveRedisConfig } from "../lib/redisClient";
 import { normalizeRoleName } from "../utils/role";
@@ -35,6 +36,13 @@ type SocketUserSnapshot = {
     branchId: string | null;
     isUse: boolean;
     isActive: boolean;
+};
+
+type PublicTableSocketSnapshot = {
+    id: string;
+    branchId: string;
+    tableName: string;
+    token: string;
 };
 
 export type SocketHealthSnapshot = {
@@ -135,6 +143,33 @@ async function loadSocketUserSnapshot(userId: string): Promise<SocketUserSnapsho
     };
 }
 
+async function loadPublicTableSocketSnapshot(token: string): Promise<PublicTableSocketSnapshot | null> {
+    const table = await AppDataSource.getRepository(Tables)
+        .createQueryBuilder("tables")
+        .select("tables.id", "id")
+        .addSelect("tables.branch_id", "branchId")
+        .addSelect("tables.table_name", "tableName")
+        .where("tables.qr_code_token = :token", { token })
+        .andWhere("tables.is_active = true")
+        .andWhere("(tables.qr_code_expires_at IS NULL OR tables.qr_code_expires_at > NOW())")
+        .getRawOne<{
+            id: string;
+            branchId: string;
+            tableName: string;
+        }>();
+
+    if (!table?.id || !table.branchId) {
+        return null;
+    }
+
+    return {
+        id: table.id,
+        branchId: table.branchId,
+        tableName: table.tableName,
+        token,
+    };
+}
+
 const parseCookies = (cookieHeader: string | undefined): { [key: string]: string } => {
     const list: { [key: string]: string } = {};
     if (!cookieHeader) return list;
@@ -152,6 +187,7 @@ const parseCookies = (cookieHeader: string | undefined): { [key: string]: string
 
 export class SocketService {
     private static instance: SocketService;
+    private static readonly PUBLIC_TABLE_ROOM_PREFIX = "public-table:";
     private io: Server | null = null;
     private readonly verboseLogs = process.env.SOCKET_VERBOSE_LOG === "true";
     private adapterInitStarted = false;
@@ -189,6 +225,19 @@ export class SocketService {
         // Middleware for authentication
         this.io.use(async (socket: Socket, next) => {
             try {
+                const publicTableToken = String(socket.handshake.auth.publicTableToken || "").trim();
+                if (publicTableToken) {
+                    const publicTableSnapshot = await loadPublicTableSocketSnapshot(publicTableToken);
+                    if (!publicTableSnapshot) {
+                        const message = "Authentication error: Invalid public table token";
+                        this.recordAuthError(message);
+                        return next(new Error(message));
+                    }
+
+                    (socket as any).publicTable = publicTableSnapshot;
+                    return next();
+                }
+
                 const cookies = parseCookies(socket.handshake.headers.cookie);
                 const token = cookies['token'] || socket.handshake.auth.token; // Also check auth object
 
@@ -348,6 +397,31 @@ export class SocketService {
         });
 
         this.io.on('connection', async (socket) => {
+            const publicTable = (socket as any).publicTable as PublicTableSocketSnapshot | undefined;
+            if (publicTable?.id) {
+                this.totalConnections += 1;
+
+                try {
+                    await socket.join(this.getPublicTableRoom(publicTable.id));
+                } catch (error) {
+                    this.recordConnectError("Public table socket room join failed", error);
+                }
+
+                socket.on("error", (error) => {
+                    this.recordConnectError("Public table socket runtime error", error);
+                });
+
+                socket.on("disconnect", (reason) => {
+                    this.lastDisconnectReason = String(reason || "unknown");
+                });
+
+                if (this.verboseLogs) {
+                    console.log(`Public table socket connected: ${publicTable.tableName} (${publicTable.id})`);
+                }
+
+                return;
+            }
+
             const user = (socket as any).user as Users;
             if (!user?.id) {
                 this.recordConnectError("Socket user context missing after auth");
@@ -426,6 +500,10 @@ export class SocketService {
                 }
             });
         });
+    }
+
+    private getPublicTableRoom(tableId: string): string {
+        return `${SocketService.PUBLIC_TABLE_ROOM_PREFIX}${tableId}`;
     }
 
     private async initRedisAdapter(): Promise<void> {
@@ -598,6 +676,17 @@ export class SocketService {
             userIds.forEach(userId => {
                 this.io!.to(userId).emit(event, data);
             });
+        } else {
+            console.warn("Socket.IO not initialized! Event missed:", event);
+        }
+    }
+
+    /**
+     * Emit event to public clients viewing a specific table QR order page.
+     */
+    public emitToPublicTable(tableId: string, event: string, data: any): void {
+        if (this.io) {
+            this.io.to(this.getPublicTableRoom(tableId)).emit(event, data);
         } else {
             console.warn("Socket.IO not initialized! Event missed:", event);
         }
