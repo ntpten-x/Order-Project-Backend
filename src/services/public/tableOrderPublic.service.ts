@@ -157,10 +157,10 @@ export class PublicTableOrderService {
             notes: item.notes || "",
             details: Array.isArray(item.details)
                 ? item.details.map((detail) => ({
-                      id: detail.id,
-                      detail_name: detail.detail_name,
-                      extra_price: Number(detail.extra_price || 0),
-                  }))
+                    id: detail.id,
+                    detail_name: detail.detail_name,
+                    extra_price: Number(detail.extra_price || 0),
+                }))
                 : [],
         };
     }
@@ -385,7 +385,7 @@ export class PublicTableOrderService {
                     );
 
                     if (latestOrder && !this.canAddItemsToOrder(String(latestOrder.status || ""))) {
-                        throw new AppError("This table bill is locked. Please contact staff.", 409);
+                        throw new AppError("ไม่สามารถสั่งของได้", 409);
                     }
 
                     if (latestOrder && this.canAddItemsToOrder(String(latestOrder.status || ""))) {
