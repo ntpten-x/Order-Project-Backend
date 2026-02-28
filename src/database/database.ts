@@ -25,6 +25,7 @@ import { Payments } from "../entity/pos/Payments"
 import { PaymentMethod } from "../entity/pos/PaymentMethod"
 import { ShopProfile } from "../entity/pos/ShopProfile"
 import { ShopPaymentAccount } from "../entity/pos/ShopPaymentAccount"
+import { PrintSettings } from "../entity/pos/PrintSettings"
 import { SalesSummaryView } from "../entity/pos/views/SalesSummaryView"
 import { TopSellingItemsView } from "../entity/pos/views/TopSellingItemsView"
 
@@ -112,7 +113,7 @@ export const AppDataSource = new DataSource({
     username: process.env.DATABASE_USER,
     password: process.env.DATABASE_PASSWORD,
     database: process.env.DATABASE_NAME,
-    entities: [Users, Roles, Branch, IngredientsUnit, Ingredients, PurchaseOrder, StockOrdersItem, StockOrdersDetail, SalesOrder, SalesOrderItem, SalesOrderDetail, Category, Products, ProductsUnit, Tables, Delivery, Discounts, Payments, PaymentMethod, Shifts, ShopProfile, ShopPaymentAccount, SalesSummaryView, TopSellingItemsView, OrderQueue, AuditLog, PermissionResource, PermissionAction, RolePermission, UserPermission, PermissionAudit, PermissionOverrideApproval],
+    entities: [Users, Roles, Branch, IngredientsUnit, Ingredients, PurchaseOrder, StockOrdersItem, StockOrdersDetail, SalesOrder, SalesOrderItem, SalesOrderDetail, Category, Products, ProductsUnit, Tables, Delivery, Discounts, Payments, PaymentMethod, Shifts, ShopProfile, ShopPaymentAccount, PrintSettings, SalesSummaryView, TopSellingItemsView, OrderQueue, AuditLog, PermissionResource, PermissionAction, RolePermission, UserPermission, PermissionAudit, PermissionOverrideApproval],
     synchronize: synchronize as boolean,
     logging: typeormLogging,
     ssl: sslOptions,

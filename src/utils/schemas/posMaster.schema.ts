@@ -4,6 +4,15 @@ import { TableStatus } from "../../entity/pos/Tables";
 import { OrderStatus } from "../../entity/pos/OrderEnums";
 import { uuid, money } from "./common.schema";
 import { paymentAccountSchema } from "../../schemas/paymentAccount.schema";
+import {
+    PRINT_DENSITIES,
+    PRINT_DOCUMENT_TYPES,
+    PRINT_HEIGHT_MODES,
+    PRINT_ORIENTATIONS,
+    PRINT_PRESETS,
+    PRINT_PRINTER_PROFILES,
+    PRINT_UNITS,
+} from "../printSettings";
 
 // Category
 export const categoryIdParamSchema = z.object({
@@ -222,6 +231,76 @@ export const updateShopProfileSchema = z.object({
         bank_name: z.string().max(100).optional().nullable(),
         account_type: z.string().max(20).optional().nullable()
     }).passthrough()
+});
+
+// Print Settings
+const printDocumentTypeEnum = z.enum(PRINT_DOCUMENT_TYPES);
+const printUnitEnum = z.enum(PRINT_UNITS);
+const printOrientationEnum = z.enum(PRINT_ORIENTATIONS);
+const printPresetEnum = z.enum(PRINT_PRESETS);
+const printPrinterProfileEnum = z.enum(PRINT_PRINTER_PROFILES);
+const printDensityEnum = z.enum(PRINT_DENSITIES);
+const printHeightModeEnum = z.enum(PRINT_HEIGHT_MODES);
+const printMeasurementSchema = z.coerce.number().min(0).max(500);
+
+const printDocumentSettingSchema = z.object({
+    document_type: printDocumentTypeEnum,
+    enabled: z.coerce.boolean(),
+    preset: printPresetEnum,
+    printer_profile: printPrinterProfileEnum,
+    unit: printUnitEnum,
+    orientation: printOrientationEnum,
+    width: z.coerce.number().gt(0).max(500),
+    height: z.coerce.number().gt(0).max(500).nullable(),
+    height_mode: printHeightModeEnum,
+    margin_top: printMeasurementSchema,
+    margin_right: printMeasurementSchema,
+    margin_bottom: printMeasurementSchema,
+    margin_left: printMeasurementSchema,
+    font_scale: z.coerce.number().min(70).max(180),
+    line_spacing: z.coerce.number().min(0.8).max(2),
+    copies: z.coerce.number().int().min(1).max(5),
+    density: printDensityEnum,
+    show_logo: z.coerce.boolean(),
+    show_qr: z.coerce.boolean(),
+    show_footer: z.coerce.boolean(),
+    show_branch_address: z.coerce.boolean(),
+    show_order_meta: z.coerce.boolean(),
+    cut_paper: z.coerce.boolean(),
+    note: z.string().max(140).optional().nullable(),
+}).superRefine((value, ctx) => {
+    if (value.height_mode === "fixed" && value.height == null) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["height"],
+            message: "Height is required when height_mode is fixed",
+        });
+    }
+});
+
+const printAutomationSchema = z.object({
+    auto_print_receipt_after_payment: z.coerce.boolean(),
+    auto_print_order_summary_after_close_shift: z.coerce.boolean(),
+    auto_print_purchase_order_after_submit: z.coerce.boolean(),
+    auto_print_table_qr_after_rotation: z.coerce.boolean(),
+    auto_print_kitchen_ticket_after_submit: z.coerce.boolean(),
+});
+
+export const updatePrintSettingsSchema = z.object({
+    body: z.object({
+        default_unit: printUnitEnum,
+        locale: z.string().min(2).max(20),
+        allow_manual_override: z.coerce.boolean(),
+        automation: printAutomationSchema,
+        documents: z.object({
+            receipt: printDocumentSettingSchema,
+            order_summary: printDocumentSettingSchema,
+            purchase_order: printDocumentSettingSchema,
+            table_qr: printDocumentSettingSchema,
+            kitchen_ticket: printDocumentSettingSchema,
+            custom: printDocumentSettingSchema,
+        }),
+    }).passthrough(),
 });
 
 // Shifts
