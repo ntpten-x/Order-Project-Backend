@@ -3,6 +3,7 @@ import { SalesOrderItem } from "../../entity/pos/SalesOrderItem";
 import { SalesOrderDetail } from "../../entity/pos/SalesOrderDetail";
 import { Products } from "../../entity/pos/Products";
 import { OrderType } from "../../entity/pos/OrderEnums";
+import { Shifts } from "../../entity/pos/Shifts";
 import { EntityManager, In, SelectQueryBuilder } from "typeorm";
 import { getRepository, runInTransaction } from "../../database/dbContext";
 import { executeProfiledQuery } from "../../utils/queryProfiler";
@@ -54,17 +55,64 @@ function expandOrderTypeVariants(orderType: string): string[] {
 }
 
 export class OrdersModels {
-    private sanitizeCreator(order: SalesOrder | null): SalesOrder | null {
-        // ... (this part is fine but I need to match the start of the file)
+    private sanitizeUser<T extends { name?: string | null; username?: string | null; password?: string } | null | undefined>(
+        user: T
+    ): T {
+        if (!user || typeof user !== "object") return user;
 
-        if (order?.created_by && typeof order.created_by === "object") {
-            delete (order.created_by as any).password;
+        const safeName = typeof user.name === "string" ? user.name.trim() : "";
+        const safeUsername = typeof user.username === "string" ? user.username.trim() : "";
+        const sanitizedUser = {
+            ...user,
+            name: safeName || safeUsername || undefined,
+            username: safeUsername || undefined,
+        } as T & { password?: string };
+
+        delete sanitizedUser.password;
+        return sanitizedUser as T;
+    }
+
+    private async resolveFallbackCreator(order: SalesOrder): Promise<void> {
+        const branchId = (order as any).branch_id;
+        if (!branchId || !order.create_date) return;
+
+        const shift = await getRepository(Shifts)
+            .createQueryBuilder("shift")
+            .leftJoinAndSelect("shift.user", "user")
+            .where("shift.branch_id = :branchId", { branchId })
+            .andWhere("shift.open_time <= :orderDate", { orderDate: order.create_date })
+            .andWhere("(shift.close_time IS NULL OR shift.close_time >= :orderDate)", { orderDate: order.create_date })
+            .orderBy("shift.open_time", "DESC")
+            .getOne();
+
+        if (!shift?.user) return;
+
+        order.created_by_id = order.created_by_id || shift.user_id;
+        order.created_by = this.sanitizeUser(shift.user as any) as any;
+    }
+
+    private async sanitizeCreator(order: SalesOrder | null): Promise<SalesOrder | null> {
+        if (!order) return order;
+
+        if ("created_by" in order) {
+            (order as any).created_by = this.sanitizeUser((order as any).created_by);
         }
+
+        const hasCreatorIdentity = Boolean(order.created_by?.name || order.created_by?.username);
+        if (!hasCreatorIdentity) {
+            await this.resolveFallbackCreator(order);
+        }
+
         return order;
     }
 
     private sanitizeCreators(orders: SalesOrder[]): SalesOrder[] {
-        return orders.map((order) => this.sanitizeCreator(order) as SalesOrder);
+        return orders.map((order) => {
+            if ("created_by" in order) {
+                (order as any).created_by = this.sanitizeUser((order as any).created_by);
+            }
+            return order;
+        });
     }
 
     private applyFindAllFilters(
@@ -501,7 +549,7 @@ export class OrdersModels {
                 ]
             })
 
-            return this.sanitizeCreator(order);
+            return await this.sanitizeCreator(order);
         } catch (error) {
             throw error
         }
@@ -509,10 +557,12 @@ export class OrdersModels {
 
     async findOneByOrderNo(order_no: string, branchId?: string): Promise<SalesOrder | null> {
         try {
-            return getRepository(SalesOrder).findOne({
+            const order = await getRepository(SalesOrder).findOne({
                 where: branchId ? ({ order_no, branch_id: branchId } as any) : { order_no },
                 relations: ["table", "delivery", "discount", "created_by"]
-            })
+            });
+
+            return await this.sanitizeCreator(order);
         } catch (error) {
             throw error
         }
@@ -603,7 +653,7 @@ export class OrdersModels {
             if (!updatedOrder) {
                 throw new Error("ไม่พบข้อมูลออเดอร์ที่ต้องการค้นหา")
             }
-            return this.sanitizeCreator(updatedOrder) as SalesOrder
+            return await this.sanitizeCreator(updatedOrder) as SalesOrder
         } catch (error) {
             throw error
         }
