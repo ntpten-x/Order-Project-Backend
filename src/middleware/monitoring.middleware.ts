@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { monitoringService } from '../utils/monitoring';
 import { AuthRequest } from './auth.middleware';
 import { metrics } from '../utils/metrics';
+import { AppError } from '../utils/AppError';
 
 const slowRequestThresholdMs = Number(process.env.SLOW_REQUEST_THRESHOLD_MS || 800);
 const enableSlowRequestLog = process.env.ENABLE_SLOW_REQUEST_LOG === 'true';
@@ -83,14 +84,22 @@ export const errorTracking = (
     res: Response,
     next: NextFunction
 ) => {
+    const isExpectedLookupNotFound =
+        err instanceof AppError &&
+        err.statusCode === 404 &&
+        req.method === 'GET' &&
+        /\/(getByName|name)\//i.test(req.path);
+
     const userId = (req as AuthRequest).user?.id;
-    
-    monitoringService.logError(err, {
-        method: req.method,
-        path: req.path,
-        query: req.query,
-        body: req.body,
-    }, userId);
+
+    if (!isExpectedLookupNotFound) {
+        monitoringService.logError(err, {
+            method: req.method,
+            path: req.path,
+            query: req.query,
+            body: req.body,
+        }, userId);
+    }
 
     metrics.countError(err.name || 'Unknown');
 

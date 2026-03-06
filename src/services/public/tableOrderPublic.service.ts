@@ -390,11 +390,7 @@ export class PublicTableOrderService {
 
                     if (latestOrder && this.canAddItemsToOrder(String(latestOrder.status || ""))) {
                         const refreshed = await this.withSuppressedPublicRealtime(manager, async () => {
-                            let updatedOrder: SalesOrder | null = latestOrder;
-                            for (const item of normalizedItems) {
-                                updatedOrder = await this.ordersService.addItem(latestOrder.id, item, branchId);
-                            }
-
+                            const updatedOrder = await this.ordersService.addItems(latestOrder.id, normalizedItems, branchId);
                             return (await this.ordersService.findOne(latestOrder.id, branchId)) || updatedOrder;
                         });
 

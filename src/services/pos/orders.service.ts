@@ -7,9 +7,10 @@ import { Delivery } from "../../entity/pos/Delivery";
 import { Discounts } from "../../entity/pos/Discounts";
 import { SalesOrderItem } from "../../entity/pos/SalesOrderItem";
 import { SalesOrderDetail } from "../../entity/pos/SalesOrderDetail";
-import { OrderStatus, OrderType } from "../../entity/pos/OrderEnums";
+import { OrderStatus, OrderType, ServingStatus } from "../../entity/pos/OrderEnums";
 import { Products } from "../../entity/pos/Products";
 import { EntityManager, In } from "typeorm";
+import { randomUUID } from "crypto";
 import { recalculateOrderTotal } from "./orderTotals.service";
 import { AppError } from "../../utils/AppError";
 import { ShiftsService } from "./shifts.service";
@@ -23,10 +24,16 @@ import { normalizeOrderStatus, isCancelledStatus } from "../../utils/orderStatus
 import { metrics } from "../../utils/metrics";
 import { PermissionScope } from "../../middleware/permission.middleware";
 import { CreatedSort } from "../../utils/sortCreated";
+import { groupServingBoardRows, ServingBoardGroup, ServingBoardRow } from "../../utils/servingBoard";
 
 type AccessContext = {
     scope?: PermissionScope;
     actorUserId?: string;
+};
+
+type ServingGroupContext = {
+    id: string;
+    createdAt: Date;
 };
 
 export class OrdersService {
@@ -100,11 +107,19 @@ export class OrdersService {
         throw new AppError("Unable to generate order number", 500);
     }
 
+    private createServingGroup(): ServingGroupContext {
+        return {
+            id: randomUUID(),
+            createdAt: new Date(),
+        };
+    }
+
     private async prepareItems(
         items: any[],
         manager: EntityManager,
         branchId?: string,
-        orderType?: OrderType
+        orderType?: OrderType,
+        servingGroup?: ServingGroupContext
     ): Promise<Array<{ item: SalesOrderItem; details: SalesOrderDetail[] }>> {
         const productRepo = manager.getRepository(Products);
 
@@ -173,6 +188,9 @@ export class OrdersService {
             item.discount_amount = discount;
             item.total_price = Math.max(0, Number(lineTotal));
             item.notes = itemData.notes;
+            item.serving_group_id = servingGroup?.id ?? randomUUID();
+            item.serving_group_created_at = servingGroup?.createdAt ?? new Date();
+            item.serving_status = ServingStatus.PendingServe;
             item.status = itemData.status
                 ? this.ensureValidStatus(String(itemData.status))
                 : OrderStatus.Pending;
@@ -367,6 +385,144 @@ export class OrdersService {
         }
     }
 
+    async getServingBoard(branchId?: string): Promise<ServingBoardGroup[]> {
+        if (!branchId) {
+            return [];
+        }
+
+        const activeOrderStatuses = [
+            OrderStatus.Pending,
+            OrderStatus.pending,
+            OrderStatus.Cooking,
+            OrderStatus.Served,
+        ];
+
+        const excludedItemStatuses = [
+            OrderStatus.Cancelled,
+            OrderStatus.cancelled,
+            OrderStatus.Paid,
+        ];
+
+        const rows = await getRepository(SalesOrderItem)
+            .createQueryBuilder("item")
+            .innerJoin("item.order", "order")
+            .leftJoin("order.table", "table")
+            .leftJoin("order.delivery", "delivery")
+            .leftJoin("item.product", "product")
+            .select("item.id", "item_id")
+            .addSelect("item.order_id", "order_id")
+            .addSelect("order.order_no", "order_no")
+            .addSelect("order.order_type", "order_type")
+            .addSelect("order.status", "order_status")
+            .addSelect("order.delivery_code", "delivery_code")
+            .addSelect("table.table_name", "table_name")
+            .addSelect("delivery.delivery_name", "delivery_name")
+            .addSelect("item.product_id", "product_id")
+            .addSelect("COALESCE(product.display_name, product.product_name, '-')", "product_name")
+            .addSelect("product.img_url", "product_image_url")
+            .addSelect("item.quantity", "quantity")
+            .addSelect("item.notes", "notes")
+            .addSelect("item.serving_status", "serving_status")
+            .addSelect("item.serving_group_id", "serving_group_id")
+            .addSelect("item.serving_group_created_at", "serving_group_created_at")
+            .addSelect(`(
+                SELECT COALESCE(json_agg(
+                    json_build_object(
+                        'detail_name', d.detail_name,
+                        'extra_price', d.extra_price
+                    )
+                ), '[]')
+                FROM sales_order_detail d
+                WHERE d.orders_item_id = item.id
+            )`, "details")
+            .where("order.branch_id = :branchId", { branchId })
+            .andWhere("order.status IN (:...activeOrderStatuses)", { activeOrderStatuses })
+            .andWhere("item.status::text NOT IN (:...excludedItemStatuses)", { excludedItemStatuses })
+            .orderBy("item.serving_group_created_at", "DESC")
+            .addOrderBy("order.create_date", "DESC")
+            .addOrderBy("item.id", "ASC")
+            .getRawMany<ServingBoardRow>();
+
+        return groupServingBoardRows(
+            rows.map((row) => ({
+                ...row,
+                quantity: Number(row.quantity || 0),
+            }))
+        );
+    }
+
+    async updateServingItemStatus(itemId: string, servingStatus: ServingStatus, branchId?: string): Promise<void> {
+        const item = await this.ordersModel.findItemById(itemId, undefined, branchId);
+        if (!item) {
+            throw new AppError("Item not found", 404);
+        }
+        if (
+            isCancelledStatus(String(item.status)) ||
+            !item.order ||
+            ![OrderStatus.Pending, OrderStatus.pending, OrderStatus.Cooking, OrderStatus.Served].includes(item.order.status)
+        ) {
+            throw new AppError("Item is not available on serving board", 409);
+        }
+
+        await getRepository(SalesOrderItem).update(itemId, {
+            serving_status: servingStatus,
+        } as Partial<SalesOrderItem>);
+
+        const effectiveBranchId = item.order?.branch_id || branchId;
+        if (effectiveBranchId) {
+            this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.servingBoard.update, {
+                item_id: itemId,
+                order_id: item.order_id,
+                serving_group_id: item.serving_group_id,
+                serving_status: servingStatus,
+            });
+        }
+    }
+
+    async updateServingGroupStatus(groupId: string, servingStatus: ServingStatus, branchId?: string): Promise<void> {
+        const itemRepo = getRepository(SalesOrderItem);
+
+        const items = await itemRepo
+            .createQueryBuilder("item")
+            .innerJoinAndSelect("item.order", "order")
+            .where("item.serving_group_id = :groupId", { groupId })
+            .andWhere(branchId ? "order.branch_id = :branchId" : "1=1", branchId ? { branchId } : {})
+            .andWhere("order.status IN (:...activeOrderStatuses)", {
+                activeOrderStatuses: [
+                    OrderStatus.Pending,
+                    OrderStatus.pending,
+                    OrderStatus.Cooking,
+                    OrderStatus.Served,
+                ],
+            })
+            .andWhere("item.status::text NOT IN (:...excludedItemStatuses)", {
+                excludedItemStatuses: [
+                    OrderStatus.Cancelled,
+                    OrderStatus.cancelled,
+                    OrderStatus.Paid,
+                ],
+            })
+            .getMany();
+
+        if (items.length === 0) {
+            throw new AppError("Serving group not found", 404);
+        }
+
+        await itemRepo.update(
+            { id: In(items.map((item) => item.id)) },
+            { serving_status: servingStatus } as Partial<SalesOrderItem>
+        );
+
+        const effectiveBranchId = items[0].order?.branch_id || branchId;
+        if (effectiveBranchId) {
+            this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.servingBoard.update, {
+                serving_group_id: groupId,
+                order_id: items[0].order_id,
+                serving_status: servingStatus,
+            });
+        }
+    }
+
     async create(orders: SalesOrder, branchId?: string): Promise<SalesOrder> {
         orders.status = orders.status
             ? this.ensureValidStatus(String(orders.status))
@@ -500,7 +656,14 @@ export class OrdersService {
                 }
             }
 
-            const preparedItems = await this.prepareItems(items, manager, effectiveBranchId, orderData.order_type);
+            const servingGroup = this.createServingGroup();
+            const preparedItems = await this.prepareItems(
+                items,
+                manager,
+                effectiveBranchId,
+                orderData.order_type,
+                servingGroup
+            );
 
             const orderRepo = manager.getRepository(SalesOrder);
             const itemRepo = manager.getRepository(SalesOrderItem);
@@ -715,24 +878,36 @@ export class OrdersService {
         }
     }
 
-    async addItem(orderId: string, itemData: any, branchId?: string): Promise<SalesOrder> {
+    async addItems(orderId: string, items: any[], branchId?: string): Promise<SalesOrder> {
         return await runInTransaction(async (manager) => {
             try {
+                if (!Array.isArray(items) || items.length === 0) {
+                    throw new AppError("Missing items", 400);
+                }
+
                 const orderRepo = manager.getRepository(SalesOrder);
                 const order = await orderRepo.findOneBy(branchId ? ({ id: orderId, branch_id: branchId } as any) : { id: orderId });
                 if (!order) throw new AppError("Order not found", 404);
 
-                const prepared = await this.prepareItems([itemData], manager, branchId, order.order_type);
-                const { item, details } = prepared[0];
-                item.order_id = orderId;
+                const servingGroup = this.createServingGroup();
+                const preparedItems = await this.prepareItems(
+                    items,
+                    manager,
+                    order.branch_id || branchId,
+                    order.order_type,
+                    servingGroup
+                );
 
-                const savedItem = await this.ordersModel.createItem(item, manager);
+                for (const prepared of preparedItems) {
+                    prepared.item.order_id = orderId;
+                    const savedItem = await this.ordersModel.createItem(prepared.item, manager);
 
-                if (details.length > 0) {
-                    const detailRepo = manager.getRepository(SalesOrderDetail);
-                    for (const detail of details) {
-                        detail.orders_item_id = savedItem.id;
-                        await detailRepo.save(detail);
+                    if (prepared.details.length > 0) {
+                        const detailRepo = manager.getRepository(SalesOrderDetail);
+                        for (const detail of prepared.details) {
+                            detail.orders_item_id = savedItem.id;
+                            await detailRepo.save(detail);
+                        }
                     }
                 }
 
@@ -754,6 +929,10 @@ export class OrdersService {
             }
             return updatedOrder!;
         })
+    }
+
+    async addItem(orderId: string, itemData: any, branchId?: string): Promise<SalesOrder> {
+        return this.addItems(orderId, [itemData], branchId);
     }
 
     async updateItemDetails(itemId: string, data: { quantity?: number, notes?: string, details?: any[] }, branchId?: string): Promise<SalesOrder> {

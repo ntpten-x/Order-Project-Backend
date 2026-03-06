@@ -431,6 +431,12 @@ connectDatabase().then(() => {
             console.error(`[BOOT] Port ${port} is already in use.`);
             return;
         }
+        if (error?.code === "EACCES") {
+            console.error(
+                `[BOOT] Port ${port} cannot be opened on this machine. On Windows this commonly means the port is reserved by an excluded port range. Change PORT/.env to another port such as 4000.`
+            );
+            return;
+        }
         console.error("[BOOT] Server failed to start:", error);
     });
 

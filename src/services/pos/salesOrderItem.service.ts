@@ -2,11 +2,12 @@ import { SalesOrderItemModels } from "../../models/pos/salesOrderItem.model";
 import { SocketService } from "../socket.service";
 import { SalesOrderItem } from "../../entity/pos/SalesOrderItem";
 import { SalesOrder } from "../../entity/pos/SalesOrder";
-import { OrderStatus } from "../../entity/pos/OrderEnums";
+import { OrderStatus, ServingStatus } from "../../entity/pos/OrderEnums";
 import { getRepository } from "../../database/dbContext";
 import { RealtimeEvents } from "../../utils/realtimeEvents";
 import { recalculateOrderTotal } from "./orderTotals.service";
 import { normalizeOrderStatus, isCancelledStatus } from "../../utils/orderStatus";
+import { randomUUID } from "crypto";
 
 export class SalesOrderItemService {
     private socketService = SocketService.getInstance();
@@ -87,6 +88,16 @@ export class SalesOrderItemService {
             // Normalize legacy status values (e.g. 'cancelled') to canonical casing on write.
             if ((salesOrderItem as any).status !== undefined) {
                 (salesOrderItem as any).status = normalizeOrderStatus((salesOrderItem as any).status);
+            }
+
+            if (!salesOrderItem.serving_group_id) {
+                salesOrderItem.serving_group_id = randomUUID();
+            }
+            if (!salesOrderItem.serving_group_created_at) {
+                salesOrderItem.serving_group_created_at = new Date();
+            }
+            if (!salesOrderItem.serving_status) {
+                salesOrderItem.serving_status = ServingStatus.PendingServe;
             }
 
             const createdItem = await this.salesOrderItemModel.create(salesOrderItem)

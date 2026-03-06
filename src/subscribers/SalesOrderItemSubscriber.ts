@@ -13,6 +13,14 @@ import { RealtimeEvents } from "../utils/realtimeEvents";
 
 @EventSubscriber()
 export class SalesOrderItemSubscriber implements EntitySubscriberInterface<SalesOrderItem> {
+    private readonly servingOnlyColumns = new Set([
+        "serving_status",
+        "serving_group_id",
+        "serving_group_created_at",
+        "servingStatus",
+        "servingGroupId",
+        "servingGroupCreatedAt",
+    ]);
 
     listenTo() {
         return SalesOrderItem;
@@ -89,11 +97,21 @@ export class SalesOrderItemSubscriber implements EntitySubscriberInterface<Sales
     async afterUpdate(event: UpdateEvent<SalesOrderItem>) {
         const item = event.entity as SalesOrderItem;
         const databaseItem = event.databaseEntity;
+        const updatedColumns = new Set(
+            event.updatedColumns.flatMap((column) => [column.propertyName, column.databaseName].filter(Boolean))
+        );
+        const isServingOnlyUpdate =
+            updatedColumns.size > 0 &&
+            Array.from(updatedColumns).every((column) => this.servingOnlyColumns.has(column));
 
         // Use databaseEntity for order_id if updated entity doesn't have it
         const effectiveItem = { ...databaseItem, ...item } as SalesOrderItem;
 
         const { branchId, tableId } = await this.getOrderRealtimeContext(event, effectiveItem);
+
+        if (isServingOnlyUpdate) {
+            return;
+        }
 
         if (branchId) {
             SocketService.getInstance().emitToBranch(

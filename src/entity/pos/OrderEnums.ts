@@ -19,3 +19,8 @@ export enum OrderStatus {
     completed = "completed",
     cancelled = "cancelled"
 }
+
+export enum ServingStatus {
+    PendingServe = "PendingServe",
+    Served = "Served",
+}

@@ -100,6 +100,13 @@ export class OrdersController {
         });
     })
 
+    getServingBoard = catchAsync(async (req: AuthRequest, res: Response) => {
+        const branchId = getBranchId(req as any);
+        const groups = await this.ordersService.getServingBoard(branchId);
+        this.setNoStoreHeaders(res);
+        return ApiResponses.ok(res, groups);
+    })
+
     findOne = catchAsync(async (req: AuthRequest, res: Response) => {
         const branchId = getBranchId(req as any);
         const order = await this.ordersService.findOne(req.params.id, branchId, {
@@ -233,6 +240,18 @@ export class OrdersController {
         }
         await this.ordersService.updateItemStatus(req.params.id, status, branchId)
         return ApiResponses.ok(res, { message: "อัปเดตสถานะสำเร็จ" });
+    })
+
+    updateServingItemStatus = catchAsync(async (req: AuthRequest, res: Response) => {
+        const branchId = getBranchId(req as any);
+        await this.ordersService.updateServingItemStatus(req.params.id, req.body.serving_status, branchId);
+        return ApiResponses.ok(res, { message: "Serving status updated" });
+    })
+
+    updateServingGroupStatus = catchAsync(async (req: AuthRequest, res: Response) => {
+        const branchId = getBranchId(req as any);
+        await this.ordersService.updateServingGroupStatus(req.params.id, req.body.serving_status, branchId);
+        return ApiResponses.ok(res, { message: "Serving group status updated" });
     })
 
     addItem = catchAsync(async (req: AuthRequest, res: Response) => {
