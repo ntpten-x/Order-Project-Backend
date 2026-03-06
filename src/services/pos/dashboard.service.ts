@@ -15,6 +15,7 @@ export type DashboardRecentOrderSummary = {
     order_type: string;
     status: string;
     create_date: string;
+    update_date?: string;
     total_amount: number;
     delivery_code?: string | null;
     table?: { table_name?: string | null } | null;
@@ -57,6 +58,7 @@ type RecentOrderQueryRow = {
     order_type: string;
     status: string;
     create_date: Date | string;
+    update_date: Date | string;
     total_amount: string | number;
     delivery_code: string | null;
     table_name: string | null;
@@ -296,6 +298,7 @@ export class DashboardService {
             .addSelect("order.order_type", "order_type")
             .addSelect("order.status", "status")
             .addSelect("order.create_date", "create_date")
+            .addSelect("order.update_date", "update_date")
             .addSelect("order.total_amount", "total_amount")
             .addSelect("order.delivery_code", "delivery_code")
             .addSelect("table.table_name", "table_name")
@@ -311,7 +314,7 @@ export class DashboardService {
         if (startDate && endDate) {
             const bounds = this.toDateRangeBounds(startDate, endDate);
             recentOrdersQuery.andWhere(
-                "order.create_date >= :startDateTs AND order.create_date < :endDateExclusiveTs",
+                "order.update_date >= :startDateTs AND order.update_date < :endDateExclusiveTs",
                 {
                     startDateTs: bounds.startDateTs,
                     endDateExclusiveTs: bounds.endDateExclusiveTs,
@@ -320,7 +323,7 @@ export class DashboardService {
         }
 
         recentOrdersQuery
-            .orderBy("order.create_date", "DESC")
+            .orderBy("order.update_date", "DESC")
             .limit(limit);
 
         const rows = await recentOrdersQuery.getRawMany<RecentOrderQueryRow>();
@@ -349,6 +352,7 @@ export class DashboardService {
             order_type: row.order_type,
             status: row.status,
             create_date: row.create_date instanceof Date ? row.create_date.toISOString() : String(row.create_date),
+            update_date: row.update_date instanceof Date ? row.update_date.toISOString() : String(row.update_date),
             total_amount: Number(row.total_amount || 0),
             delivery_code: row.delivery_code,
             table: row.table_name ? { table_name: row.table_name } : null,
@@ -385,11 +389,11 @@ export class DashboardService {
                     this.getSalesSummary(normalized.startDate, normalized.endDate, branchId),
                     normalized.startDate && normalized.endDate
                         ? this.getTopSellingItemsByRange(
-                              safeTopLimit,
-                              branchId,
-                              normalized.startDate,
-                              normalized.endDate
-                          )
+                            safeTopLimit,
+                            branchId,
+                            normalized.startDate,
+                            normalized.endDate
+                        )
                         : this.getTopSellingItems(safeTopLimit, branchId),
                     this.getRecentOrdersSummary(
                         safeRecentLimit,

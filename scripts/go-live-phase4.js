@@ -2,6 +2,34 @@ const net = require("net");
 const { spawn } = require("child_process");
 const http = require("http");
 
+function setDefaultEnv(target, key, value) {
+  if (target[key] === undefined || target[key] === null || target[key] === "") {
+    target[key] = String(value);
+  }
+}
+
+function applyGoLiveProfile(baseEnv, profileName) {
+  if (!profileName) return baseEnv;
+
+  const profile = profileName.trim().toLowerCase();
+  const env = { ...baseEnv };
+
+  if (profile === "pos-performance" || profile === "pos-production") {
+    // Read-heavy POS tuning profile for realistic production-like load tests.
+    setDefaultEnv(env, "TYPEORM_LOGGING", "false");
+    setDefaultEnv(env, "DATABASE_POOL_MAX", "80");
+    setDefaultEnv(env, "DATABASE_POOL_MIN", "20");
+    setDefaultEnv(env, "DATABASE_CONNECTION_TIMEOUT_MS", "30000");
+    setDefaultEnv(env, "DATABASE_IDLE_TIMEOUT_MS", "30000");
+    setDefaultEnv(env, "STATEMENT_TIMEOUT_MS", "30000");
+
+    // Avoid false negatives in load tests where many POS clients share one NAT/public IP.
+    setDefaultEnv(env, "RATE_LIMIT_MAX", "100000");
+  }
+
+  return env;
+}
+
 function getFreePort() {
   return new Promise((resolve, reject) => {
     const server = net.createServer();
@@ -87,9 +115,13 @@ function killProcessTree(child) {
 async function run() {
   const port = Number(process.env.GO_LIVE_PORT || (await getFreePort()));
   const baseUrl = `http://127.0.0.1:${port}`;
+  const goLiveProfile = process.env.GO_LIVE_PROFILE || "";
+  const k6Script = process.env.GO_LIVE_K6_SCRIPT || "load-tests/k6-go-live-smoke.js";
+  const k6SummaryExport = process.env.GO_LIVE_K6_SUMMARY || "";
+  const startupTimeoutMs = Number(process.env.GO_LIVE_STARTUP_TIMEOUT_MS || 180000);
   const noProxy = "127.0.0.1,localhost";
 
-  const backendEnv = {
+  const backendEnvBase = {
     ...process.env,
     PORT: String(port),
     NO_PROXY: noProxy,
@@ -98,6 +130,7 @@ async function run() {
     HTTPS_PROXY: "",
     ALL_PROXY: "",
   };
+  const backendEnv = applyGoLiveProfile(backendEnvBase, goLiveProfile);
 
   const k6Env = {
     ...process.env,
@@ -108,6 +141,13 @@ async function run() {
     HTTPS_PROXY: "",
     ALL_PROXY: "",
   };
+
+  if (goLiveProfile) {
+    console.log(`[phase4] profile: ${goLiveProfile}`);
+    console.log(
+      `[phase4] effective tuning: pool_max=${backendEnv.DATABASE_POOL_MAX || "-"} pool_min=${backendEnv.DATABASE_POOL_MIN || "-"} rate_limit_max=${backendEnv.RATE_LIMIT_MAX || "-"} logging=${backendEnv.TYPEORM_LOGGING || "-"}`
+    );
+  }
 
   console.log(`[phase4] starting backend on ${baseUrl}`);
   const backend =
@@ -127,21 +167,20 @@ async function run() {
 
   try {
     console.log("[phase4] waiting for /health");
-    await waitForHealth(baseUrl, 60000);
-    console.log("[phase4] health ready, starting k6");
+    await waitForHealth(baseUrl, startupTimeoutMs);
+    console.log(`[phase4] health ready, starting k6 (${k6Script})`);
     const k6Code = await new Promise((resolve, reject) => {
-      const k6 =
-        process.platform === "win32"
-          ? spawn("cmd.exe", ["/d", "/s", "/c", "k6 run load-tests/k6-go-live-smoke.js"], {
-              env: k6Env,
-              stdio: "inherit",
-              shell: false,
-            })
-          : spawn("k6", ["run", "load-tests/k6-go-live-smoke.js"], {
-              env: k6Env,
-              stdio: "inherit",
-              shell: false,
-            });
+      const args = ["run"];
+      if (k6SummaryExport) {
+        args.push("--summary-export", k6SummaryExport);
+      }
+      args.push(k6Script);
+
+      const k6 = spawn("k6", args, {
+        env: k6Env,
+        stdio: "inherit",
+        shell: false,
+      });
 
       k6.on("error", reject);
       k6.on("exit", (code) => resolve(code ?? 1));

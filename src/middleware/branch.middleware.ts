@@ -90,24 +90,6 @@ function clearActiveBranchCookie(res: Response, req: Request): void {
 }
 
 /**
- * Branch Middleware
- * Extracts branch_id from authenticated user and attaches to request
- * This middleware should be used after authenticateToken middleware
- */
-export const extractBranch = (req: BranchRequest, res: Response, next: NextFunction) => {
-    const ctx = getDbContext();
-
-    // Admin branch context is controlled by explicit "active branch" selection (cookie -> DB context).
-    // Do not fall back to the user's assigned branch_id for admins, or branch switching would be ignored.
-    if (ctx?.isAdmin) {
-        req.branchId = ctx.branchId;
-    } else {
-        req.branchId = ctx?.branchId || req.user?.branch_id;
-    }
-    next();
-};
-
-/**
  * Require Branch Middleware
  * Ensures that the user has a branch assigned
  * Use this for endpoints that strictly require branch context
@@ -161,16 +143,4 @@ export const getBranchId = (req: BranchRequest): string | undefined => {
     }
 
     return ctx?.branchId || req.branchId || req.user?.branch_id;
-};
-
-/**
- * Helper function to ensure branch_id exists
- * Throws error if branch_id is not available
- */
-export const requireBranchId = (req: BranchRequest): string => {
-    const branchId = getBranchId(req);
-    if (!branchId) {
-        throw new Error("Branch ID is required but not available");
-    }
-    return branchId;
 };

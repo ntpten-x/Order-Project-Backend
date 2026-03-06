@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { OrderStatus, OrderType } from "../../entity/pos/OrderEnums";
+import { OrderStatus, OrderType, ServingStatus } from "../../entity/pos/OrderEnums";
 
 const uuid = z.string().uuid();
 const money = z.coerce.number().min(0);
@@ -13,6 +13,12 @@ export const orderIdParamSchema = z.object({
 export const orderItemIdParamSchema = z.object({
     params: z.object({
         itemId: uuid
+    })
+});
+
+export const servingGroupIdParamSchema = z.object({
+    params: z.object({
+        id: uuid
     })
 });
 
@@ -87,5 +93,23 @@ export const updateOrderItemStatusSchema = z.object({
     }),
     body: z.object({
         status: z.nativeEnum(OrderStatus)
+    })
+});
+
+export const updateServingItemStatusSchema = z.object({
+    params: z.object({
+        id: uuid
+    }),
+    body: z.object({
+        serving_status: z.nativeEnum(ServingStatus)
+    })
+});
+
+export const updateServingGroupStatusSchema = z.object({
+    params: z.object({
+        id: uuid
+    }),
+    body: z.object({
+        serving_status: z.nativeEnum(ServingStatus)
     })
 });

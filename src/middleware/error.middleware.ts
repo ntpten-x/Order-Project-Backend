@@ -123,6 +123,11 @@ export const globalErrorHandler = (
     _next: NextFunction
 ) => {
     const isDev = process.env.NODE_ENV === 'development';
+    const isExpectedLookupNotFound =
+        err instanceof AppError &&
+        err.statusCode === 404 &&
+        req.method === 'GET' &&
+        /\/(getByName|name)\//i.test(req.path);
 
     // Default values
     let statusCode = 500;
@@ -182,7 +187,7 @@ export const globalErrorHandler = (
     }
 
     // Log error in development or for server errors
-    if (isDev || statusCode >= 500) {
+    if (!isExpectedLookupNotFound && (isDev || statusCode >= 500)) {
         console.error(`[ERROR ${statusCode}] ${errorCode}:`, err.message);
         if (isDev) {
             console.error(err.stack);

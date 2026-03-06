@@ -18,7 +18,19 @@ export function getDbContext(): DbContext | undefined {
 }
 
 export function getDbManager(): EntityManager {
-    return storage.getStore()?.manager ?? AppDataSource.manager;
+    const store = storage.getStore();
+    if (!store) {
+        return AppDataSource.manager;
+    }
+
+    // Under heavy concurrent load, async work can outlive the request context.
+    // If the scoped queryRunner has already been released, fallback to the
+    // global manager to avoid QueryRunnerAlreadyReleasedError on read paths.
+    if (store.queryRunner?.isReleased) {
+        return AppDataSource.manager;
+    }
+
+    return store.manager;
 }
 
 export function getRepository<Entity extends ObjectLiteral>(entity: EntityTarget<Entity>): Repository<Entity> {

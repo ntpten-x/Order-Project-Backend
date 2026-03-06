@@ -6,7 +6,17 @@ import { authenticateToken } from "../../middleware/auth.middleware";
 import { requireBranch } from "../../middleware/branch.middleware";
 import { authorizePermission, enforceOrderItemTargetScope, enforceOrderTargetScope } from "../../middleware/permission.middleware";
 import { validate } from "../../middleware/validate.middleware";
-import { addOrderItemSchema, createOrderSchema, orderIdParamSchema, orderItemIdParamSchema, updateOrderItemSchema, updateOrderItemStatusSchema, updateOrderSchema } from "../../utils/schemas/posOrders.schema";
+import {
+    addOrderItemSchema,
+    createOrderSchema,
+    orderIdParamSchema,
+    orderItemIdParamSchema,
+    updateOrderItemSchema,
+    updateOrderItemStatusSchema,
+    updateOrderSchema,
+    updateServingGroupStatusSchema,
+    updateServingItemStatusSchema,
+} from "../../utils/schemas/posOrders.schema";
 
 const router = Router()
 
@@ -20,6 +30,9 @@ router.use(requireBranch)
 // Specific routes must come before dynamic routes like /:id
 router.get("/stats", authorizePermission("orders.page", "view"), ordersController.getStats)
 router.get("/summary", authorizePermission("orders.page", "view"), ordersController.findSummary)
+router.get("/serve-board", authorizePermission("orders.page", "view"), ordersController.getServingBoard)
+router.patch("/serve-board/items/:id", authorizePermission("orders.page", "update"), enforceOrderItemTargetScope("id"), validate(updateServingItemStatusSchema), ordersController.updateServingItemStatus)
+router.patch("/serve-board/groups/:id", authorizePermission("orders.page", "update"), validate(updateServingGroupStatusSchema), ordersController.updateServingGroupStatus)
 
 router.get("/", authorizePermission("orders.page", "view"), ordersController.findAll)
 router.get("/items", authorizePermission("orders.page", "view"), ordersController.findAllItems)

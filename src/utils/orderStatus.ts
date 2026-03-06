@@ -14,6 +14,11 @@ export const normalizeOrderStatus = (status: unknown): OrderStatus => {
   switch (s as OrderStatus) {
     case OrderStatus.pending:
       return OrderStatus.Pending;
+    // Legacy workflow states are now collapsed into Pending.
+    case OrderStatus.Cooking:
+      return OrderStatus.Pending;
+    case OrderStatus.Served:
+      return OrderStatus.Pending;
     case OrderStatus.completed:
       return OrderStatus.Completed;
     case OrderStatus.cancelled:
@@ -26,4 +31,3 @@ export const normalizeOrderStatus = (status: unknown): OrderStatus => {
 export const isCancelledStatus = (status: unknown): boolean => {
   return String(status ?? "").trim().toLowerCase() === "cancelled";
 };
-

@@ -48,6 +48,10 @@
 - `REQUEST_BODY_LIMIT_MB` - Request body size limit in MB (default: 5)
 - `ENABLE_PERF_LOG` - Enable performance logging (default: false)
 
+### Table QR Ordering
+- `TABLE_QR_TOKEN_BYTES` - Random bytes used to generate per-table QR tokens (default: 24, minimum: 16)
+- `TABLE_QR_TOKEN_EXPIRE_DAYS` - Token lifetime in days (default: 365). Set `0` or negative to disable expiry.
+
 ### Redis
 - `REDIS_URL` - Redis connection string (used for sessions/auth and as fallback for rate limiting)
 - `REDIS_PREFIX` - Key prefix namespace (default: `order-app`)

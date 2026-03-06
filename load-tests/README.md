@@ -1,17 +1,33 @@
 # Load Tests (k6)
 
-## Quick Start
-1. Install k6.
-2. Run the script from the backend root:
+## POS Read-Heavy (Recommended)
+Run deterministic backend + k6 with production-like profile:
 
 ```bash
-k6 run -e BASE_URL=http://localhost:3000 -e USERNAME=admin -e PASSWORD=secret load-tests/k6-stock-orders.js
+GO_LIVE_PROFILE=pos-production \
+GO_LIVE_K6_SCRIPT=load-tests/k6-pos-read-heavy.js \
+GO_LIVE_K6_SUMMARY=load-tests/k6-pos-read-summary.json \
+AUTH_TOKEN=<jwt> \
+VUS=40 STAGE_UP=45s STAGE_STEADY=120s STAGE_DOWN=30s \
+node scripts/go-live-phase4.js
 ```
 
-## Notes
-- `BASE_URL` should point to the backend origin (not the frontend).
-- If `USERNAME`/`PASSWORD` are not provided, the script will still hit `/health` but protected endpoints may return `401`.
-- `/csrf-token` is used to fetch a CSRF token when cookie auth is enabled.
+## Profile Defaults (`pos-production`)
+- `TYPEORM_LOGGING=false`
+- `DATABASE_POOL_MAX=80`
+- `DATABASE_POOL_MIN=20`
+- `DATABASE_CONNECTION_TIMEOUT_MS=30000`
+- `DATABASE_IDLE_TIMEOUT_MS=30000`
+- `STATEMENT_TIMEOUT_MS=30000`
+- `RATE_LIMIT_MAX=100000`
 
-## Tuning
-- Adjust the `stages` and `thresholds` inside `k6-stock-orders.js`.
+Environment values passed explicitly still override profile defaults.
+
+## Thresholds (`k6-pos-read-heavy.js`)
+- `http_req_failed < 2%`
+- `http_req_duration p95 < 2000ms`
+- `http_req_duration p99 < 3500ms`
+
+## Notes
+- Use backend origin for `BASE_URL` (not frontend).
+- Prefer `AUTH_TOKEN` for stable load tests; login-per-VU adds extra auth noise.

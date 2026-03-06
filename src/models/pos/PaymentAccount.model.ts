@@ -2,6 +2,42 @@ import { ShopPaymentAccount } from "../../entity/pos/ShopPaymentAccount"
 import { getRepository } from "../../database/dbContext"
 
 export class PaymentAccountModel {
+    async findAll(
+        shopId: string,
+        branchId?: string,
+        page: number = 1,
+        limit: number = 50,
+        q?: string,
+        filters?: { status?: "active" | "inactive" }
+    ): Promise<{ data: ShopPaymentAccount[]; total: number; page: number; last_page: number }> {
+        const skip = (page - 1) * limit;
+        const repository = getRepository(ShopPaymentAccount);
+        const query = repository.createQueryBuilder("account")
+            .where(branchId ? "account.shop_id = :shopId AND account.branch_id = :branchId" : "account.shop_id = :shopId", { shopId, branchId })
+            .orderBy("account.is_active", "DESC")
+            .addOrderBy("account.created_at", "DESC");
+
+        if (q && q.trim()) {
+            query.andWhere("(account.account_name ILIKE :q OR account.account_number ILIKE :q)", { q: `%${q.trim()}%` });
+        }
+
+        if (filters?.status === "active") {
+            query.andWhere("account.is_active = true");
+        } else if (filters?.status === "inactive") {
+            query.andWhere("account.is_active = false");
+        }
+
+        const [data, total] = await query.skip(skip).take(limit).getManyAndCount();
+
+        return {
+            data,
+            total,
+            page,
+            last_page: Math.max(1, Math.ceil(total / limit)),
+        };
+    }
+
+    // Deprecated: use findAll instead
     async findByShopId(shopId: string, branchId?: string) {
         return await getRepository(ShopPaymentAccount).find({
             where: branchId ? { shop_id: shopId, branch_id: branchId } : { shop_id: shopId },

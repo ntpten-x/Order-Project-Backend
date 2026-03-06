@@ -8,6 +8,12 @@ const explainEnabled = process.env.QUERY_PROFILE_EXPLAIN === "true";
 const logDir = process.env.QUERY_PROFILE_DIR || "query-plans";
 const sampleRate = Number(process.env.QUERY_PROFILE_SAMPLE_RATE || 1);
 
+function fireAndForget(task: Promise<unknown>): void {
+    void task.catch(() => {
+        // keep profiler side-effects non-blocking
+    });
+}
+
 function shouldSample(): boolean {
     if (!enabled) return false;
     if (sampleRate >= 1) return true;
@@ -38,17 +44,19 @@ export async function executeProfiledQuery<T = any>(
         const level = durationMs >= slowMs ? "SLOW" : "OK";
         const msg = `[QUERY_PROFILE][${level}] ${name} ${durationMs.toFixed(1)}ms`;
         console.log(msg);
-        await appendLogLine(msg);
+        fireAndForget(appendLogLine(msg));
 
         if (explainEnabled && durationMs >= slowMs) {
-            try {
-                const plan = await getDbManager().query(`EXPLAIN (FORMAT JSON) ${sql}`, params);
-                await appendLogLine(
-                    `[QUERY_EXPLAIN] ${name} ${JSON.stringify(plan?.[0] ?? plan)}`
-                );
-            } catch (error) {
-                await appendLogLine(`[QUERY_EXPLAIN_ERROR] ${name} ${String(error)}`);
-            }
+            fireAndForget((async () => {
+                try {
+                    const plan = await getDbManager().query(`EXPLAIN (FORMAT JSON) ${sql}`, params);
+                    await appendLogLine(
+                        `[QUERY_EXPLAIN] ${name} ${JSON.stringify(plan?.[0] ?? plan)}`
+                    );
+                } catch (error) {
+                    await appendLogLine(`[QUERY_EXPLAIN_ERROR] ${name} ${String(error)}`);
+                }
+            })());
         }
     }
 
@@ -60,5 +68,5 @@ export async function logProfileDuration(name: string, durationMs: number): Prom
     const level = durationMs >= slowMs ? "SLOW" : "OK";
     const msg = `[QUERY_PROFILE][${level}] ${name} ${durationMs.toFixed(1)}ms`;
     console.log(msg);
-    await appendLogLine(msg);
+    fireAndForget(appendLogLine(msg));
 }

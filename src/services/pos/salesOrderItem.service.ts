@@ -2,11 +2,12 @@ import { SalesOrderItemModels } from "../../models/pos/salesOrderItem.model";
 import { SocketService } from "../socket.service";
 import { SalesOrderItem } from "../../entity/pos/SalesOrderItem";
 import { SalesOrder } from "../../entity/pos/SalesOrder";
-import { OrderStatus } from "../../entity/pos/OrderEnums";
+import { OrderStatus, ServingStatus } from "../../entity/pos/OrderEnums";
 import { getRepository } from "../../database/dbContext";
 import { RealtimeEvents } from "../../utils/realtimeEvents";
 import { recalculateOrderTotal } from "./orderTotals.service";
 import { normalizeOrderStatus, isCancelledStatus } from "../../utils/orderStatus";
+import { randomUUID } from "crypto";
 
 export class SalesOrderItemService {
     private socketService = SocketService.getInstance();
@@ -25,13 +26,9 @@ export class SalesOrderItemService {
         const activeItems = items.filter((item) => !isCancelledStatus(String(item.status)));
         if (activeItems.length === 0) return null;
 
-        const statuses = activeItems.map((item) => normalizeOrderStatus(String(item.status)));
-        if (statuses.some((status) => status === OrderStatus.Cooking)) {
-            return OrderStatus.Cooking;
-        }
-        if (statuses.every((status) => status === OrderStatus.Served)) {
-            return OrderStatus.Served;
-        }
+        activeItems.forEach((item) => {
+            normalizeOrderStatus(String(item.status));
+        });
         return OrderStatus.Pending;
     }
 
@@ -93,19 +90,28 @@ export class SalesOrderItemService {
                 (salesOrderItem as any).status = normalizeOrderStatus((salesOrderItem as any).status);
             }
 
+            if (!salesOrderItem.serving_group_id) {
+                salesOrderItem.serving_group_id = randomUUID();
+            }
+            if (!salesOrderItem.serving_group_created_at) {
+                salesOrderItem.serving_group_created_at = new Date();
+            }
+            if (!salesOrderItem.serving_status) {
+                salesOrderItem.serving_status = ServingStatus.PendingServe;
+            }
+
             const createdItem = await this.salesOrderItemModel.create(salesOrderItem)
 
             // Keep order totals consistent even if this endpoint is used directly.
             await recalculateOrderTotal(createdItem.order_id);
             const syncedOrder = await this.syncOrderStatusFromItems(createdItem.order_id, branchId);
             const effectiveBranchId = syncedOrder?.branch_id || branchId;
-            if (effectiveBranchId) {
-                this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.update, { id: createdItem.order_id } as any);
-            }
 
             const completeItem = await this.salesOrderItemModel.findOne(createdItem.id, branchId)
             if (completeItem) {
                 if (effectiveBranchId) {
+                    // salesOrderItem events are already handled as order-affecting events on the frontend.
+                    // Avoid emitting a duplicate orders:update for every item mutation.
                     this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.salesOrderItem.create, completeItem)
                 }
                 return completeItem
@@ -132,9 +138,6 @@ export class SalesOrderItemService {
             const syncedOrder = await this.syncOrderStatusFromItems(itemToUpdate.order_id, branchId);
             const effectiveBranchId = syncedOrder?.branch_id || branchId;
             if (effectiveBranchId) {
-                this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.update, { id: itemToUpdate.order_id } as any);
-            }
-            if (effectiveBranchId) {
                 this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.salesOrderItem.update, updatedItem)
             }
             return updatedItem
@@ -152,7 +155,6 @@ export class SalesOrderItemService {
                 const syncedOrder = await this.syncOrderStatusFromItems(item.order_id, branchId);
                 const effectiveBranchId = syncedOrder?.branch_id || branchId;
                 if (effectiveBranchId) {
-                    this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.update, { id: item.order_id } as any);
                     this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.salesOrderItem.delete, { id })
                 }
             } else if (branchId) {

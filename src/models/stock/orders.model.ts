@@ -5,6 +5,46 @@ import { getRepository, runInTransaction } from "../../database/dbContext";
 import { CreatedSort, createdSortToOrder } from "../../utils/sortCreated";
 
 export class StockOrdersModel {
+    private sanitizeUser<T extends { name?: string | null; username?: string | null; password?: string } | null | undefined>(
+        user: T
+    ): T {
+        if (!user || typeof user !== "object") return user;
+
+        const safeName = typeof user.name === "string" ? user.name.trim() : "";
+        const safeUsername = typeof user.username === "string" ? user.username.trim() : "";
+        const sanitizedUser = {
+            ...user,
+            name: safeName || safeUsername || undefined,
+            username: safeUsername || undefined,
+        } as T & { password?: string };
+
+        delete sanitizedUser.password;
+        return sanitizedUser as T;
+    }
+
+    private sanitizeOrder(order: PurchaseOrder | null): PurchaseOrder | null {
+        if (!order) return order;
+
+        if ("ordered_by" in order) {
+            (order as any).ordered_by = this.sanitizeUser((order as any).ordered_by);
+        }
+
+        if (Array.isArray(order.ordersItems)) {
+            order.ordersItems = order.ordersItems.map((item) => {
+                if (item?.ordersDetail && typeof item.ordersDetail === "object" && "purchased_by" in item.ordersDetail) {
+                    (item.ordersDetail as any).purchased_by = this.sanitizeUser((item.ordersDetail as any).purchased_by);
+                }
+                return item;
+            });
+        }
+
+        return order;
+    }
+
+    private sanitizeOrders(orders: PurchaseOrder[]): PurchaseOrder[] {
+        return orders.map((order) => this.sanitizeOrder(order) as PurchaseOrder);
+    }
+
     // Creates an order and its items in a transaction
     async createOrderWithItems(orderedById: string, items: { ingredient_id: string; quantity_ordered: number }[], remark?: string, branchId?: string): Promise<PurchaseOrder> {
         return runInTransaction(async (manager) => {
@@ -69,7 +109,7 @@ export class StockOrdersModel {
             .getManyAndCount();
 
         return {
-            data,
+            data: this.sanitizeOrders(data),
             total,
             page,
             limit
@@ -126,7 +166,7 @@ export class StockOrdersModel {
     }
 
     async findById(id: string, branchId?: string): Promise<PurchaseOrder | null> {
-        return await getRepository(PurchaseOrder).findOne({
+        const order = await getRepository(PurchaseOrder).findOne({
             where: branchId ? ({ id, branch_id: branchId } as any) : ({ id } as any),
             relations: {
                 ordered_by: true,
@@ -140,6 +180,7 @@ export class StockOrdersModel {
                 }
             }
         });
+        return this.sanitizeOrder(order);
     }
 
     async updateStatus(id: string, status: PurchaseOrderStatus, branchId?: string): Promise<PurchaseOrder | null> {
@@ -148,7 +189,8 @@ export class StockOrdersModel {
         if (!order) return null;
 
         order.status = status;
-        return await ordersRepository.save(order);
+        await ordersRepository.save(order);
+        return await this.findById(id, branchId);
     }
 
     async delete(id: string, branchId?: string): Promise<boolean> {
@@ -254,7 +296,7 @@ export class StockOrdersModel {
 
     // internal helper for transaction
     private async findByIdInternal(id: string, manager: any, branchId?: string): Promise<PurchaseOrder> {
-        return await manager.findOne(PurchaseOrder, {
+        const order = await manager.findOne(PurchaseOrder, {
             where: branchId ? ({ id, branch_id: branchId } as any) : ({ id } as any),
             relations: {
                 ordered_by: true,
@@ -268,5 +310,6 @@ export class StockOrdersModel {
                 }
             }
         });
+        return this.sanitizeOrder(order) as PurchaseOrder;
     }
 }

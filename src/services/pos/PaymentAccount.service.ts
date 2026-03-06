@@ -72,6 +72,23 @@ export class PaymentAccountService {
         }
     }
 
+    async findAll(
+        branchId: string,
+        page: number = 1,
+        limit: number = 50,
+        q?: string,
+        filters?: { status?: "active" | "inactive" }
+    ) {
+        const shopId = await this.getShopIdForBranch(branchId);
+        return await this.model.findAll(shopId, branchId, page, limit, q, filters);
+    }
+
+    async findOne(branchId: string, accountId: string) {
+        const shopId = await this.getShopIdForBranch(branchId);
+        return await this.model.findOne(shopId, accountId, branchId);
+    }
+
+    // Deprecated: use findAll instead
     async getAccounts(branchId: string) {
         const shopId = await this.getShopIdForBranch(branchId);
         return await this.model.findByShopId(shopId, branchId)

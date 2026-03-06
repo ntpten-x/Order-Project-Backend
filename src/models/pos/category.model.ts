@@ -49,11 +49,11 @@ export class CategoryModels {
             const categoryRepository = getRepository(Category);
             const query = categoryRepository.createQueryBuilder("category")
                 .orderBy("category.create_date", createdSortToOrder(sortCreated));
-            
+
             if (branchId) {
                 query.andWhere("category.branch_id = :branchId", { branchId });
             }
-            
+
             return query.getMany();
         } catch (error) {
             throw error
@@ -65,11 +65,11 @@ export class CategoryModels {
             const categoryRepository = getRepository(Category);
             const query = categoryRepository.createQueryBuilder("category")
                 .where("category.id = :id", { id });
-            
+
             if (branchId) {
                 query.andWhere("category.branch_id = :branchId", { branchId });
             }
-            
+
             return query.getOne();
         } catch (error) {
             throw error
@@ -81,11 +81,11 @@ export class CategoryModels {
             const categoryRepository = getRepository(Category);
             const query = categoryRepository.createQueryBuilder("category")
                 .where("category.category_name = :category_name", { category_name });
-            
+
             if (branchId) {
                 query.andWhere("category.branch_id = :branchId", { branchId });
             }
-            
+
             return query.getOne();
         } catch (error) {
             throw error

@@ -68,6 +68,7 @@ export enum AuditActionType {
 
   // Shop profile actions
   SHOP_PROFILE_UPDATE = "SHOP_PROFILE_UPDATE",
+  PRINT_SETTINGS_UPDATE = "PRINT_SETTINGS_UPDATE",
 
   // User actions
   USER_CREATE = "USER_CREATE",

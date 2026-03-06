@@ -12,6 +12,7 @@ import { parseCreatedSort } from "../../utils/sortCreated";
 
 export class OrdersController {
     constructor(private ordersService: OrdersService) { }
+    private readonly bypassReadCache = process.env.ORDERS_READ_BYPASS_CACHE === "true";
     private setNoStoreHeaders(res: Response): void {
         res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
         res.setHeader("Pragma", "no-cache");
@@ -57,7 +58,7 @@ export class OrdersController {
             query,
             branchId,
             { scope: req.permission?.scope, actorUserId: req.user?.id },
-            { bypassCache: true },
+            { bypassCache: this.bypassReadCache },
             sortCreated
         );
         this.setNoStoreHeaders(res);
@@ -73,7 +74,7 @@ export class OrdersController {
         const stats = await this.ordersService.getStats(
             branchId,
             { scope: req.permission?.scope, actorUserId: req.user?.id },
-            { bypassCache: true }
+            { bypassCache: this.bypassReadCache }
         );
         this.setNoStoreHeaders(res);
         return ApiResponses.ok(res, stats);
@@ -97,6 +98,13 @@ export class OrdersController {
             limit: result.limit,
             total: result.total,
         });
+    })
+
+    getServingBoard = catchAsync(async (req: AuthRequest, res: Response) => {
+        const branchId = getBranchId(req as any);
+        const groups = await this.ordersService.getServingBoard(branchId);
+        this.setNoStoreHeaders(res);
+        return ApiResponses.ok(res, groups);
     })
 
     findOne = catchAsync(async (req: AuthRequest, res: Response) => {
@@ -129,7 +137,7 @@ export class OrdersController {
         } else {
             order = await this.ordersService.create(req.body, branchId)
         }
-        
+
         // Audit log
         await auditLogger.log({
             action_type: AuditActionType.ORDER_CREATE,
@@ -145,7 +153,7 @@ export class OrdersController {
             path: req.path,
             method: req.method,
         });
-        
+
         return ApiResponses.created(res, order);
     })
 
@@ -159,7 +167,7 @@ export class OrdersController {
 
         const oldOrder = await this.ordersService.findOne(req.params.id, branchId);
         const order = await this.ordersService.update(req.params.id, req.body, branchId)
-        
+
         // Audit log
         await auditLogger.log({
             action_type: AuditActionType.ORDER_UPDATE,
@@ -195,7 +203,7 @@ export class OrdersController {
                 method: req.method,
             });
         }
-        
+
         return ApiResponses.ok(res, order);
     })
 
@@ -234,11 +242,23 @@ export class OrdersController {
         return ApiResponses.ok(res, { message: "อัปเดตสถานะสำเร็จ" });
     })
 
+    updateServingItemStatus = catchAsync(async (req: AuthRequest, res: Response) => {
+        const branchId = getBranchId(req as any);
+        await this.ordersService.updateServingItemStatus(req.params.id, req.body.serving_status, branchId);
+        return ApiResponses.ok(res, { message: "Serving status updated" });
+    })
+
+    updateServingGroupStatus = catchAsync(async (req: AuthRequest, res: Response) => {
+        const branchId = getBranchId(req as any);
+        await this.ordersService.updateServingGroupStatus(req.params.id, req.body.serving_status, branchId);
+        return ApiResponses.ok(res, { message: "Serving group status updated" });
+    })
+
     addItem = catchAsync(async (req: AuthRequest, res: Response) => {
         const user = (req as any).user;
         const branchId = getBranchId(req as any);
         const order = await this.ordersService.addItem(req.params.id, req.body, branchId);
-        
+
         // Audit log
         await auditLogger.log({
             action_type: AuditActionType.ITEM_ADD,
@@ -254,7 +274,7 @@ export class OrdersController {
             path: req.path,
             method: req.method,
         });
-        
+
         return ApiResponses.created(res, order);
     })
 
@@ -286,9 +306,9 @@ export class OrdersController {
         const branchId = getBranchId(req as any);
         const order = await this.ordersService.deleteItem(req.params.itemId, branchId);
 
-        // Audit log - important destructive action
+        // Audit log - item is now soft-cancelled (not hard-deleted)
         await auditLogger.log({
-            action_type: AuditActionType.ITEM_DELETE,
+            action_type: AuditActionType.ITEM_UPDATE,
             user_id: user?.id,
             username: user?.username,
             ip_address: getClientIp(req),
@@ -296,7 +316,7 @@ export class OrdersController {
             entity_type: 'SalesOrderItem',
             entity_id: req.params.itemId,
             branch_id: branchId,
-            description: order?.order_no ? `Deleted item from order ${order.order_no}` : `Deleted order item ${req.params.itemId}`,
+            description: order?.order_no ? `Cancelled item in order ${order.order_no}` : `Cancelled order item ${req.params.itemId}`,
             path: req.path,
             method: req.method,
         });

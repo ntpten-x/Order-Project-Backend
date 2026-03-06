@@ -160,6 +160,7 @@ export const metadataCache = getCache<unknown>('metadata', {
 const redisCacheEnabled = process.env.REDIS_CACHE_ENABLED === "true";
 const redisCachePrefix = getRedisPrefix("cache");
 const redisScanCount = Number(process.env.REDIS_CACHE_SCAN_COUNT || 200);
+const inFlightCacheFetches = new Map<string, Promise<unknown>>();
 
 function toRedisCacheKey(key: string): string {
     return `${redisCachePrefix}${key}`;
@@ -228,12 +229,24 @@ export async function withCache<T>(
         return redisCached;
     }
 
+    const inFlight = inFlightCacheFetches.get(key) as Promise<T> | undefined;
+    if (inFlight) {
+        return inFlight;
+    }
+
     hooks?.onMiss?.();
-    const value = await fetcher();
-    cache.set(key, value, effectiveTtl);
-    await writeToRedisCache(key, value, effectiveTtl);
-    hooks?.onStore?.();
-    return value;
+    const fetchPromise = (async () => {
+        const value = await fetcher();
+        cache.set(key, value, effectiveTtl);
+        await writeToRedisCache(key, value, effectiveTtl);
+        hooks?.onStore?.();
+        return value;
+    })().finally(() => {
+        inFlightCacheFetches.delete(key);
+    });
+
+    inFlightCacheFetches.set(key, fetchPromise as Promise<unknown>);
+    return fetchPromise;
 }
 
 /**

@@ -69,4 +69,18 @@ describe("SocketService contract", () => {
         expect(roomEmit).toHaveBeenCalledTimes(2);
         expect(roomEmit).toHaveBeenCalledWith(RealtimeEvents.orders.update, { id: "o2" });
     });
+
+    it("emits public table events to the table room", () => {
+        const { io, roomEmit } = buildIoMock();
+        const svc = SocketService.getInstance() as unknown as {
+            io: MockIo | null;
+            emitToPublicTable: (tableId: string, event: string, data: unknown) => void;
+        };
+        svc.io = io;
+
+        svc.emitToPublicTable("t-123", RealtimeEvents.orders.update, { id: "o3" });
+
+        expect(io.to).toHaveBeenCalledWith("public-table:t-123");
+        expect(roomEmit).toHaveBeenCalledWith(RealtimeEvents.orders.update, { id: "o3" });
+    });
 });
