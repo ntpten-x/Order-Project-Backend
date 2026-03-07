@@ -1,7 +1,8 @@
 
 import { Server, Socket } from "socket.io";
+import { createAdapter } from "@socket.io/redis-adapter";
+import Redis from "ioredis";
 import jwt from "jsonwebtoken";
-import { createClient } from "redis";
 import { AppDataSource } from "../database/database";
 import { Users } from "../entity/Users";
 import { Tables } from "../entity/pos/Tables";
@@ -190,8 +191,17 @@ export class SocketService {
     private static readonly PUBLIC_TABLE_ROOM_PREFIX = "public-table:";
     private io: Server | null = null;
     private readonly verboseLogs = process.env.SOCKET_VERBOSE_LOG === "true";
+    private readonly redisAdapterConnectTimeoutMs = Number(process.env.REDIS_CONNECT_TIMEOUT_MS) || 5000;
+    private readonly redisAdapterReconnectBaseMs = Number(process.env.SOCKET_REDIS_RECONNECT_BASE_MS) || 500;
+    private readonly redisAdapterReconnectMaxMs = Number(process.env.SOCKET_REDIS_RECONNECT_MAX_MS) || 5000;
+    private readonly redisAdapterInitRetryBaseMs = Number(process.env.SOCKET_REDIS_INIT_RETRY_BASE_MS) || 1000;
+    private readonly redisAdapterInitRetryMaxMs = Number(process.env.SOCKET_REDIS_INIT_RETRY_MAX_MS) || 30000;
     private adapterInitStarted = false;
     private redisAdapterReady = false;
+    private redisPubClient: Redis | null = null;
+    private redisSubClient: Redis | null = null;
+    private redisAdapterRetryTimer: NodeJS.Timeout | null = null;
+    private redisAdapterRetryAttempt = 0;
     private totalConnections = 0;
     private authErrorCount = 0;
     private connectErrorCount = 0;
@@ -506,6 +516,115 @@ export class SocketService {
         return `${SocketService.PUBLIC_TABLE_ROOM_PREFIX}${tableId}`;
     }
 
+    private buildRedisAdapterClient(
+        url: string,
+        rejectUnauthorized: boolean,
+        role: "pub" | "sub"
+    ): Redis {
+        const parsed = new URL(url);
+        const shouldUseTls = parsed.protocol === "rediss:";
+
+        return new Redis(url, {
+            lazyConnect: true,
+            maxRetriesPerRequest: null,
+            enableReadyCheck: true,
+            connectTimeout: this.redisAdapterConnectTimeoutMs,
+            connectionName: `socket-io-${role}`,
+            ...(shouldUseTls
+                ? {
+                    tls: {
+                        servername: parsed.hostname,
+                        rejectUnauthorized,
+                    },
+                }
+                : {}),
+            retryStrategy: (attempt: number) =>
+                Math.min(this.redisAdapterReconnectBaseMs * Math.max(attempt, 1), this.redisAdapterReconnectMaxMs),
+        });
+    }
+
+    private attachRedisAdapterListeners(client: Redis, label: "pub" | "sub"): void {
+        client.on("connect", () => {
+            if (this.verboseLogs) {
+                console.info(`[SocketAdapter] Redis ${label} connecting.`);
+            }
+        });
+
+        client.on("ready", () => {
+            this.redisAdapterRetryAttempt = 0;
+            this.refreshRedisAdapterReadyState();
+            console.info(`[SocketAdapter] Redis ${label} ready.`);
+        });
+
+        client.on("error", (error) => {
+            this.refreshRedisAdapterReadyState();
+            this.recordConnectError(`Socket adapter Redis ${label} error`, error);
+        });
+
+        client.on("close", () => {
+            this.refreshRedisAdapterReadyState();
+            console.warn(`[SocketAdapter] Redis ${label} connection closed.`);
+        });
+
+        client.on("reconnecting", (delay: number) => {
+            this.refreshRedisAdapterReadyState();
+            console.warn(`[SocketAdapter] Redis ${label} reconnecting in ${delay}ms.`);
+        });
+
+        client.on("end", () => {
+            this.refreshRedisAdapterReadyState();
+            console.error(`[SocketAdapter] Redis ${label} connection ended.`);
+        });
+    }
+
+    private refreshRedisAdapterReadyState(): void {
+        this.redisAdapterReady =
+            this.redisPubClient?.status === "ready" &&
+            this.redisSubClient?.status === "ready";
+    }
+
+    private async disconnectRedisAdapterClients(): Promise<void> {
+        const clients = [this.redisPubClient, this.redisSubClient].filter(Boolean) as Redis[];
+        this.redisPubClient = null;
+        this.redisSubClient = null;
+        this.redisAdapterReady = false;
+
+        await Promise.all(
+            clients.map(async (client) => {
+                client.removeAllListeners();
+                try {
+                    await client.quit();
+                } catch {
+                    client.disconnect();
+                }
+            })
+        );
+    }
+
+    private clearRedisAdapterRetry(): void {
+        if (!this.redisAdapterRetryTimer) return;
+        clearTimeout(this.redisAdapterRetryTimer);
+        this.redisAdapterRetryTimer = null;
+    }
+
+    private scheduleRedisAdapterRetry(): void {
+        if (this.redisAdapterRetryTimer || process.env.SOCKET_REDIS_ADAPTER_ENABLED !== "true") {
+            return;
+        }
+
+        this.redisAdapterRetryAttempt += 1;
+        const delay = Math.min(
+            this.redisAdapterInitRetryBaseMs * Math.max(this.redisAdapterRetryAttempt, 1),
+            this.redisAdapterInitRetryMaxMs
+        );
+
+        console.warn(`[SocketAdapter] Retrying Redis adapter initialization in ${delay}ms.`);
+        this.redisAdapterRetryTimer = setTimeout(() => {
+            this.redisAdapterRetryTimer = null;
+            void this.initRedisAdapter();
+        }, delay);
+    }
+
     private async initRedisAdapter(): Promise<void> {
         if (!this.io || this.adapterInitStarted) return;
         this.adapterInitStarted = true;
@@ -521,27 +640,34 @@ export class SocketService {
         }
 
         try {
-            // Optional dependency for multi-instance Socket.IO fan-out.
-            // eslint-disable-next-line @typescript-eslint/no-var-requires
-            const adapterPkg = require("@socket.io/redis-adapter");
-            const createAdapter = adapterPkg?.createAdapter as ((pubClient: any, subClient: any) => any) | undefined;
-            if (!createAdapter) {
-                console.warn("[SocketAdapter] '@socket.io/redis-adapter' not available; running without distributed adapter.");
-                return;
-            }
+            this.clearRedisAdapterRetry();
 
-            const pubClient = createClient(resolved.config);
-            const subClient = pubClient.duplicate();
-            pubClient.on("error", (err) => console.error("[SocketAdapter] Redis pub error:", err));
-            subClient.on("error", (err) => console.error("[SocketAdapter] Redis sub error:", err));
+            const pubClient = this.buildRedisAdapterClient(
+                resolved.normalizedUrl,
+                resolved.rejectUnauthorized,
+                "pub"
+            );
+            const subClient = this.buildRedisAdapterClient(
+                resolved.normalizedUrl,
+                resolved.rejectUnauthorized,
+                "sub"
+            );
+            this.attachRedisAdapterListeners(pubClient, "pub");
+            this.attachRedisAdapterListeners(subClient, "sub");
+            this.redisPubClient = pubClient;
+            this.redisSubClient = subClient;
 
             await Promise.all([pubClient.connect(), subClient.connect()]);
             this.io.adapter(createAdapter(pubClient, subClient));
+            this.redisAdapterRetryAttempt = 0;
             this.redisAdapterReady = true;
             console.info("[SocketAdapter] Redis adapter enabled for multi-instance realtime.");
         } catch (error) {
             this.redisAdapterReady = false;
             console.error("[SocketAdapter] Failed to initialize Redis adapter. Falling back to local adapter.", error);
+            await this.disconnectRedisAdapterClients();
+            this.adapterInitStarted = false;
+            this.scheduleRedisAdapterRetry();
         }
     }
 

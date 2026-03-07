@@ -1,31 +1,52 @@
 import { EntityManager } from "typeorm";
 import { SalesOrder } from "../../entity/pos/SalesOrder";
 import { SalesOrderItem } from "../../entity/pos/SalesOrderItem";
-import { PriceCalculatorService } from "./priceCalculator.service";
+import { DiscountType } from "../../entity/pos/Discounts";
 import { getRepository } from "../../database/dbContext";
-import { isCancelledStatus } from "../../utils/orderStatus";
 
 export const recalculateOrderTotal = async (orderId: string, manager?: EntityManager): Promise<void> => {
     const orderRepo = manager ? manager.getRepository(SalesOrder) : getRepository(SalesOrder);
     const itemRepo = manager ? manager.getRepository(SalesOrderItem) : getRepository(SalesOrderItem);
 
-    const order = await orderRepo.findOne({
-        where: { id: orderId },
-        relations: ["discount"]
-    });
+    const orderQuery = orderRepo
+        .createQueryBuilder("order")
+        .leftJoinAndSelect("order.discount", "discount")
+        .where("order.id = :orderId", { orderId });
+
+    if (manager) {
+        orderQuery.setLock("pessimistic_write");
+    }
+
+    const order = await orderQuery.getOne();
 
     if (!order) return;
 
-    const items = await itemRepo.find({ where: { order_id: orderId } });
-    // Support legacy 'cancelled' values too.
-    const validItems = items.filter(i => !isCancelledStatus(i.status));
+    const aggregate = await itemRepo
+        .createQueryBuilder("item")
+        .select("COALESCE(SUM(item.total_price), 0)", "sub_total")
+        .where("item.order_id = :orderId", { orderId })
+        .andWhere("item.status::text NOT IN ('Cancelled', 'cancelled')")
+        .getRawOne<{ sub_total: string | number | null }>();
 
-    const result = PriceCalculatorService.calculateOrderTotal(validItems, order.discount);
+    const subTotal = Number(aggregate?.sub_total || 0);
+    let discountAmount = 0;
+
+    if (order.discount?.is_active) {
+        if (order.discount.discount_type === DiscountType.Percentage) {
+            discountAmount = (subTotal * Number(order.discount.discount_amount)) / 100;
+        } else {
+            discountAmount = Number(order.discount.discount_amount);
+        }
+    }
+
+    discountAmount = Math.min(discountAmount, subTotal);
+    const vatAmount = 0;
+    const totalAmount = subTotal - discountAmount + vatAmount;
 
     await orderRepo.update(orderId, {
-        sub_total: result.subTotal,
-        discount_amount: result.discountAmount,
-        vat: result.vatAmount,
-        total_amount: result.totalAmount
+        sub_total: Number(subTotal.toFixed(2)),
+        discount_amount: Number(discountAmount.toFixed(2)),
+        vat: Number(vatAmount.toFixed(2)),
+        total_amount: Number(totalAmount.toFixed(2))
     } as SalesOrder);
 };
