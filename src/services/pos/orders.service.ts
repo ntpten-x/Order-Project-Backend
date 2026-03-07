@@ -85,11 +85,6 @@ export class OrdersService {
         const scope = this.getCacheScopeParts(branchId);
         const patterns = [
             cacheKey(this.LIST_CACHE_PREFIX, ...scope),
-            cacheKey(this.SUMMARY_CACHE_PREFIX, ...scope),
-            cacheKey(this.STATS_CACHE_PREFIX, ...scope),
-            cacheKey("dashboard:sales", ...scope),
-            cacheKey("dashboard:top-items", ...scope),
-            cacheKey("dashboard:overview", ...scope),
         ];
         invalidateCache(patterns);
     }
@@ -512,7 +507,7 @@ export class OrdersService {
             sortCreated
         );
 
-        if (options?.bypassCache || query?.trim() || page > 1) {
+        if (options?.bypassCache || query?.trim()) {
             return this.ordersModel.findAllSummary(page, limit, statuses, type, query, branchId, access, sortCreated);
         }
 
