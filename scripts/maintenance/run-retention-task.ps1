@@ -7,7 +7,6 @@ param(
 )
 
 $env:ORDER_RETENTION_ENABLED = "true"
-$env:ORDER_QUEUE_RETENTION_ENABLED = "true"
 $env:STOCK_ORDER_RETENTION_ENABLED = "true"
 $env:AUDIT_LOG_RETENTION_ENABLED = "true"
 

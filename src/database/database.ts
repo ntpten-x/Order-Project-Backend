@@ -30,7 +30,6 @@ import { SalesSummaryView } from "../entity/pos/views/SalesSummaryView"
 import { TopSellingItemsView } from "../entity/pos/views/TopSellingItemsView"
 
 import { Shifts } from "../entity/pos/Shifts"
-import { OrderQueue } from "../entity/pos/OrderQueue"
 import { AuditLog } from "../entity/AuditLog"
 import { PermissionResource } from "../entity/PermissionResource"
 import { PermissionAction } from "../entity/PermissionAction"
@@ -113,7 +112,7 @@ export const AppDataSource = new DataSource({
     username: process.env.DATABASE_USER,
     password: process.env.DATABASE_PASSWORD,
     database: process.env.DATABASE_NAME,
-    entities: [Users, Roles, Branch, IngredientsUnit, Ingredients, PurchaseOrder, StockOrdersItem, StockOrdersDetail, SalesOrder, SalesOrderItem, SalesOrderDetail, Category, Products, ProductsUnit, Tables, Delivery, Discounts, Payments, PaymentMethod, Shifts, ShopProfile, ShopPaymentAccount, PrintSettings, SalesSummaryView, TopSellingItemsView, OrderQueue, AuditLog, PermissionResource, PermissionAction, RolePermission, UserPermission, PermissionAudit, PermissionOverrideApproval],
+    entities: [Users, Roles, Branch, IngredientsUnit, Ingredients, PurchaseOrder, StockOrdersItem, StockOrdersDetail, SalesOrder, SalesOrderItem, SalesOrderDetail, Category, Products, ProductsUnit, Tables, Delivery, Discounts, Payments, PaymentMethod, Shifts, ShopProfile, ShopPaymentAccount, PrintSettings, SalesSummaryView, TopSellingItemsView, AuditLog, PermissionResource, PermissionAction, RolePermission, UserPermission, PermissionAudit, PermissionOverrideApproval],
     synchronize: synchronize as boolean,
     logging: typeormLogging,
     ssl: sslOptions,

@@ -4,8 +4,9 @@ import { OrdersService } from "../../services/pos/orders.service";
 import { OrdersController } from "../../controllers/pos/orders.controller";
 import { authenticateToken } from "../../middleware/auth.middleware";
 import { requireBranch } from "../../middleware/branch.middleware";
-import { authorizePermission, enforceOrderItemTargetScope, enforceOrderTargetScope } from "../../middleware/permission.middleware";
+import { authorizePermission, enforceOrderItemTargetScope, enforceOrderTargetScope, enforceServingGroupTargetScope } from "../../middleware/permission.middleware";
 import { validate } from "../../middleware/validate.middleware";
+import { paginationQuerySchema } from "../../utils/schemas/common.schema";
 import {
     addOrderItemSchema,
     createOrderSchema,
@@ -29,12 +30,12 @@ router.use(requireBranch)
 
 // Specific routes must come before dynamic routes like /:id
 router.get("/stats", authorizePermission("orders.page", "view"), ordersController.getStats)
-router.get("/summary", authorizePermission("orders.page", "view"), ordersController.findSummary)
+router.get("/summary", authorizePermission("orders.page", "view"), validate(paginationQuerySchema), ordersController.findSummary)
 router.get("/serve-board", authorizePermission("orders.page", "view"), ordersController.getServingBoard)
 router.patch("/serve-board/items/:id", authorizePermission("orders.page", "update"), enforceOrderItemTargetScope("id"), validate(updateServingItemStatusSchema), ordersController.updateServingItemStatus)
-router.patch("/serve-board/groups/:id", authorizePermission("orders.page", "update"), validate(updateServingGroupStatusSchema), ordersController.updateServingGroupStatus)
+router.patch("/serve-board/groups/:id", authorizePermission("orders.page", "update"), enforceServingGroupTargetScope("id"), validate(updateServingGroupStatusSchema), ordersController.updateServingGroupStatus)
 
-router.get("/", authorizePermission("orders.page", "view"), ordersController.findAll)
+router.get("/", authorizePermission("orders.page", "view"), validate(paginationQuerySchema), ordersController.findAll)
 router.get("/items", authorizePermission("orders.page", "view"), ordersController.findAllItems)
 router.get("/:id", authorizePermission("orders.page", "view"), enforceOrderTargetScope("id"), validate(orderIdParamSchema), ordersController.findOne)
 

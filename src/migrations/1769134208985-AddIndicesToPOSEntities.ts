@@ -6,7 +6,7 @@ export class AddIndicesToPOSEntities1769134208985 implements MigrationInterface 
     public async up(queryRunner: QueryRunner): Promise<void> {
         await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_sales_order_item_order_id"`);
         await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_21278276a20cd242a6ba10efc0" ON "tables" ("status") `);
-        await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_894a8151f2433fca9b81acb297" ON "products" ("product_name") `);
+        await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_products_display_name" ON "products" ("display_name") `);
         await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_4759a2cc727c8989652f479c64" ON "sales_order_item" ("order_id") `);
         await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_dc1e84f1d1e75e990952c40859" ON "shifts" ("user_id") `);
         await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_3e044af0f8d48f964102ee2bf6" ON "shifts" ("status") `);
@@ -22,7 +22,7 @@ export class AddIndicesToPOSEntities1769134208985 implements MigrationInterface 
         await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_3e044af0f8d48f964102ee2bf6"`);
         await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_dc1e84f1d1e75e990952c40859"`);
         await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_4759a2cc727c8989652f479c64"`);
-        await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_894a8151f2433fca9b81acb297"`);
+        await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_products_display_name"`);
         await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_21278276a20cd242a6ba10efc0"`);
         await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_sales_order_item_order_id" ON "sales_order_item" ("order_id") `);
     }

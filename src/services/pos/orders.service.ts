@@ -14,8 +14,6 @@ import { randomUUID } from "crypto";
 import { recalculateOrderTotal } from "./orderTotals.service";
 import { AppError } from "../../utils/AppError";
 import { ShiftsService } from "./shifts.service";
-import { OrderQueueService } from "./orderQueue.service";
-import { QueuePriority, QueueStatus, OrderQueue } from "../../entity/pos/OrderQueue";
 import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../../utils/auditLogger";
 import { getClientIp } from "../../utils/securityLogger";
 import { getDbContext, getRepository, runInTransaction } from "../../database/dbContext";
@@ -25,6 +23,7 @@ import { metrics } from "../../utils/metrics";
 import { PermissionScope } from "../../middleware/permission.middleware";
 import { CreatedSort } from "../../utils/sortCreated";
 import { groupServingBoardRows, ServingBoardGroup, ServingBoardRow } from "../../utils/servingBoard";
+import { getTableCacheInvalidationPatterns } from "./tableCache.utils";
 
 type AccessContext = {
     scope?: PermissionScope;
@@ -39,7 +38,6 @@ type ServingGroupContext = {
 export class OrdersService {
     private socketService = SocketService.getInstance();
     private shiftsService = new ShiftsService();
-    private queueService = new OrderQueueService();
     private readonly LIST_CACHE_PREFIX = "orders:list";
     private readonly LIST_CACHE_TTL = Number(process.env.ORDERS_LIST_CACHE_TTL_MS || 5000);
     private readonly SUMMARY_CACHE_PREFIX = "orders:summary";
@@ -68,7 +66,10 @@ export class OrdersService {
 
     private getAccessCacheScopeParts(access?: AccessContext): Array<string> {
         const scope = access?.scope ?? "all";
-        if (scope === "own" && access?.actorUserId) {
+        if (scope === "own") {
+            if (!access?.actorUserId) {
+                return ["scope", "none"];
+            }
             return ["scope", "own", "user", access.actorUserId];
         }
         return ["scope", scope];
@@ -82,8 +83,23 @@ export class OrdersService {
             cacheKey(this.STATS_CACHE_PREFIX, ...scope),
             cacheKey("dashboard:sales", ...scope),
             cacheKey("dashboard:top-items", ...scope),
+            cacheKey("dashboard:overview", ...scope),
         ];
         invalidateCache(patterns);
+    }
+
+    private invalidateTableCache(branchId?: string, tableId?: string): void {
+        invalidateCache(getTableCacheInvalidationPatterns(branchId, tableId));
+    }
+
+    private async emitTableUpdate(tableId: string, branchId?: string, manager?: EntityManager): Promise<void> {
+        const repo = manager ? manager.getRepository(Tables) : getRepository(Tables);
+        const table = await repo.findOneBy({ id: tableId });
+        const effectiveBranchId = table?.branch_id || branchId;
+        this.invalidateTableCache(effectiveBranchId, tableId);
+        if (table && effectiveBranchId) {
+            this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.tables.update, table);
+        }
     }
 
     private async ensureActiveShift(branchId?: string): Promise<void> {
@@ -377,9 +393,9 @@ export class OrdersService {
         return this.ordersModel.findAllItems(status, page, limit, branchId, access, sortCreated);
     }
 
-    async findOne(id: string, branchId?: string, access?: AccessContext): Promise<SalesOrder | null> {
+    async findOne(id: string, branchId?: string, access?: AccessContext, manager?: EntityManager): Promise<SalesOrder | null> {
         try {
-            return this.ordersModel.findOne(id, branchId, access)
+            return this.ordersModel.findOne(id, branchId, access, manager)
         } catch (error) {
             throw error
         }
@@ -418,7 +434,7 @@ export class OrdersService {
             .addSelect("table.table_name", "table_name")
             .addSelect("delivery.delivery_name", "delivery_name")
             .addSelect("item.product_id", "product_id")
-            .addSelect("COALESCE(product.display_name, product.product_name, '-')", "product_name")
+            .addSelect("COALESCE(product.display_name, '-')", "display_name")
             .addSelect("product.img_url", "product_image_url")
             .addSelect("item.quantity", "quantity")
             .addSelect("item.notes", "notes")
@@ -576,33 +592,12 @@ export class OrdersService {
             }
         }).then(async (createdOrder) => {
             this.invalidateReadCaches(createdOrder.branch_id || branchId);
-            // Post-transaction Side Effects
             const effectiveBranchId = createdOrder.branch_id || branchId;
             if (effectiveBranchId) {
                 this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.create, createdOrder);
             }
             if (createdOrder.table_id) {
-                const tablesRepo = getRepository(Tables)
-                tablesRepo.findOneBy({ id: createdOrder.table_id }).then(t => {
-                    if (!t) return;
-                    if (effectiveBranchId) {
-                        this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.tables.update, t);
-                    }
-                })
-            }
-
-            // Auto-add to queue if order is pending
-            if (createdOrder.status === OrderStatus.Pending) {
-                try {
-                    await this.queueService.addToQueue(
-                        createdOrder.id,
-                        QueuePriority.Normal,
-                        createdOrder.branch_id
-                    );
-                } catch (error) {
-                    // Log but don't fail if queue add fails (might already be in queue)
-                    console.warn('Failed to add order to queue:', error);
-                }
+                await this.emitTableUpdate(createdOrder.table_id, effectiveBranchId);
             }
 
             return createdOrder
@@ -701,27 +696,7 @@ export class OrdersService {
                     this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.create, fullOrder);
                 }
                 if (fullOrder.table_id) {
-                    const tablesRepo = getRepository(Tables)
-                    const t = await tablesRepo.findOneBy({ id: fullOrder.table_id })
-                    if (t) {
-                        if (effectiveBranchId) {
-                            this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.tables.update, t);
-                        }
-                    }
-                }
-
-                // Auto-add to queue if order is pending
-                if (fullOrder.status === OrderStatus.Pending) {
-                    try {
-                        await this.queueService.addToQueue(
-                            fullOrder.id,
-                            QueuePriority.Normal,
-                            fullOrder.branch_id
-                        );
-                    } catch (error) {
-                        // Log but don't fail if queue add fails (might already be in queue)
-                        console.warn('Failed to add order to queue:', error);
-                    }
+                    await this.emitTableUpdate(fullOrder.table_id, effectiveBranchId);
                 }
 
                 return fullOrder;
@@ -772,6 +747,7 @@ export class OrdersService {
                 ? ({ ...orders, status: normalizedStatus } as SalesOrder)
                 : orders;
 
+            const previousTableId = orderToUpdate.table_id || null;
             const updatedOrder = await this.ordersModel.update(id, payload, undefined, branchId)
 
             if (normalizedStatus === OrderStatus.Cancelled) {
@@ -784,36 +760,24 @@ export class OrdersService {
             const result = refreshedOrder ?? updatedOrder;
 
             const finalStatus = normalizedStatus ?? this.ensureValidStatus(String(result.status));
-            // Release table if Order is Completed or Cancelled
-            if ((finalStatus === OrderStatus.Completed || finalStatus === OrderStatus.Cancelled) && result.table_id) {
+            const nextTableId = result.table_id || null;
+
+            if (previousTableId && previousTableId !== nextTableId) {
                 const tablesRepo = getRepository(Tables);
-                await tablesRepo.update(result.table_id, { status: TableStatus.Available });
-                const t = await tablesRepo.findOneBy({ id: result.table_id });
-                if (t) {
-                    const effectiveBranchId = result.branch_id || branchId;
-                    if (effectiveBranchId) {
-                        this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.tables.update, t);
-                    }
-                }
+                await tablesRepo.update(previousTableId, { status: TableStatus.Available });
+                await this.emitTableUpdate(previousTableId, result.branch_id || branchId);
             }
 
-            // Update queue status based on order status
-            try {
-                const queueRepo = getRepository(OrderQueue);
-                const queueItem = await queueRepo.findOne({ where: { order_id: result.id } });
-
-                if (queueItem) {
-                    if (finalStatus === OrderStatus.Pending) {
-                        await this.queueService.updateStatus(queueItem.id, QueueStatus.Processing, branchId);
-                    } else if (finalStatus === OrderStatus.Completed || finalStatus === OrderStatus.Cancelled) {
-                        await this.queueService.updateStatus(queueItem.id, finalStatus === OrderStatus.Completed
-                            ? QueueStatus.Completed
-                            : QueueStatus.Cancelled, branchId);
-                    }
+            if (finalStatus === OrderStatus.Completed || finalStatus === OrderStatus.Cancelled) {
+                if (nextTableId) {
+                    const tablesRepo = getRepository(Tables);
+                    await tablesRepo.update(nextTableId, { status: TableStatus.Available });
+                    await this.emitTableUpdate(nextTableId, result.branch_id || branchId);
                 }
-            } catch (error) {
-                // Log but don't fail if queue update fails
-                console.warn('Failed to update queue status:', error);
+            } else if (nextTableId && previousTableId !== nextTableId) {
+                const tablesRepo = getRepository(Tables);
+                await tablesRepo.update(nextTableId, { status: TableStatus.Unavailable });
+                await this.emitTableUpdate(nextTableId, result.branch_id || branchId);
             }
 
             const emitBranchId = result.branch_id || branchId;
@@ -836,13 +800,7 @@ export class OrdersService {
             if (order?.table_id) {
                 const tablesRepo = getRepository(Tables);
                 await tablesRepo.update(order.table_id, { status: TableStatus.Available });
-                const t = await tablesRepo.findOneBy({ id: order.table_id });
-                if (t) {
-                    const effectiveBranchId = order.branch_id || branchId;
-                    if (effectiveBranchId) {
-                        this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.tables.update, t);
-                    }
-                }
+                await this.emitTableUpdate(order.table_id, order.branch_id || branchId);
             }
             await this.ordersModel.delete(id, undefined, branchId)
             const effectiveBranchId = order?.branch_id || branchId;
@@ -914,7 +872,7 @@ export class OrdersService {
                 await recalculateOrderTotal(orderId, manager);
                 await this.syncOrderStatusFromItems(orderId, branchId, manager);
 
-                const updatedOrder = await this.ordersModel.findOne(orderId, branchId);
+                const updatedOrder = await this.ordersModel.findOne(orderId, branchId, undefined, manager);
                 return updatedOrder!;
             } catch (error) {
                 throw error;
@@ -988,7 +946,12 @@ export class OrdersService {
                 await recalculateOrderTotal(updatedItemWithDetails.order_id, manager);
                 await this.syncOrderStatusFromItems(updatedItemWithDetails.order_id, branchId, manager);
 
-                const updatedOrder = await this.ordersModel.findOne(updatedItemWithDetails.order_id, branchId);
+                const updatedOrder = await this.ordersModel.findOne(
+                    updatedItemWithDetails.order_id,
+                    branchId,
+                    undefined,
+                    manager
+                );
                 return updatedOrder!;
             } catch (error) {
                 throw error;
@@ -1020,7 +983,7 @@ export class OrdersService {
                 await recalculateOrderTotal(orderId, manager);
                 await this.syncOrderStatusFromItems(orderId, branchId, manager);
 
-                const updatedOrder = await this.ordersModel.findOne(orderId, branchId);
+                const updatedOrder = await this.ordersModel.findOne(orderId, branchId, undefined, manager);
                 return updatedOrder!;
             } catch (error) {
                 throw error;

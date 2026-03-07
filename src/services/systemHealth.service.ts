@@ -898,11 +898,6 @@ export class SystemHealthService {
                 reason: "POS order list + dashboard filters",
             },
             {
-                table: "order_queue",
-                columns: ["status", "created_at"],
-                reason: "Kitchen queue filtering",
-            },
-            {
                 table: "payments",
                 columns: ["order_id", "status"],
                 reason: "Payment lookup and reconciliation",

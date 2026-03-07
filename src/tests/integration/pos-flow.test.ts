@@ -28,6 +28,10 @@ function todayIsoDate() {
     return new Date().toISOString().slice(0, 10);
 }
 
+function sleep(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 describe("POS critical flow (DB integration)", () => {
     beforeAll(async () => {
         if (!AppDataSource.isInitialized) {
@@ -68,7 +72,6 @@ describe("POS critical flow (DB integration)", () => {
             const category = await runAsBranch(async () =>
                 getRepository(Category).save({
                     branch_id: branchId,
-                    category_name: `it-posflow-cat-${now}`,
                     display_name: `IT POSFLOW CAT ${now}`,
                     is_active: true,
                 } as any)
@@ -77,7 +80,6 @@ describe("POS critical flow (DB integration)", () => {
             const unit = await runAsBranch(async () =>
                 getRepository(ProductsUnit).save({
                     branch_id: branchId,
-                    unit_name: `it-posflow-unit-${now}`,
                     display_name: `IT POSFLOW UNIT ${now}`,
                     is_active: true,
                 } as any)
@@ -86,7 +88,6 @@ describe("POS critical flow (DB integration)", () => {
             product = await runAsBranch(async () =>
                 getRepository(Products).save({
                     branch_id: branchId,
-                    product_name: `it-posflow-product-${now}`,
                     display_name: `IT POSFLOW PRODUCT ${now}`,
                     description: "integration test product",
                     price: 100,
@@ -140,12 +141,15 @@ describe("POS critical flow (DB integration)", () => {
 
         const loadedOrder = await runAsBranch(async () => ordersService.findOne(order.id, branchId));
         expect(loadedOrder?.items?.length).toBeGreaterThanOrEqual(2);
+        const initialUpdatedAt = loadedOrder?.update_date ? new Date(loadedOrder.update_date).getTime() : 0;
 
         const cancelItem = loadedOrder!.items[1];
+        await sleep(20);
         await runAsBranch(async () => ordersService.updateItemStatus(cancelItem.id, OrderStatus.Cancelled, branchId));
 
         const orderAfterCancel = await runAsBranch(async () => ordersService.findOne(order.id, branchId));
         expect(orderAfterCancel).toBeTruthy();
+        expect(new Date(orderAfterCancel!.update_date).getTime()).toBeGreaterThan(initialUpdatedAt);
         const nonCancelledTotal = (orderAfterCancel!.items || [])
             .filter((item) => item.status !== OrderStatus.Cancelled && item.status !== OrderStatus.cancelled)
             .reduce((sum, item) => sum + Number(item.total_price || 0), 0);
@@ -165,6 +169,23 @@ describe("POS critical flow (DB integration)", () => {
                 branchId
             )
         );
+
+        await expect(
+            runAsBranch(async () =>
+                paymentsService.create(
+                    {
+                        branch_id: branchId,
+                        order_id: order.id,
+                        payment_method_id: paymentMethod!.id,
+                        amount: Number(orderAfterCancel!.total_amount),
+                        amount_received: Number(orderAfterCancel!.total_amount),
+                        status: PaymentStatus.Success,
+                    } as any,
+                    userId,
+                    branchId
+                )
+            )
+        ).rejects.toThrow(/already (fully paid|settled)/i);
 
         const finalOrder = await runAsBranch(async () => ordersService.findOne(order.id, branchId));
         expect(finalOrder?.status).toBe(OrderStatus.Completed);
@@ -186,9 +207,117 @@ describe("POS critical flow (DB integration)", () => {
                 [order.id]
             );
             await AppDataSource.query(
-                `DELETE FROM order_queue WHERE order_id = $1`,
+                `DELETE FROM sales_order_detail WHERE orders_item_id IN (SELECT id FROM sales_order_item WHERE order_id = $1)`,
                 [order.id]
             );
+            await AppDataSource.query(
+                `DELETE FROM sales_order_item WHERE order_id = $1`,
+                [order.id]
+            );
+            await AppDataSource.query(
+                `DELETE FROM sales_orders WHERE id = $1`,
+                [order.id]
+            );
+        });
+    }, 120000);
+
+    it("returns fresh order data immediately after item detail updates", async () => {
+        const userRepo = AppDataSource.getRepository(Users);
+
+        const actor = await userRepo
+            .createQueryBuilder("u")
+            .leftJoinAndSelect("u.roles", "r")
+            .where("u.branch_id IS NOT NULL")
+            .andWhere("u.is_use = true")
+            .orderBy("u.create_date", "ASC")
+            .getOne();
+
+        expect(actor?.id).toBeTruthy();
+        expect(actor?.branch_id).toBeTruthy();
+
+        const branchId = actor!.branch_id!;
+        const userId = actor!.id;
+        const runAsBranch = <T>(fn: () => Promise<T>) =>
+            runWithDbContext({ branchId, userId, role: actor!.roles?.roles_name, isAdmin: actor!.roles?.roles_name === "Admin" }, fn);
+
+        let product = await runAsBranch(async () =>
+            getRepository(Products).findOne({ where: { branch_id: branchId, is_active: true } as any })
+        );
+
+        if (!product) {
+            const now = Date.now();
+            const category = await runAsBranch(async () =>
+                getRepository(Category).save({
+                    branch_id: branchId,
+                    display_name: `IT POSFLOW ITEM CAT ${now}`,
+                    is_active: true,
+                } as any)
+            );
+
+            const unit = await runAsBranch(async () =>
+                getRepository(ProductsUnit).save({
+                    branch_id: branchId,
+                    display_name: `IT POSFLOW ITEM UNIT ${now}`,
+                    is_active: true,
+                } as any)
+            );
+
+            product = await runAsBranch(async () =>
+                getRepository(Products).save({
+                    branch_id: branchId,
+                    display_name: `IT POSFLOW ITEM PRODUCT ${now}`,
+                    description: "integration test product",
+                    price: 80,
+                    price_delivery: 80,
+                    cost: 40,
+                    category_id: category.id,
+                    unit_id: unit.id,
+                    is_active: true,
+                } as any)
+            );
+        }
+
+        await runAsBranch(async () => {
+            await shiftsService.openShift(userId, 0, branchId);
+        });
+
+        const order = await runAsBranch(async () =>
+            ordersService.createFullOrder(
+                {
+                    branch_id: branchId,
+                    created_by_id: userId,
+                    order_type: OrderType.TakeAway,
+                    status: OrderStatus.Pending,
+                    items: [{ product_id: product!.id, quantity: 1 }],
+                },
+                branchId
+            )
+        );
+
+        const loadedOrder = await runAsBranch(async () => ordersService.findOne(order.id, branchId));
+        expect(loadedOrder?.items?.length).toBeGreaterThanOrEqual(1);
+
+        const targetItem = loadedOrder!.items[0];
+        const updatedOrder = await runAsBranch(async () =>
+            ordersService.updateItemDetails(
+                targetItem.id,
+                {
+                    quantity: 3,
+                    notes: "integration-note",
+                    details: [{ detail_name: "extra cheese", extra_price: 15 }],
+                },
+                branchId
+            )
+        );
+
+        const updatedItem = updatedOrder.items?.find((item) => item.id === targetItem.id);
+        expect(updatedItem).toBeTruthy();
+        expect(updatedItem?.quantity).toBe(3);
+        expect(updatedItem?.notes).toBe("integration-note");
+        expect(updatedItem?.details?.map((detail) => detail.detail_name)).toContain("extra cheese");
+        expect(Number(updatedItem?.total_price || 0)).toBeGreaterThan(Number(targetItem.total_price || 0));
+
+        await runAsBranch(async () => {
             await AppDataSource.query(
                 `DELETE FROM sales_order_detail WHERE orders_item_id IN (SELECT id FROM sales_order_item WHERE order_id = $1)`,
                 [order.id]

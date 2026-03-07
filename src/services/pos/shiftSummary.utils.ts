@@ -10,17 +10,19 @@ type PaymentLike = {
 export const SUCCESS_PAYMENT_STATUS = "Success";
 
 export const filterSuccessfulPayments = <T extends PaymentLike>(payments: T[]): T[] => {
-    return payments.filter((p) => p.status === SUCCESS_PAYMENT_STATUS);
+    return payments.filter((payment) => payment.status === SUCCESS_PAYMENT_STATUS);
 };
 
 export const sumPaymentAmount = (payments: PaymentLike[]): number => {
-    return payments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+    return payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
 };
 
 const CASH_TOKENS = ["cash", "เงินสด"];
 
 export const isCashPayment = (payment: PaymentLike): boolean => {
-    const methodName = `${payment.payment_method?.payment_method_name || ""} ${payment.payment_method?.display_name || ""}`.toLowerCase();
+    const methodName =
+        `${payment.payment_method?.payment_method_name || ""} ${payment.payment_method?.display_name || ""}`
+            .toLowerCase();
     return CASH_TOKENS.some((token) => methodName.includes(token));
 };
 

@@ -64,7 +64,6 @@ describe("Serving board flow (DB integration)", () => {
             const category = await runAsBranch(async () =>
                 getRepository(Category).save({
                     branch_id: branchId,
-                    category_name: `it-serving-cat-${now}`,
                     display_name: `IT SERVING CAT ${now}`,
                     is_active: true,
                 } as any)
@@ -73,7 +72,6 @@ describe("Serving board flow (DB integration)", () => {
             const unit = await runAsBranch(async () =>
                 getRepository(ProductsUnit).save({
                     branch_id: branchId,
-                    unit_name: `it-serving-unit-${now}`,
                     display_name: `IT SERVING UNIT ${now}`,
                     is_active: true,
                 } as any)
@@ -82,7 +80,6 @@ describe("Serving board flow (DB integration)", () => {
             product = await runAsBranch(async () =>
                 getRepository(Products).save({
                     branch_id: branchId,
-                    product_name: `it-serving-product-${now}`,
                     display_name: `IT SERVING PRODUCT ${now}`,
                     description: "integration test product",
                     price: 90,
@@ -222,7 +219,6 @@ describe("Serving board flow (DB integration)", () => {
 
         await runAsBranch(async () => {
             await AppDataSource.query(`DELETE FROM payments WHERE order_id = $1`, [order.id]);
-            await AppDataSource.query(`DELETE FROM order_queue WHERE order_id = $1`, [order.id]);
             await AppDataSource.query(
                 `DELETE FROM sales_order_detail WHERE orders_item_id IN (SELECT id FROM sales_order_item WHERE order_id = $1)`,
                 [order.id]

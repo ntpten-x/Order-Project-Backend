@@ -7,14 +7,99 @@ import { getRepository } from "../../database/dbContext"
 import { RealtimeEvents } from "../../utils/realtimeEvents"
 import { AppError } from "../../utils/AppError"
 import { Branch } from "../../entity/Branch"
+import { cacheKey, invalidateCache, queryCache, withCache } from "../../utils/cache"
 
 
 export class PaymentAccountService {
     private model: PaymentAccountModel
     private socketService = SocketService.getInstance()
+    private readonly CACHE_PREFIX = "payment-accounts"
+    private readonly CACHE_TTL = Number(process.env.POS_MASTER_CACHE_TTL_MS || 30_000)
 
     constructor(model: PaymentAccountModel) {
         this.model = model
+    }
+
+    private normalizeDigits(value?: string | null): string | undefined {
+        if (typeof value !== "string") return undefined;
+        const digits = value.replace(/\D/g, "");
+        return digits || undefined;
+    }
+
+    private normalizeMutableFields(data: Partial<CreatePaymentAccountDto>): Partial<CreatePaymentAccountDto> {
+        const next: Partial<CreatePaymentAccountDto> = { ...data };
+
+        if (next.account_name !== undefined) {
+            const accountName = next.account_name.trim();
+            if (!accountName) {
+                throw AppError.badRequest("Account name is required");
+            }
+            next.account_name = accountName;
+        }
+
+        if (next.account_number !== undefined) {
+            const accountNumber = this.normalizeDigits(next.account_number);
+            if (!accountNumber) {
+                throw AppError.badRequest("Account number is required");
+            }
+            if (accountNumber.length !== 10) {
+                throw AppError.badRequest("PromptPay number must be 10 digits");
+            }
+            next.account_number = accountNumber;
+        }
+
+        if (next.phone !== undefined) {
+            const phone = this.normalizeDigits(next.phone);
+            if (phone && phone.length !== 10) {
+                throw AppError.badRequest("Phone number must be 10 digits");
+            }
+            next.phone = phone;
+        }
+
+        if (next.address !== undefined) {
+            next.address = next.address.trim() || undefined;
+        }
+
+        if (next.bank_name !== undefined) {
+            next.bank_name = next.bank_name.trim() || undefined;
+        }
+
+        next.account_type = "PromptPay";
+        return next;
+    }
+
+    private getCacheScopeParts(branchId?: string): Array<string> {
+        if (branchId) return ["branch", branchId];
+        return ["public"];
+    }
+
+    private getInvalidationPatterns(branchId?: string, accountId?: string): string[] {
+        if (!branchId) {
+            return [`${this.CACHE_PREFIX}:`];
+        }
+
+        const scopes: Array<Array<string>> = [
+            ["branch", branchId],
+            ["admin"],
+            ["public"],
+        ];
+        const patterns: string[] = [];
+
+        for (const scope of scopes) {
+            patterns.push(cacheKey(this.CACHE_PREFIX, ...scope, "list"));
+            patterns.push(cacheKey(this.CACHE_PREFIX, ...scope, "list-all"));
+            patterns.push(cacheKey(this.CACHE_PREFIX, ...scope, "single"));
+            patterns.push(cacheKey(this.CACHE_PREFIX, ...scope, "number"));
+            if (accountId) {
+                patterns.push(cacheKey(this.CACHE_PREFIX, ...scope, "single", accountId));
+            }
+        }
+
+        return patterns;
+    }
+
+    private invalidatePaymentAccountCache(branchId?: string, accountId?: string): void {
+        invalidateCache(this.getInvalidationPatterns(branchId, accountId));
     }
 
     private async ensureBranchExists(branchId: string): Promise<void> {
@@ -80,37 +165,70 @@ export class PaymentAccountService {
         filters?: { status?: "active" | "inactive" }
     ) {
         const shopId = await this.getShopIdForBranch(branchId);
-        return await this.model.findAll(shopId, branchId, page, limit, q, filters);
+        const scope = this.getCacheScopeParts(branchId);
+        const key = cacheKey(
+            this.CACHE_PREFIX,
+            ...scope,
+            "list",
+            page,
+            limit,
+            (q || "").trim().toLowerCase(),
+            filters?.status || "all"
+        );
+
+        return withCache(
+            key,
+            () => this.model.findAll(shopId, branchId, page, limit, q, filters),
+            this.CACHE_TTL,
+            queryCache as any
+        );
     }
 
     async findOne(branchId: string, accountId: string) {
         const shopId = await this.getShopIdForBranch(branchId);
-        return await this.model.findOne(shopId, accountId, branchId);
+        const scope = this.getCacheScopeParts(branchId);
+        const key = cacheKey(this.CACHE_PREFIX, ...scope, "single", accountId);
+
+        return withCache(
+            key,
+            () => this.model.findOne(shopId, accountId, branchId),
+            this.CACHE_TTL,
+            queryCache as any
+        );
     }
 
     // Deprecated: use findAll instead
     async getAccounts(branchId: string) {
         const shopId = await this.getShopIdForBranch(branchId);
-        return await this.model.findByShopId(shopId, branchId)
+        const scope = this.getCacheScopeParts(branchId);
+        const key = cacheKey(this.CACHE_PREFIX, ...scope, "list-all");
+
+        return withCache(
+            key,
+            () => this.model.findByShopId(shopId, branchId),
+            this.CACHE_TTL,
+            queryCache as any
+        );
     }
 
     async createAccount(branchId: string, data: CreatePaymentAccountDto) {
         const shopId = await this.getShopIdForBranch(branchId);
+        const normalizedData = this.normalizeMutableFields(data) as CreatePaymentAccountDto;
         // Zod Validation
-        const validation = paymentAccountSchema.safeParse(data);
+        const validation = paymentAccountSchema.safeParse(normalizedData);
         if (!validation.success) {
-            throw new Error(validation.error.issues[0].message);
+            throw AppError.badRequest(validation.error.issues[0].message);
         }
 
         // Check for duplicate account number in this shop
-        const existing = await this.model.findByAccountNumber(shopId, data.account_number, branchId);
+        const existing = await this.model.findByAccountNumber(shopId, normalizedData.account_number, branchId);
 
         if (existing) throw AppError.conflict("This account number already exists in your shop.");
 
         const accountData: Partial<ShopPaymentAccount> = {
             branch_id: branchId,
             shop_id: shopId,
-            ...data
+            ...normalizedData
         };
 
         // If this is the first account, make it active
@@ -136,6 +254,7 @@ export class PaymentAccountService {
             this.throwPersistenceError(error, "Failed to create payment account.");
         }
 
+        this.invalidatePaymentAccountCache(branchId, account.id);
         this.socketService.emitToBranch(branchId, RealtimeEvents.paymentAccounts.create, account);
         return account;
     }
@@ -144,21 +263,22 @@ export class PaymentAccountService {
         const shopId = await this.getShopIdForBranch(branchId);
         const account = await this.model.findOne(shopId, accountId, branchId);
         if (!account) throw AppError.notFound("Payment account");
+        const normalizedData = this.normalizeMutableFields(data);
 
-        if (data.account_number) {
+        if (normalizedData.account_number) {
             // Validate format
-            const validation = paymentAccountSchema.pick({ account_number: true }).safeParse({ account_number: data.account_number });
+            const validation = paymentAccountSchema.pick({ account_number: true }).safeParse({ account_number: normalizedData.account_number });
             if (!validation.success) {
-                throw new Error(validation.error.issues[0].message);
+                throw AppError.badRequest(validation.error.issues[0].message);
             }
             // Check duplicates if changing number
-            if (data.account_number !== account.account_number) {
-                const scopedExisting = await this.model.findByAccountNumber(shopId, data.account_number, branchId);
+            if (normalizedData.account_number !== account.account_number) {
+                const scopedExisting = await this.model.findByAccountNumber(shopId, normalizedData.account_number, branchId);
                 if (scopedExisting) throw AppError.conflict("This account number already exists in your shop.");
             }
         }
 
-        Object.assign(account, data);
+        Object.assign(account, normalizedData);
 
         if (account.is_active) {
             await this.model.deactivateAll(shopId, branchId);
@@ -177,6 +297,7 @@ export class PaymentAccountService {
             this.throwPersistenceError(error, "Failed to update payment account.");
         }
 
+        this.invalidatePaymentAccountCache(branchId, accountId);
         this.socketService.emitToBranch(branchId, RealtimeEvents.paymentAccounts.update, savedAccount);
         return savedAccount;
     }
@@ -201,6 +322,7 @@ export class PaymentAccountService {
             this.throwPersistenceError(error, "Failed to activate payment account.");
         }
 
+        this.invalidatePaymentAccountCache(branchId, accountId);
         this.socketService.emitToBranch(branchId, RealtimeEvents.paymentAccounts.update, savedAccount);
         return savedAccount;
     }
@@ -221,6 +343,7 @@ export class PaymentAccountService {
             this.throwPersistenceError(error, "Failed to delete payment account.");
         }
 
+        this.invalidatePaymentAccountCache(branchId, accountId);
         this.socketService.emitToBranch(branchId, RealtimeEvents.paymentAccounts.delete, { id: accountId });
         return result;
     }

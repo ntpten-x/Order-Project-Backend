@@ -1,4 +1,4 @@
-import { Column, Entity, PrimaryGeneratedColumn, Index, ManyToOne, JoinColumn } from "typeorm"
+import { Column, Entity, PrimaryGeneratedColumn, Index, ManyToOne, JoinColumn, UpdateDateColumn } from "typeorm"
 import { Branch } from "../Branch"
 
 @Entity()
@@ -36,6 +36,6 @@ export class ShopProfile {
     @Column({ type: "varchar", length: 20, default: "PromptPay" })
     account_type!: string
 
-    @Column({ type: "timestamptz", default: () => "CURRENT_TIMESTAMP" })
+    @UpdateDateColumn({ type: "timestamptz" })
     update_date!: Date
 }

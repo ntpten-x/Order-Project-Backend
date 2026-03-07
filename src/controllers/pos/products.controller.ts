@@ -83,7 +83,7 @@ export class ProductsController {
 
     findOneByName = catchAsync(async (req: Request, res: Response) => {
         const branchId = getBranchId(req as any);
-        const product = await this.productsService.findOneByName(req.params.product_name, branchId);
+        const product = await this.productsService.findOneByName(req.params.name, branchId);
         if (!product) {
             throw AppError.notFound("สินค้า");
         }
@@ -115,7 +115,7 @@ export class ProductsController {
             new_values: req.body,
             path: req.originalUrl,
             method: req.method,
-            description: `Create product ${(product as any).product_name || (product as any).display_name || (product as any).id}`,
+            description: `Create product ${(product as any).display_name || (product as any).id}`,
         });
 
         return ApiResponses.created(res, product);

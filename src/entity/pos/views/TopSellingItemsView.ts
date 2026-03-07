@@ -9,7 +9,7 @@ import { Products } from "../Products";
             .createQueryBuilder()
             .select("o.branch_id", "branch_id")
             .addSelect("oi.product_id", "product_id")
-            .addSelect("p.display_name", "product_name")
+            .addSelect("p.display_name", "display_name")
             .addSelect("p.img_url", "img_url")
             .addSelect("p.category_id", "category_id")
             .addSelect("SUM(oi.quantity)", "total_quantity")
@@ -34,7 +34,7 @@ export class TopSellingItemsView {
     product_id!: string;
 
     @ViewColumn()
-    product_name!: string;
+    display_name!: string;
 
     @ViewColumn()
     img_url!: string;

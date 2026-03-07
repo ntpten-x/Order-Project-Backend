@@ -10,20 +10,20 @@ export type ServingBoardRow = {
     table_name: string | null;
     delivery_name: string | null;
     product_id: string;
-    product_name: string;
+    display_name: string;
     product_image_url: string | null;
     quantity: number;
     notes: string | null;
     serving_status: ServingStatus;
     serving_group_id: string;
     serving_group_created_at: Date | string;
-    details: { detail_name: string; extra_price: number }[];
+    details: { detail_name: string; extra_price: number }[] | string;
 };
 
 export type ServingBoardItem = {
     id: string;
     product_id: string;
-    product_name: string;
+    display_name: string;
     product_image_url: string | null;
     quantity: number;
     notes: string | null;
@@ -59,7 +59,9 @@ function toIso(value: Date | string): string {
     return Number.isNaN(parsed.getTime()) ? new Date().toISOString() : parsed.toISOString();
 }
 
-export function getServingBoardSource(row: Pick<ServingBoardRow, "order_type" | "table_name" | "delivery_name" | "delivery_code" | "order_no">): {
+export function getServingBoardSource(
+    row: Pick<ServingBoardRow, "order_type" | "table_name" | "delivery_name" | "delivery_code" | "order_no">
+): {
     title: string;
     subtitle: string | null;
 } {
@@ -111,17 +113,18 @@ export function groupServingBoardRows(rows: ServingBoardRow[]): ServingBoardGrou
         }
 
         const group = groups.get(row.serving_group_id)!;
-        let parsedDetails = [];
+        let parsedDetails: { detail_name: string; extra_price: number }[] = [];
+
         try {
-            parsedDetails = typeof row.details === 'string' ? JSON.parse(row.details) : (row.details || []);
-        } catch (e) {
+            parsedDetails = typeof row.details === "string" ? JSON.parse(row.details) : (row.details || []);
+        } catch {
             parsedDetails = [];
         }
 
         group.items.push({
             id: row.item_id,
             product_id: row.product_id,
-            product_name: row.product_name,
+            display_name: row.display_name,
             product_image_url: row.product_image_url,
             quantity: Number(row.quantity || 0),
             notes: row.notes || null,

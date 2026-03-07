@@ -10,11 +10,12 @@ export class DeliveryModels {
         branchId?: string,
         sortCreated: CreatedSort = "old",
         status?: "active" | "inactive"
-    ): Promise<{ data: Delivery[], total: number, page: number, last_page: number }> {
+    ): Promise<{ data: Delivery[]; total: number; page: number; last_page: number }> {
         try {
             const skip = (page - 1) * limit;
             const deliveryRepository = getRepository(Delivery);
-            const query = deliveryRepository.createQueryBuilder("delivery")
+            const query = deliveryRepository
+                .createQueryBuilder("delivery")
                 .orderBy("delivery.create_date", createdSortToOrder(sortCreated));
 
             if (branchId) {
@@ -22,7 +23,9 @@ export class DeliveryModels {
             }
 
             if (q && q.trim()) {
-                query.andWhere("delivery.delivery_name ILIKE :q", { q: `%${q.trim()}%` });
+                query.andWhere("(delivery.delivery_name ILIKE :q OR delivery.delivery_prefix ILIKE :q)", {
+                    q: `%${q.trim()}%`,
+                });
             }
 
             if (status === "active") {
@@ -36,10 +39,10 @@ export class DeliveryModels {
                 data,
                 total,
                 page,
-                last_page: Math.max(1, Math.ceil(total / limit))
+                last_page: Math.max(1, Math.ceil(total / limit)),
             };
         } catch (error) {
-            throw error
+            throw error;
         }
     }
 
@@ -50,30 +53,34 @@ export class DeliveryModels {
             if (branchId) {
                 where.branch_id = branchId;
             }
-            return deliveryRepository.findOneBy(where)
+            return deliveryRepository.findOneBy(where);
         } catch (error) {
-            throw error
+            throw error;
         }
     }
 
     async findOneByName(delivery_name: string, branchId?: string): Promise<Delivery | null> {
         try {
-            const deliveryRepository = getRepository(Delivery);
-            const where: any = { delivery_name };
+            const normalizedName = delivery_name.trim().toLowerCase();
+            const query = getRepository(Delivery)
+                .createQueryBuilder("delivery")
+                .where("LOWER(TRIM(delivery.delivery_name)) = :deliveryName", { deliveryName: normalizedName });
+
             if (branchId) {
-                where.branch_id = branchId;
+                query.andWhere("delivery.branch_id = :branchId", { branchId });
             }
-            return deliveryRepository.findOneBy(where)
+
+            return query.getOne();
         } catch (error) {
-            throw error
+            throw error;
         }
     }
 
     async create(data: Delivery): Promise<Delivery> {
         try {
-            return getRepository(Delivery).save(data)
+            return getRepository(Delivery).save(data);
         } catch (error) {
-            throw error
+            throw error;
         }
     }
 
@@ -81,17 +88,17 @@ export class DeliveryModels {
         try {
             const deliveryRepository = getRepository(Delivery);
             if (branchId) {
-                await deliveryRepository.update({ id, branch_id: branchId } as any, data)
+                await deliveryRepository.update({ id, branch_id: branchId } as any, data);
             } else {
-                await deliveryRepository.update(id, data)
+                await deliveryRepository.update(id, data);
             }
-            const updatedDelivery = await this.findOne(id, branchId)
+            const updatedDelivery = await this.findOne(id, branchId);
             if (!updatedDelivery) {
-                throw new Error("ไม่พบข้อมูลบริการส่งที่ต้องการค้นหา")
+                throw new Error("Delivery not found after update");
             }
-            return updatedDelivery
+            return updatedDelivery;
         } catch (error) {
-            throw error
+            throw error;
         }
     }
 
@@ -99,12 +106,12 @@ export class DeliveryModels {
         try {
             const deliveryRepository = getRepository(Delivery);
             if (branchId) {
-                await deliveryRepository.delete({ id, branch_id: branchId } as any)
+                await deliveryRepository.delete({ id, branch_id: branchId } as any);
             } else {
-                await deliveryRepository.delete(id)
+                await deliveryRepository.delete(id);
             }
         } catch (error) {
-            throw error
+            throw error;
         }
     }
 }

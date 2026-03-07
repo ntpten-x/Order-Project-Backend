@@ -2,22 +2,18 @@ import { Column, Entity, PrimaryGeneratedColumn, Index, ManyToOne, JoinColumn } 
 import { Branch } from "../Branch"
 
 export enum DiscountType {
-    Fixed = "Fixed",        // ลดเป็นจำนวนเงินคงที่ (บาท)
-    Percentage = "Percentage" // ลดเป็นเปอร์เซ็นต์ (%)
+    Fixed = "Fixed",
+    Percentage = "Percentage"
 }
 
 @Entity()
-@Index(["discount_name", "branch_id"], { unique: true })
 @Index(["display_name", "branch_id"], { unique: true })
 export class Discounts {
     @PrimaryGeneratedColumn("uuid")
-    id!: string // รหัสส่วนลด
+    id!: string
 
     @Column({ type: "varchar", length: 100 })
-    discount_name!: string // ชื่อส่วนลด (สำหรับระบบ)
-
-    @Column({ type: "varchar", length: 100 })
-    display_name!: string // ชื่อส่วนลดที่แสดงให้ลูกค้าเห็น
+    display_name!: string
 
     @Index()
     @Column({ name: "branch_id", type: "uuid" })
@@ -28,17 +24,17 @@ export class Discounts {
     branch?: Branch
 
     @Column({ type: "text", nullable: true })
-    description?: string // รายละเอียดเงื่อนไข
+    description?: string
 
     @Column({ type: "decimal", precision: 12, scale: 2, default: 0 })
-    discount_amount!: number // มูลค่าส่วนลด (บาท หรือ %)
+    discount_amount!: number
 
     @Column({ type: "enum", enum: DiscountType })
-    discount_type!: DiscountType // ประเภทส่วนลด
+    discount_type!: DiscountType
 
     @Column({ type: "boolean", default: true })
-    is_active!: boolean // สถานะการใช้งาน
+    is_active!: boolean
 
     @Column({ type: "timestamptz", default: () => "CURRENT_TIMESTAMP" })
-    create_date!: Date // วันที่สร้าง
+    create_date!: Date
 }

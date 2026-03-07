@@ -1,13 +1,14 @@
-import { Column, Entity, PrimaryGeneratedColumn, ManyToOne, JoinColumn, Index } from "typeorm"
+import { Column, Entity, PrimaryGeneratedColumn, ManyToOne, JoinColumn, Index, CreateDateColumn, UpdateDateColumn } from "typeorm"
 import { Category } from "./Category"
 import { ProductsUnit } from "./ProductsUnit"
 import { Branch } from "../Branch"
 
 @Entity()
 @Index(["branch_id"])
+@Index(["display_name"])
 export class Products {
     @PrimaryGeneratedColumn("uuid")
-    id!: string // รหัสสินค้า
+    id!: string
 
     @Column({ name: "branch_id", type: "uuid" })
     branch_id?: string
@@ -16,51 +17,47 @@ export class Products {
     @JoinColumn({ name: "branch_id" })
     branch?: Branch
 
-    @Index()
     @Column({ type: "varchar", length: 100 })
-    product_name!: string // ชื่อสินค้า (ระบบ)
-
-    @Column({ type: "varchar", length: 100 })
-    display_name!: string // ชื่อสินค้า (แสดงผล)
+    display_name!: string
 
     @Column({ type: "text" })
-    description!: string // รายละเอียดสินค้า
+    description!: string
 
     @Column({ type: "decimal", precision: 12, scale: 2, default: 0 })
-    price!: number // ราคาสินค้า
+    price!: number
 
     @Column({ type: "decimal", precision: 12, scale: 2, default: 0 })
-    cost!: number // ต้นทุนสินค้า
+    cost!: number
 
     @Column({ name: "price_delivery", type: "decimal", precision: 12, scale: 2, default: 0 })
-    price_delivery!: number // Delivery price
+    price_delivery!: number
 
     @Index()
     @Column({ name: "category_id", type: "uuid" })
-    category_id!: string // รหัสหมวดหมู่
+    category_id!: string
 
     @Index()
     @Column({ name: "unit_id", type: "uuid" })
-    unit_id!: string // รหัสหน่วยสินค้า
+    unit_id!: string
 
     @Column({ type: "text", nullable: true })
-    img_url!: string | null // URL รูปภาพสินค้า
+    img_url!: string | null
 
-    @Column({ type: "timestamptz", default: () => "CURRENT_TIMESTAMP" })
-    create_date!: Date // วันที่สร้าง
+    @CreateDateColumn({ type: "timestamptz" })
+    create_date!: Date
 
-    @Column({ type: "timestamptz", default: () => "CURRENT_TIMESTAMP" })
-    update_date!: Date // วันที่แก้ไขล่าสุด
+    @UpdateDateColumn({ type: "timestamptz" })
+    update_date!: Date
 
     @Index()
     @Column({ type: "boolean", default: true })
-    is_active!: boolean // สถานะการใช้งาน
+    is_active!: boolean
 
     @ManyToOne(() => Category, (category) => category.products)
     @JoinColumn({ name: "category_id" })
-    category!: Category // ความสัมพันธ์เชื่อมไปยังหมวดหมู่
+    category!: Category
 
     @ManyToOne(() => ProductsUnit, (productsUnit) => productsUnit.products)
     @JoinColumn({ name: "unit_id" })
-    unit!: ProductsUnit // ความสัมพันธ์เชื่อมไปยังหน่วยสินค้า
+    unit!: ProductsUnit
 }

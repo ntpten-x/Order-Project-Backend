@@ -31,7 +31,7 @@ export class ProductsModels {
 
     /**
      * Find all products with pagination, filtering, and search
-     * Uses indexed columns: category_id, product_name, is_active, branch_id
+     * Uses indexed columns: category_id, display_name, is_active, branch_id
      */
     async findAll(
         page: number = 1,
@@ -81,11 +81,11 @@ export class ProductsModels {
         // Use indexed is_active filter
         baseQuery = addBooleanFilter(baseQuery, is_active, "is_active", "products");
 
-        // Search uses indexed product_name column
+        // Search uses display_name and description columns
         baseQuery = addSearchCondition(
             baseQuery,
             q,
-            ["product_name", "display_name", "description"],
+            ["display_name", "description"],
             "products"
         );
 
@@ -168,12 +168,12 @@ export class ProductsModels {
     }
 
     /**
-     * Find product by name
-     * Uses indexed product_name column
+     * Find product by display name
      */
-    async findOneByName(product_name: string, branchId?: string): Promise<Products | null> {
+    async findOneByName(name: string, branchId?: string): Promise<Products | null> {
         const scope = this.getCacheScopeParts(branchId);
-        const key = cacheKey(this.CACHE_PREFIX, ...scope, 'name', product_name);
+        const normalizedName = name.trim().toLowerCase();
+        const key = cacheKey(this.CACHE_PREFIX, ...scope, 'name', normalizedName);
         
         return withCache(
             key,
@@ -182,7 +182,7 @@ export class ProductsModels {
                 const query = productsRepository.createQueryBuilder("products")
                     .leftJoinAndSelect("products.category", "category")
                     .leftJoinAndSelect("products.unit", "unit")
-                    .where("products.product_name = :product_name", { product_name });
+                    .where("LOWER(TRIM(products.display_name)) = :name", { name: normalizedName });
                 
                 if (branchId) {
                     query.andWhere("products.branch_id = :branchId", { branchId });
@@ -256,17 +256,29 @@ export class ProductsModels {
      * Called after create/update/delete operations
      */
     private invalidateProductCache(branchId?: string, id?: string): void {
-        if (!branchId) return;
+        const ctx = getDbContext();
+        const effectiveBranchId = branchId ?? ctx?.branchId;
 
-        const patterns = [
-            cacheKey(this.CACHE_PREFIX, "branch", branchId, "list"),
-            cacheKey(this.CACHE_PREFIX, "branch", branchId, "name"),
-            cacheKey(this.CACHE_PREFIX, "branch", branchId, "active-count"),
-            cacheKey(this.CACHE_PREFIX, "branch", branchId, "count-by-category"),
+        if (!effectiveBranchId) {
+            invalidateCache([`${this.CACHE_PREFIX}:`]);
+            return;
+        }
+
+        const scopes: Array<Array<string>> = [
+            ["branch", effectiveBranchId],
+            ["admin"],
+            ["public"],
         ];
+        const patterns: string[] = [];
 
-        if (id) {
-            patterns.push(cacheKey(this.CACHE_PREFIX, "branch", branchId, "single", id));
+        for (const scope of scopes) {
+            patterns.push(cacheKey(this.CACHE_PREFIX, ...scope, "list"));
+            patterns.push(cacheKey(this.CACHE_PREFIX, ...scope, "name"));
+            patterns.push(cacheKey(this.CACHE_PREFIX, ...scope, "active-count"));
+            patterns.push(cacheKey(this.CACHE_PREFIX, ...scope, "count-by-category"));
+            if (id) {
+                patterns.push(cacheKey(this.CACHE_PREFIX, ...scope, "single", id));
+            }
         }
 
         invalidateCache(patterns);

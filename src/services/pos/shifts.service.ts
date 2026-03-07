@@ -11,6 +11,7 @@ import { RealtimeEvents } from "../../utils/realtimeEvents";
 import { isCancelledStatus } from "../../utils/orderStatus";
 import { filterSuccessfulPayments, sumCashPaymentAmount, sumPaymentAmount } from "./shiftSummary.utils";
 import { CreatedSort, createdSortToOrder } from "../../utils/sortCreated";
+import { cacheKey, invalidateCache, queryCache, withCache } from "../../utils/cache";
 
 type PendingOrderTypeSummary = {
     orderType: string;
@@ -54,6 +55,9 @@ function formatPendingOrderSummary(byOrderType: PendingOrderTypeSummary[]): stri
 }
 
 export class ShiftsService {
+    private readonly SHIFT_SUMMARY_CACHE_PREFIX = "shifts:summary";
+    private readonly SHIFT_SUMMARY_CACHE_TTL = Number(process.env.SHIFT_SUMMARY_CACHE_TTL_MS || 60_000);
+
     private get shiftsRepo() {
         return getRepository(Shifts);
     }
@@ -67,6 +71,27 @@ export class ShiftsService {
         return getRepository(SalesOrder);
     }
     private socketService = SocketService.getInstance();
+
+    private getShiftSummaryCacheKey(shiftId: string, branchId?: string): string {
+        return cacheKey(
+            this.SHIFT_SUMMARY_CACHE_PREFIX,
+            branchId ? "branch" : "global",
+            branchId || "all",
+            shiftId
+        );
+    }
+
+    private invalidateShiftCaches(branchId?: string, shiftId?: string): void {
+        const patterns = [
+            cacheKey(this.SHIFT_SUMMARY_CACHE_PREFIX, branchId ? "branch" : "global", branchId || "all"),
+        ];
+
+        if (shiftId) {
+            patterns.push(this.getShiftSummaryCacheKey(shiftId, branchId));
+        }
+
+        invalidateCache(patterns);
+    }
 
     async openShift(userId: string, startAmount: number, branchId?: string): Promise<Shifts> {
         if (!branchId) {
@@ -111,6 +136,7 @@ export class ShiftsService {
             throw error;
         });
 
+        this.invalidateShiftCaches(branchId, shift.id);
         this.socketService.emitToBranch(branchId, RealtimeEvents.shifts.update, shift);
         return shift;
     }
@@ -227,11 +253,12 @@ export class ShiftsService {
         }
 
         const savedShift = await this.shiftsRepo.save(activeShift);
+        this.invalidateShiftCaches(branchId, savedShift.id);
         this.socketService.emitToBranch(branchId, RealtimeEvents.shifts.update, savedShift);
         return savedShift;
     }
 
-    async getShiftSummary(shiftId: string, branchId?: string) {
+    private async buildShiftSummary(shiftId: string, branchId?: string) {
         const shift = await this.shiftsRepo.findOne({
             where: branchId ? ({ id: shiftId, branch_id: branchId } as any) : ({ id: shiftId } as any),
             relations: ["payments", "payments.payment_method", "payments.order", "payments.order.items", "payments.order.items.product", "payments.order.items.product.category", "payments.order.items.product.unit"]
@@ -335,6 +362,32 @@ export class ShiftsService {
             categories: categoryCounts,
             top_products: topProducts
         };
+    }
+
+    async getShiftSummary(shiftId: string, branchId?: string) {
+        const shiftMeta = await this.shiftsRepo.findOne({
+            where: branchId ? ({ id: shiftId, branch_id: branchId } as any) : ({ id: shiftId } as any),
+            select: {
+                id: true,
+                status: true,
+            },
+        });
+
+        if (!shiftMeta) {
+            throw new AppError("ไม่พบข้อมูลกะ", 404);
+        }
+
+        if (shiftMeta.status !== ShiftStatus.CLOSED) {
+            return this.buildShiftSummary(shiftId, branchId);
+        }
+
+        const key = this.getShiftSummaryCacheKey(shiftId, branchId);
+        return withCache(
+            key,
+            () => this.buildShiftSummary(shiftId, branchId),
+            this.SHIFT_SUMMARY_CACHE_TTL,
+            queryCache as any,
+        );
     }
 
     async getShiftHistory(options: {

@@ -13,6 +13,7 @@ router.use(authenticateToken)
 router.use(requireBranch)
 
 router.get("/accounts", authorizePermission("payment_accounts.page", "view"), controller.getAccounts)
+router.get("/accounts/:id", authorizePermission("payment_accounts.page", "view"), validate(paymentAccountIdParamSchema), controller.getAccount)
 router.post("/accounts", authorizePermission("payment_accounts.page", "create"), validate(createPaymentAccountSchema), controller.createAccount)
 router.put("/accounts/:id", authorizePermission("payment_accounts.page", "update"), validate(updatePaymentAccountSchema), controller.updateAccount)
 router.patch("/accounts/:id/activate", authorizePermission("payment_accounts.page", "update"), validate(paymentAccountIdParamSchema), controller.activateAccount)

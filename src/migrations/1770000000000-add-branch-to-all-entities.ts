@@ -12,7 +12,6 @@ export class AddBranchToAllEntities1770000000000 implements MigrationInterface {
         await queryRunner.query(`ALTER TABLE "category" DROP CONSTRAINT IF EXISTS "UQ_category_name"`);
         await queryRunner.query(`ALTER TABLE "category" DROP CONSTRAINT IF EXISTS "category_category_name_key"`);
         await queryRunner.query(`ALTER TABLE "category" DROP CONSTRAINT IF EXISTS "category_display_name_key"`);
-        await queryRunner.query(`CREATE UNIQUE INDEX IF NOT EXISTS "UQ_category_name_branch" ON "category" ("category_name", "branch_id") WHERE "branch_id" IS NOT NULL`);
         await queryRunner.query(`CREATE UNIQUE INDEX IF NOT EXISTS "UQ_category_display_name_branch" ON "category" ("display_name", "branch_id") WHERE "branch_id" IS NOT NULL`);
 
         // Add branch_id to Products
@@ -27,7 +26,6 @@ export class AddBranchToAllEntities1770000000000 implements MigrationInterface {
         // Drop unique constraints and recreate with branch_id
         await queryRunner.query(`ALTER TABLE "products_unit" DROP CONSTRAINT IF EXISTS "products_unit_unit_name_key"`);
         await queryRunner.query(`ALTER TABLE "products_unit" DROP CONSTRAINT IF EXISTS "products_unit_display_name_key"`);
-        await queryRunner.query(`CREATE UNIQUE INDEX IF NOT EXISTS "UQ_products_unit_name_branch" ON "products_unit" ("unit_name", "branch_id") WHERE "branch_id" IS NOT NULL`);
         await queryRunner.query(`CREATE UNIQUE INDEX IF NOT EXISTS "UQ_products_unit_display_name_branch" ON "products_unit" ("display_name", "branch_id") WHERE "branch_id" IS NOT NULL`);
 
         // Add branch_id to Discounts
@@ -37,7 +35,6 @@ export class AddBranchToAllEntities1770000000000 implements MigrationInterface {
         // Drop unique constraints and recreate with branch_id
         await queryRunner.query(`ALTER TABLE "discounts" DROP CONSTRAINT IF EXISTS "discounts_discount_name_key"`);
         await queryRunner.query(`ALTER TABLE "discounts" DROP CONSTRAINT IF EXISTS "discounts_display_name_key"`);
-        await queryRunner.query(`CREATE UNIQUE INDEX IF NOT EXISTS "UQ_discounts_name_branch" ON "discounts" ("discount_name", "branch_id") WHERE "branch_id" IS NOT NULL`);
         await queryRunner.query(`CREATE UNIQUE INDEX IF NOT EXISTS "UQ_discounts_display_name_branch" ON "discounts" ("display_name", "branch_id") WHERE "branch_id" IS NOT NULL`);
 
         // Add branch_id to Delivery
@@ -134,14 +131,12 @@ export class AddBranchToAllEntities1770000000000 implements MigrationInterface {
         await queryRunner.query(`ALTER TABLE "delivery" DROP COLUMN IF EXISTS "branch_id"`);
 
         // Remove branch_id from Discounts
-        await queryRunner.query(`DROP INDEX IF EXISTS "UQ_discounts_name_branch"`);
         await queryRunner.query(`DROP INDEX IF EXISTS "UQ_discounts_display_name_branch"`);
         await queryRunner.query(`ALTER TABLE "discounts" DROP CONSTRAINT IF EXISTS "FK_discounts_branch"`);
         await queryRunner.query(`DROP INDEX IF EXISTS "IDX_discounts_branch_id"`);
         await queryRunner.query(`ALTER TABLE "discounts" DROP COLUMN IF EXISTS "branch_id"`);
 
         // Remove branch_id from ProductsUnit
-        await queryRunner.query(`DROP INDEX IF EXISTS "UQ_products_unit_name_branch"`);
         await queryRunner.query(`DROP INDEX IF EXISTS "UQ_products_unit_display_name_branch"`);
         await queryRunner.query(`ALTER TABLE "products_unit" DROP CONSTRAINT IF EXISTS "FK_products_unit_branch"`);
         await queryRunner.query(`DROP INDEX IF EXISTS "IDX_products_unit_branch_id"`);
@@ -153,7 +148,6 @@ export class AddBranchToAllEntities1770000000000 implements MigrationInterface {
         await queryRunner.query(`ALTER TABLE "products" DROP COLUMN IF EXISTS "branch_id"`);
 
         // Remove branch_id from Category
-        await queryRunner.query(`DROP INDEX IF EXISTS "UQ_category_name_branch"`);
         await queryRunner.query(`DROP INDEX IF EXISTS "UQ_category_display_name_branch"`);
         await queryRunner.query(`ALTER TABLE "category" DROP CONSTRAINT IF EXISTS "FK_category_branch"`);
         await queryRunner.query(`DROP INDEX IF EXISTS "IDX_category_branch_id"`);

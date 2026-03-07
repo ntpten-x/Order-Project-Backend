@@ -45,7 +45,7 @@ export type DashboardOverview = {
 type TopItemQueryRow = {
     branch_id: string;
     product_id: string;
-    product_name: string;
+    display_name: string;
     img_url: string | null;
     category_id: string | null;
     total_quantity: string | number;
@@ -238,7 +238,7 @@ export class DashboardService {
             .leftJoin(Products, "product", "product.id = item.product_id")
             .select("order.branch_id", "branch_id")
             .addSelect("item.product_id", "product_id")
-            .addSelect("COALESCE(product.display_name, '')", "product_name")
+            .addSelect("COALESCE(product.display_name, '')", "display_name")
             .addSelect("COALESCE(product.img_url, '')", "img_url")
             .addSelect("product.category_id", "category_id")
             .addSelect("COALESCE(SUM(item.quantity), 0)::int", "total_quantity")
@@ -275,7 +275,7 @@ export class DashboardService {
         return rows.map((row) => ({
             branch_id: row.branch_id,
             product_id: row.product_id,
-            product_name: row.product_name || "",
+            display_name: row.display_name || "",
             img_url: row.img_url || "",
             category_id: row.category_id || "",
             total_quantity: Number(row.total_quantity || 0),

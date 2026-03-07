@@ -12,6 +12,7 @@ import {
     paymentMethodNameParamSchema,
     updatePaymentMethodSchema
 } from "../../utils/schemas/posMaster.schema";
+import { paginationQuerySchema } from "../../utils/schemas/common.schema";
 
 const router = Router()
 
@@ -22,7 +23,7 @@ const paymentMethodController = new PaymentMethodController(paymentMethodService
 router.use(authenticateToken)
 router.use(requireBranch)
 
-router.get("/", authorizePermission("payment_method.page", "view"), paymentMethodController.findAll)
+router.get("/", authorizePermission("payment_method.page", "view"), validate(paginationQuerySchema), paymentMethodController.findAll)
 router.get("/:id", authorizePermission("payment_method.page", "view"), validate(paymentMethodIdParamSchema), paymentMethodController.findOne)
 router.get("/getByName/:name", authorizePermission("payment_method.page", "view"), validate(paymentMethodNameParamSchema), paymentMethodController.findByName)
 

@@ -53,15 +53,6 @@ export class EnforceBranchIntegrityAndIndexes1770500000000 implements MigrationI
               AND o."branch_id" IS NOT NULL
         `);
 
-        await queryRunner.query(`
-            UPDATE "order_queue" q
-            SET "branch_id" = o."branch_id"
-            FROM "sales_orders" o
-            WHERE q."order_id" = o."id"
-              AND q."branch_id" IS NULL
-              AND o."branch_id" IS NOT NULL
-        `);
-
         // Generic backfill fallback
         const branchTables = [
             "category",
@@ -76,7 +67,6 @@ export class EnforceBranchIntegrityAndIndexes1770500000000 implements MigrationI
             "shifts",
             "shop_profile",
             "shop_payment_account",
-            "order_queue",
             "promotions",
             "stock_ingredients_unit",
             "stock_ingredients",
@@ -207,17 +197,6 @@ export class EnforceBranchIntegrityAndIndexes1770500000000 implements MigrationI
             END $$;
         `);
 
-        await queryRunner.query(`
-            DO $$
-            BEGIN
-                IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'FK_order_queue_order_branch') THEN
-                    ALTER TABLE "order_queue"
-                    ADD CONSTRAINT "FK_order_queue_order_branch"
-                    FOREIGN KEY ("order_id", "branch_id")
-                    REFERENCES "sales_orders"("id", "branch_id");
-                END IF;
-            END $$;
-        `);
     }
 
     public async down(queryRunner: QueryRunner): Promise<void> {
@@ -225,7 +204,6 @@ export class EnforceBranchIntegrityAndIndexes1770500000000 implements MigrationI
         await queryRunner.query(`SELECT set_config('app.is_admin', 'true', true)`);
         await queryRunner.query(`SELECT set_config('app.branch_id', '', true)`);
 
-        await queryRunner.query(`ALTER TABLE "order_queue" DROP CONSTRAINT IF EXISTS "FK_order_queue_order_branch"`);
         await queryRunner.query(`ALTER TABLE "payments" DROP CONSTRAINT IF EXISTS "FK_payments_shift_branch"`);
         await queryRunner.query(`ALTER TABLE "payments" DROP CONSTRAINT IF EXISTS "FK_payments_payment_method_branch"`);
         await queryRunner.query(`ALTER TABLE "payments" DROP CONSTRAINT IF EXISTS "FK_payments_order_branch"`);
@@ -257,7 +235,6 @@ export class EnforceBranchIntegrityAndIndexes1770500000000 implements MigrationI
             "shifts",
             "shop_profile",
             "shop_payment_account",
-            "order_queue",
             "promotions",
             "stock_ingredients_unit",
             "stock_ingredients",

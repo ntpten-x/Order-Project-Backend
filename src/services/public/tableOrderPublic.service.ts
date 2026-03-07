@@ -149,7 +149,7 @@ export class PublicTableOrderService {
         return {
             id: item.id,
             product_id: item.product_id,
-            product_name: item.product?.display_name || item.product?.product_name || "-",
+            display_name: item.product?.display_name || "-",
             quantity: Number(item.quantity || 0),
             price: Number(item.price || 0),
             total_price: Number(item.total_price || 0),
@@ -210,7 +210,6 @@ export class PublicTableOrderService {
                 category.id,
                 {
                     id: category.id,
-                    category_name: category.category_name,
                     display_name: category.display_name,
                     items: [] as Array<{
                         id: string;
@@ -219,7 +218,7 @@ export class PublicTableOrderService {
                         description: string;
                         price: number;
                         img_url: string | null;
-                        unit_name: string | null;
+                        unit_display_name: string | null;
                     }>,
                 },
             ]),
@@ -229,7 +228,6 @@ export class PublicTableOrderService {
             if (!categoryMap.has(product.category_id)) {
                 categoryMap.set(product.category_id, {
                     id: product.category_id,
-                    category_name: product.category?.category_name || "",
                     display_name: product.category?.display_name || "Uncategorized",
                     items: [],
                 });
@@ -243,7 +241,7 @@ export class PublicTableOrderService {
                 description: product.description || "",
                 price: Number(product.price || 0),
                 img_url: product.img_url || null,
-                unit_name: product.unit?.display_name || product.unit?.unit_name || null,
+                unit_display_name: product.unit?.display_name || null,
             });
         }
 
