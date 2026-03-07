@@ -5,6 +5,7 @@ import usersRouter from "./src/routes/users.route";
 import rolesRouter from "./src/routes/roles.route";
 import authRouter from "./src/routes/auth.route";
 import { createServer } from "http";
+import { createServer as createNetServer } from "net";
 import { Server } from "socket.io";
 import { SocketService } from "./src/services/socket.service";
 import cookieParser from "cookie-parser";
@@ -54,7 +55,12 @@ import { registerProcessErrorHandlers } from "./src/utils/processErrorHandlers";
 
 const app = express();
 const httpServer = createServer(app); // Wrap express with HTTP server
-const port = process.env.PORT || 4000;
+const configuredPort = Number(process.env.PORT || 4000);
+const port = Number.isFinite(configuredPort) && configuredPort > 0 ? configuredPort : 4000;
+const portAutoFallbackEnabled = process.env.PORT_AUTO_FALLBACK
+    ? process.env.PORT_AUTO_FALLBACK === "true"
+    : process.env.NODE_ENV !== "production";
+const maxPortFallbackAttempts = Math.max(1, Number(process.env.PORT_AUTO_FALLBACK_ATTEMPTS || 20));
 registerProcessErrorHandlers({ server: httpServer });
 logger.info({ port }, "backend bootstrap starting");
 const rawBodyLimitMb = Number(process.env.REQUEST_BODY_LIMIT_MB || 20);
@@ -74,6 +80,44 @@ const setNoStoreHeaders = (res: express.Response): void => {
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
     res.setHeader("Pragma", "no-cache");
     res.setHeader("Expires", "0");
+};
+
+const isPortAvailable = async (candidatePort: number): Promise<boolean> => {
+    return await new Promise<boolean>((resolve) => {
+        const tester = createNetServer();
+
+        tester.once("error", (error: NodeJS.ErrnoException) => {
+            if (error.code === "EADDRINUSE" || error.code === "EACCES") {
+                resolve(false);
+                return;
+            }
+
+            resolve(false);
+        });
+
+        tester.once("listening", () => {
+            tester.close(() => resolve(true));
+        });
+
+        tester.listen(candidatePort);
+    });
+};
+
+const resolveListenPort = async (preferredPort: number): Promise<number> => {
+    if (!portAutoFallbackEnabled) {
+        return preferredPort;
+    }
+
+    for (let offset = 0; offset < maxPortFallbackAttempts; offset++) {
+        const candidatePort = preferredPort + offset;
+        if (await isPortAvailable(candidatePort)) {
+            return candidatePort;
+        }
+    }
+
+    throw new Error(
+        `No available port found starting from ${preferredPort} within ${maxPortFallbackAttempts} attempts`
+    );
 };
 
 // Trust proxy only when explicitly configured.
@@ -418,7 +462,7 @@ app.use(errorTracking);
 // Global Error Handler
 app.use(globalErrorHandler);
 
-connectDatabase().then(() => {
+connectDatabase().then(async () => {
     httpServer.on("error", (error: any) => {
         if (error?.code === "EADDRINUSE") {
             logger.error({ port, err: error }, "port is already in use");
@@ -434,8 +478,16 @@ connectDatabase().then(() => {
         logger.error({ err: error, port }, "server failed to start");
     });
 
-    httpServer.listen(port, () => { // Listen on httpServer
-        logger.info({ port }, "server is running");
+    const listenPort = await resolveListenPort(port);
+    if (listenPort !== port) {
+        logger.warn({
+            requestedPort: port,
+            fallbackPort: listenPort,
+        }, "requested port is busy; using fallback port");
+    }
+
+    httpServer.listen(listenPort, () => { // Listen on httpServer
+        logger.info({ port: listenPort }, "server is running");
         startupWarmupService.schedule();
     });
 }).catch((error) => {

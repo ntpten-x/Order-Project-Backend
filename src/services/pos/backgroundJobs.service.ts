@@ -1,4 +1,4 @@
-import { Job } from "bullmq";
+import { Job, Queue } from "bullmq";
 import {
     AnyPosBackgroundJobData,
     AnyPosBackgroundJobResult,
@@ -9,6 +9,7 @@ import {
     SyncStockJobData,
     SyncStockJobResult,
 } from "../../queues/posBackground.queue";
+import { AppError } from "../../utils/AppError";
 
 export type PosBackgroundJobStatus = {
     id: string;
@@ -34,18 +35,33 @@ export type PosBackgroundJobAccessContext = {
 };
 
 export class BackgroundJobsService {
-    private readonly queue = getPosBackgroundQueue();
+    private queue: Queue<AnyPosBackgroundJobData, AnyPosBackgroundJobResult, string> | null = null;
+
+    private getQueue(): Queue<AnyPosBackgroundJobData, AnyPosBackgroundJobResult, string> {
+        if (this.queue) {
+            return this.queue;
+        }
+
+        try {
+            this.queue = getPosBackgroundQueue();
+            return this.queue;
+        } catch (error) {
+            const message = error instanceof Error ? error.message : "Background jobs are unavailable";
+            throw new AppError(message, 503);
+        }
+    }
 
     async enqueueGenerateReport(
         payload: GenerateReportJobData
     ): Promise<Job<AnyPosBackgroundJobData, AnyPosBackgroundJobResult, string>> {
+        const queue = this.getQueue();
         const normalizedPayload: GenerateReportJobData = {
             ...payload,
             format: payload.format ?? "json",
             requestedAt: payload.requestedAt ?? new Date().toISOString(),
         };
 
-        return this.queue.add(PosBackgroundJobNames.GenerateReport, normalizedPayload, {
+        return queue.add(PosBackgroundJobNames.GenerateReport, normalizedPayload, {
             priority: 2,
         });
     }
@@ -53,18 +69,19 @@ export class BackgroundJobsService {
     async enqueueSyncStock(
         payload: SyncStockJobData
     ): Promise<Job<AnyPosBackgroundJobData, AnyPosBackgroundJobResult, string>> {
+        const queue = this.getQueue();
         const normalizedPayload: SyncStockJobData = {
             ...payload,
             requestedAt: payload.requestedAt ?? new Date().toISOString(),
         };
 
-        return this.queue.add(PosBackgroundJobNames.SyncStock, normalizedPayload, {
+        return queue.add(PosBackgroundJobNames.SyncStock, normalizedPayload, {
             priority: 1,
         });
     }
 
     async getJob(jobId: string): Promise<Job<AnyPosBackgroundJobData, AnyPosBackgroundJobResult, string> | undefined> {
-        const job = await this.queue.getJob(jobId);
+        const job = await this.getQueue().getJob(jobId);
         return job ?? undefined;
     }
 
