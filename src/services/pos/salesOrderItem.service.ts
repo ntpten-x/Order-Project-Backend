@@ -29,8 +29,10 @@ export class SalesOrderItemService {
     }
 
     private deriveOrderStatusFromItems(items: SalesOrderItem[]): OrderStatus | null {
+        if (items.length === 0) return null;
+
         const activeItems = items.filter((item) => !isCancelledStatus(String(item.status)));
-        if (activeItems.length === 0) return null;
+        if (activeItems.length === 0) return OrderStatus.Cancelled;
 
         activeItems.forEach((item) => {
             normalizeOrderStatus(String(item.status));

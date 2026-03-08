@@ -24,6 +24,7 @@ import { PermissionScope } from "../../middleware/permission.middleware";
 import { CreatedSort } from "../../utils/sortCreated";
 import { groupServingBoardRows, ServingBoardGroup, ServingBoardRow } from "../../utils/servingBoard";
 import { getTableCacheInvalidationPatterns } from "./tableCache.utils";
+import { getDashboardCacheInvalidationPatterns } from "./dashboardCache.utils";
 
 type AccessContext = {
     scope?: PermissionScope;
@@ -85,6 +86,9 @@ export class OrdersService {
         const scope = this.getCacheScopeParts(branchId);
         const patterns = [
             cacheKey(this.LIST_CACHE_PREFIX, ...scope),
+            cacheKey(this.SUMMARY_CACHE_PREFIX, ...scope),
+            cacheKey(this.STATS_CACHE_PREFIX, ...scope),
+            ...getDashboardCacheInvalidationPatterns(branchId),
         ];
         invalidateCache(patterns);
     }
@@ -192,17 +196,38 @@ export class OrdersService {
     }
 
     private async lockItemForUpdate(manager: EntityManager, itemId: string, branchId?: string): Promise<SalesOrderItem> {
-        const query = manager
-            .getRepository(SalesOrderItem)
+        const itemRepo = manager.getRepository(SalesOrderItem);
+        const lockQuery = itemRepo
             .createQueryBuilder("item")
-            .leftJoinAndSelect("item.product", "product")
-            .leftJoinAndSelect("item.details", "details")
-            .leftJoinAndSelect("item.order", "order")
             .setLock("pessimistic_write")
             .where("item.id = :itemId", { itemId });
 
         if (branchId) {
-            query.andWhere("order.branch_id = :branchId", { branchId });
+            lockQuery.andWhere(
+                `EXISTS (
+                    SELECT 1
+                    FROM sales_orders so
+                    WHERE so.id = item.order_id
+                      AND so.branch_id = :branchId
+                )`,
+                { branchId },
+            );
+        }
+
+        const lockedItem = await lockQuery.getOne();
+        if (!lockedItem) {
+            throw new AppError("Item not found", 404);
+        }
+
+        const query = itemRepo
+            .createQueryBuilder("item")
+            .leftJoinAndSelect("item.product", "product")
+            .leftJoinAndSelect("item.details", "details")
+            .innerJoinAndSelect("item.order", "salesOrder")
+            .where("item.id = :itemId", { itemId });
+
+        if (branchId) {
+            query.andWhere("salesOrder.branch_id = :branchId", { branchId });
         }
 
         const item = await query.getOne();
@@ -411,8 +436,10 @@ export class OrdersService {
     }
 
     private deriveOrderStatusFromItems(items: SalesOrderItem[]): OrderStatus | null {
+        if (items.length === 0) return null;
+
         const activeItems = items.filter((item) => !isCancelledStatus(String(item.status)));
-        if (activeItems.length === 0) return null;
+        if (activeItems.length === 0) return OrderStatus.Cancelled;
 
         // Current flow keeps all active items under "Pending/กำลังดำเนินการ".
         activeItems.forEach((item) => {

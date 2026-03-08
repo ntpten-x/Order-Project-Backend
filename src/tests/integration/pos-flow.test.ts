@@ -221,6 +221,242 @@ describe("POS critical flow (DB integration)", () => {
         });
     }, 120000);
 
+    it("marks a delivery order as cancelled and hides it from open summaries when all items are cancelled", async () => {
+        const userRepo = AppDataSource.getRepository(Users);
+
+        const actor = await userRepo
+            .createQueryBuilder("u")
+            .leftJoinAndSelect("u.roles", "r")
+            .where("u.branch_id IS NOT NULL")
+            .andWhere("u.is_use = true")
+            .orderBy("u.create_date", "ASC")
+            .getOne();
+
+        expect(actor?.id).toBeTruthy();
+        expect(actor?.branch_id).toBeTruthy();
+
+        const branchId = actor!.branch_id!;
+        const userId = actor!.id;
+        const runAsBranch = <T>(fn: () => Promise<T>) =>
+            runWithDbContext({ branchId, userId, role: actor!.roles?.roles_name, isAdmin: actor!.roles?.roles_name === "Admin" }, fn);
+
+        let product = await runAsBranch(async () =>
+            getRepository(Products).findOne({ where: { branch_id: branchId, is_active: true } as any })
+        );
+
+        if (!product) {
+            const now = Date.now();
+            const category = await runAsBranch(async () =>
+                getRepository(Category).save({
+                    branch_id: branchId,
+                    display_name: `IT POSFLOW DELIVERY CAT ${now}`,
+                    is_active: true,
+                } as any)
+            );
+
+            const unit = await runAsBranch(async () =>
+                getRepository(ProductsUnit).save({
+                    branch_id: branchId,
+                    display_name: `IT POSFLOW DELIVERY UNIT ${now}`,
+                    is_active: true,
+                } as any)
+            );
+
+            product = await runAsBranch(async () =>
+                getRepository(Products).save({
+                    branch_id: branchId,
+                    display_name: `IT POSFLOW DELIVERY PRODUCT ${now}`,
+                    description: "integration test delivery product",
+                    price: 100,
+                    price_delivery: 100,
+                    cost: 50,
+                    category_id: category.id,
+                    unit_id: unit.id,
+                    is_active: true,
+                } as any)
+            );
+        }
+
+        await runAsBranch(async () => {
+            await shiftsService.openShift(userId, 0, branchId);
+        });
+
+        const order = await runAsBranch(async () =>
+            ordersService.createFullOrder(
+                {
+                    branch_id: branchId,
+                    created_by_id: userId,
+                    order_type: OrderType.Delivery,
+                    status: OrderStatus.Pending,
+                    items: [
+                        { product_id: product!.id, quantity: 1 },
+                        { product_id: product!.id, quantity: 1 },
+                    ],
+                },
+                branchId
+            )
+        );
+
+        try {
+            const loadedOrder = await runAsBranch(async () => ordersService.findOne(order.id, branchId));
+            expect(loadedOrder?.items?.length).toBeGreaterThanOrEqual(2);
+
+            for (const item of loadedOrder?.items || []) {
+                await runAsBranch(async () => ordersService.updateItemStatus(item.id, OrderStatus.Cancelled, branchId));
+            }
+
+            const cancelledOrder = await runAsBranch(async () => ordersService.findOne(order.id, branchId));
+            expect(cancelledOrder?.status).toBe(OrderStatus.Cancelled);
+            expect(Number(cancelledOrder?.total_amount || 0)).toBe(0);
+
+            const summary = await runAsBranch(async () =>
+                ordersService.findAllSummary(
+                    1,
+                    20,
+                    [OrderStatus.Pending, OrderStatus.Cooking, OrderStatus.Served, OrderStatus.WaitingForPayment],
+                    OrderType.Delivery,
+                    undefined,
+                    branchId
+                )
+            );
+
+            expect(summary.data.some((row) => row.id === order.id)).toBe(false);
+        } finally {
+            await runAsBranch(async () => {
+                await AppDataSource.query(
+                    `DELETE FROM sales_order_detail WHERE orders_item_id IN (SELECT id FROM sales_order_item WHERE order_id = $1)`,
+                    [order.id]
+                );
+                await AppDataSource.query(
+                    `DELETE FROM sales_order_item WHERE order_id = $1`,
+                    [order.id]
+                );
+                await AppDataSource.query(
+                    `DELETE FROM sales_orders WHERE id = $1`,
+                    [order.id]
+                );
+            });
+        }
+    }, 120000);
+
+    it("marks a takeaway order as cancelled and hides it from open summaries when all items are cancelled", async () => {
+        const userRepo = AppDataSource.getRepository(Users);
+
+        const actor = await userRepo
+            .createQueryBuilder("u")
+            .leftJoinAndSelect("u.roles", "r")
+            .where("u.branch_id IS NOT NULL")
+            .andWhere("u.is_use = true")
+            .orderBy("u.create_date", "ASC")
+            .getOne();
+
+        expect(actor?.id).toBeTruthy();
+        expect(actor?.branch_id).toBeTruthy();
+
+        const branchId = actor!.branch_id!;
+        const userId = actor!.id;
+        const runAsBranch = <T>(fn: () => Promise<T>) =>
+            runWithDbContext({ branchId, userId, role: actor!.roles?.roles_name, isAdmin: actor!.roles?.roles_name === "Admin" }, fn);
+
+        let product = await runAsBranch(async () =>
+            getRepository(Products).findOne({ where: { branch_id: branchId, is_active: true } as any })
+        );
+
+        if (!product) {
+            const now = Date.now();
+            const category = await runAsBranch(async () =>
+                getRepository(Category).save({
+                    branch_id: branchId,
+                    display_name: `IT POSFLOW TAKEAWAY CAT ${now}`,
+                    is_active: true,
+                } as any)
+            );
+
+            const unit = await runAsBranch(async () =>
+                getRepository(ProductsUnit).save({
+                    branch_id: branchId,
+                    display_name: `IT POSFLOW TAKEAWAY UNIT ${now}`,
+                    is_active: true,
+                } as any)
+            );
+
+            product = await runAsBranch(async () =>
+                getRepository(Products).save({
+                    branch_id: branchId,
+                    display_name: `IT POSFLOW TAKEAWAY PRODUCT ${now}`,
+                    description: "integration test takeaway product",
+                    price: 100,
+                    price_delivery: 100,
+                    cost: 50,
+                    category_id: category.id,
+                    unit_id: unit.id,
+                    is_active: true,
+                } as any)
+            );
+        }
+
+        await runAsBranch(async () => {
+            await shiftsService.openShift(userId, 0, branchId);
+        });
+
+        const order = await runAsBranch(async () =>
+            ordersService.createFullOrder(
+                {
+                    branch_id: branchId,
+                    created_by_id: userId,
+                    order_type: OrderType.TakeAway,
+                    status: OrderStatus.Pending,
+                    items: [
+                        { product_id: product!.id, quantity: 1 },
+                        { product_id: product!.id, quantity: 1 },
+                    ],
+                },
+                branchId
+            )
+        );
+
+        try {
+            const loadedOrder = await runAsBranch(async () => ordersService.findOne(order.id, branchId));
+            expect(loadedOrder?.items?.length).toBeGreaterThanOrEqual(2);
+
+            for (const item of loadedOrder?.items || []) {
+                await runAsBranch(async () => ordersService.updateItemStatus(item.id, OrderStatus.Cancelled, branchId));
+            }
+
+            const cancelledOrder = await runAsBranch(async () => ordersService.findOne(order.id, branchId));
+            expect(cancelledOrder?.status).toBe(OrderStatus.Cancelled);
+            expect(Number(cancelledOrder?.total_amount || 0)).toBe(0);
+
+            const summary = await runAsBranch(async () =>
+                ordersService.findAllSummary(
+                    1,
+                    20,
+                    [OrderStatus.Pending, OrderStatus.Cooking, OrderStatus.Served, OrderStatus.WaitingForPayment],
+                    OrderType.TakeAway,
+                    undefined,
+                    branchId
+                )
+            );
+
+            expect(summary.data.some((row) => row.id === order.id)).toBe(false);
+        } finally {
+            await runAsBranch(async () => {
+                await AppDataSource.query(
+                    `DELETE FROM sales_order_detail WHERE orders_item_id IN (SELECT id FROM sales_order_item WHERE order_id = $1)`,
+                    [order.id]
+                );
+                await AppDataSource.query(
+                    `DELETE FROM sales_order_item WHERE order_id = $1`,
+                    [order.id]
+                );
+                await AppDataSource.query(
+                    `DELETE FROM sales_orders WHERE id = $1`,
+                    [order.id]
+                );
+            });
+        }
+    }, 120000);
+
     it("returns fresh order data immediately after item detail updates", async () => {
         const userRepo = AppDataSource.getRepository(Users);
 

@@ -14,6 +14,7 @@ import { isCancelledStatus } from "../../utils/orderStatus";
 import { ShiftsService } from "./shifts.service";
 import { SocketService } from "../socket.service";
 import { getTableCacheInvalidationPatterns } from "./tableCache.utils";
+import { getDashboardCacheInvalidationPatterns } from "./dashboardCache.utils";
 
 type AccessContext = {
     scope?: "none" | "own" | "branch" | "all";
@@ -36,6 +37,10 @@ export class PaymentsService {
 
     private invalidateTableCache(branchId?: string, tableId?: string): void {
         invalidateCache(getTableCacheInvalidationPatterns(branchId, tableId));
+    }
+
+    private invalidateDashboardCaches(branchId?: string): void {
+        invalidateCache(getDashboardCacheInvalidationPatterns(branchId));
     }
 
     private async findAccessiblePayment(
@@ -129,6 +134,7 @@ export class PaymentsService {
             where: branchId ? ({ id: orderId, branch_id: branchId } as any) : { id: orderId },
         });
         const effectiveBranchId = refreshedOrder?.branch_id || branchId;
+        this.invalidateDashboardCaches(effectiveBranchId);
         if (refreshedOrder && effectiveBranchId) {
             this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.update, refreshedOrder);
         }
