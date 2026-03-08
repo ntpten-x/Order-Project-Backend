@@ -54,9 +54,6 @@ export class SalesOrder {
     @Column({ type: "varchar", length: 120, nullable: true })
     customer_name?: string | null;
 
-    @Column({ type: "varchar", length: 20, nullable: true })
-    customer_phone?: string | null;
-
     @Column({ type: "decimal", precision: 12, scale: 2, default: 0 })
     sub_total!: number; // ยอดรวมค่าอาหาร (ก่อนหักส่วนลด/ภาษี)
 

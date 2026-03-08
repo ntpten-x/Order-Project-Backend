@@ -29,16 +29,15 @@ export const publicTakeawaySubmitOrderSchema = z
             .object({
                 items: z.array(orderItemSchema).min(1).max(100),
                 customer_name: z.string().trim().max(120).optional(),
-                customer_phone: z.string().trim().max(20).optional(),
             })
             .strict(),
     })
     .superRefine((value, ctx) => {
-        if (!value.body.customer_name?.trim() && !value.body.customer_phone?.trim()) {
+        if (!value.body.customer_name?.trim()) {
             ctx.addIssue({
                 code: z.ZodIssueCode.custom,
                 path: ["body", "customer_name"],
-                message: "Customer name or phone is required",
+                message: "Customer name is required",
             });
         }
     });

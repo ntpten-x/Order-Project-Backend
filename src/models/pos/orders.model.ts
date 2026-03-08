@@ -142,7 +142,7 @@ export class OrdersModels {
         if (searchTerm) {
             const search = `${searchTerm}%`;
             qb.andWhere(
-                "(order.order_no ILIKE :search OR order.delivery_code ILIKE :search OR order.customer_name ILIKE :search OR order.customer_phone ILIKE :search OR table.table_name ILIKE :search OR delivery.delivery_name ILIKE :search)",
+                "(order.order_no ILIKE :search OR order.delivery_code ILIKE :search OR order.customer_name ILIKE :search OR table.table_name ILIKE :search OR delivery.delivery_name ILIKE :search)",
                 { search }
             );
         }
@@ -225,7 +225,6 @@ export class OrdersModels {
                     "order.delivery_id",
                     "order.delivery_code",
                     "order.customer_name",
-                    "order.customer_phone",
                     "order.sub_total",
                     "order.discount_id",
                     "order.discount_amount",
@@ -307,7 +306,6 @@ export class OrdersModels {
                     o.order_no ILIKE $${qIndex}
                     OR o.delivery_code ILIKE $${qIndex}
                     OR o.customer_name ILIKE $${qIndex}
-                    OR o.customer_phone ILIKE $${qIndex}
                     OR EXISTS (
                         SELECT 1
                         FROM tables t
@@ -368,7 +366,6 @@ export class OrdersModels {
                         o.total_amount,
                         o.delivery_code,
                         o.customer_name,
-                        o.customer_phone,
                         o.table_id,
                         o.delivery_id
                     FROM sales_orders o
@@ -394,7 +391,6 @@ export class OrdersModels {
                     bo.total_amount,
                     bo.delivery_code,
                     bo.customer_name,
-                    bo.customer_phone,
                     bo.table_id,
                     bo.delivery_id,
                     t.table_name,
@@ -423,7 +419,6 @@ export class OrdersModels {
                 total_amount: Number(row.total_amount),
                 delivery_code: row.delivery_code,
                 customer_name: row.customer_name,
-                customer_phone: row.customer_phone,
                 table_id: row.table_id,
                 delivery_id: row.delivery_id,
                 table: row.table_name ? { table_name: row.table_name } : null,

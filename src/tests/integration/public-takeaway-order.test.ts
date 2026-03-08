@@ -220,10 +220,9 @@ describeIntegration("Public takeaway-order flow (DB integration)", () => {
             expect(first.mode).toBe("create");
             expect(first.order.order_type).toBe(OrderType.TakeAway);
             expect(first.order.customer_name).toBeTruthy();
-            expect(first.order.customer_phone).toBeNull();
 
             const second = await publicService.submitByToken(fixture.token, {
-                customer_phone: "0891234567",
+                customer_name: "0891234567",
                 items: [{ product_id: productId, quantity: 2, notes: "less sweet" }],
             });
             expect(second.order).toBeTruthy();
@@ -234,12 +233,11 @@ describeIntegration("Public takeaway-order flow (DB integration)", () => {
 
             expect(second.mode).toBe("create");
             expect(second.order.id).not.toBe(first.order.id);
-            expect(second.order.customer_name).toBeNull();
-            expect(second.order.customer_phone).toBe("0891234567");
+            expect(second.order.customer_name).toBe("0891234567");
 
             const loaded = await publicService.resolveOrderByToken(fixture.token, second.order.id);
             expect(loaded.order?.id).toBe(second.order.id);
-            expect(loaded.order?.customer_phone).toBe("0891234567");
+            expect(loaded.order?.customer_name).toBe("0891234567");
         } finally {
             await cleanupOrders(createdOrderIds);
             await fixture.restore();

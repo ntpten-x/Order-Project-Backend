@@ -19,7 +19,6 @@ type PublicOrderItemInput = {
 type SubmitTakeawayOrderInput = {
     items: PublicOrderItemInput[];
     customer_name?: string;
-    customer_phone?: string;
 };
 
 export class PublicTakeawayOrderService {
@@ -53,21 +52,15 @@ export class PublicTakeawayOrderService {
         return profile;
     }
 
-    private normalizeCustomerIdentity(input: Pick<SubmitTakeawayOrderInput, "customer_name" | "customer_phone">) {
+    private normalizeCustomerIdentity(input: Pick<SubmitTakeawayOrderInput, "customer_name">) {
         const customerName = input.customer_name?.trim() || "";
-        const customerPhone = (input.customer_phone || "").replace(/\D/g, "").trim();
 
-        if (!customerName && !customerPhone) {
-            throw new AppError("Please provide a customer name or phone number", 400);
-        }
-
-        if (customerPhone && (customerPhone.length < 8 || customerPhone.length > 15)) {
-            throw new AppError("Customer phone number is invalid", 400);
+        if (!customerName) {
+            throw new AppError("Please provide a customer name", 400);
         }
 
         return {
             customerName: customerName || undefined,
-            customerPhone: customerPhone || undefined,
         };
     }
 
@@ -149,7 +142,6 @@ export class PublicTakeawayOrderService {
             status: order.status,
             order_type: order.order_type,
             customer_name: order.customer_name || null,
-            customer_phone: order.customer_phone || null,
             total_amount: Number(order.total_amount || 0),
             sub_total: Number(order.sub_total || 0),
             discount_amount: Number(order.discount_amount || 0),
@@ -273,7 +265,7 @@ export class PublicTakeawayOrderService {
         this.assertNoCustomerModifiers(rawItems);
 
         const normalizedItems = this.toOrderItemsInput(payload.items || []);
-        const { customerName, customerPhone } = this.normalizeCustomerIdentity(payload);
+        const { customerName } = this.normalizeCustomerIdentity(payload);
 
         return runWithDbContext(
             {
@@ -296,7 +288,6 @@ export class PublicTakeawayOrderService {
                             received_amount: 0,
                             change_amount: 0,
                             customer_name: customerName || null,
-                            customer_phone: customerPhone || null,
                             items: normalizedItems,
                         },
                         branchId,

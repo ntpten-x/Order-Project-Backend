@@ -176,7 +176,6 @@ export class PublicTableOrderService {
             status: order.status,
             order_type: order.order_type,
             customer_name: order.customer_name || null,
-            customer_phone: order.customer_phone || null,
             total_amount: Number(order.total_amount || 0),
             sub_total: Number(order.sub_total || 0),
             discount_amount: Number(order.discount_amount || 0),
