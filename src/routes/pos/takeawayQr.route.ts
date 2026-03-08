@@ -12,5 +12,6 @@ router.use(authenticateToken);
 router.use(requireBranch);
 
 router.get("/", authorizePermission("orders.page", "view"), controller.getInfo);
+router.post("/rotate", authorizePermission("orders.page", "update"), controller.rotateQr);
 
 export default router;

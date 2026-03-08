@@ -16,7 +16,7 @@ export type TakeawayQrInfo = {
 };
 
 export class TakeawayQrService {
-    constructor(private shopProfileModel: ShopProfileModels = new ShopProfileModels()) {}
+    constructor(private shopProfileModel: ShopProfileModels = new ShopProfileModels()) { }
 
     private isExpired(expiresAt?: Date | string | null): boolean {
         if (!expiresAt) return false;
@@ -74,6 +74,21 @@ export class TakeawayQrService {
             takeaway_qr_token: await this.generateUniqueToken(),
             takeaway_qr_expires_at: this.resolveExpiryDate(),
         });
+    }
+
+    async rotateQr(branchId: string): Promise<TakeawayQrInfo> {
+        let profile = await this.getOrCreateProfile(branchId);
+        profile = await this.shopProfileModel.createOrUpdate(branchId, {
+            takeaway_qr_token: await this.generateUniqueToken(),
+            takeaway_qr_expires_at: this.resolveExpiryDate(),
+        });
+
+        return {
+            token: profile.takeaway_qr_token!,
+            customer_path: `/order/takeaway/${profile.takeaway_qr_token}`,
+            qr_code_expires_at: profile.takeaway_qr_expires_at ?? null,
+            shop_name: profile.shop_name || null,
+        };
     }
 
     async getQrInfo(branchId: string): Promise<TakeawayQrInfo> {
