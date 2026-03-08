@@ -9,6 +9,7 @@ import { ShopProfile } from "../../entity/pos/ShopProfile";
 import { OrdersModels } from "../../models/pos/orders.model";
 import { AppError } from "../../utils/AppError";
 import { OrdersService } from "../pos/orders.service";
+import { ShiftsService } from "../pos/shifts.service";
 
 type PublicOrderItemInput = {
     product_id: string;
@@ -23,6 +24,7 @@ type SubmitTakeawayOrderInput = {
 
 export class PublicTakeawayOrderService {
     private ordersService = new OrdersService(new OrdersModels());
+    private shiftsService = new ShiftsService();
 
     private getSalesOrderRepository(manager?: EntityManager) {
         return manager ? manager.getRepository(SalesOrder) : getRepository(SalesOrder);
@@ -131,6 +133,13 @@ export class PublicTakeawayOrderService {
         return normalized === "pending" || normalized === "cooking" || normalized === "served";
     }
 
+    private async ensurePublicOrderingAvailable(branchId: string): Promise<void> {
+        const activeShift = await this.shiftsService.getCurrentShift(branchId);
+        if (!activeShift) {
+            throw new AppError("Public ordering is unavailable while the shift is closed", 403);
+        }
+    }
+
     private mapOrder(order: SalesOrder | null) {
         if (!order) {
             return null;
@@ -228,6 +237,7 @@ export class PublicTakeawayOrderService {
 
     async getBootstrapByToken(token: string) {
         const profile = await this.resolveProfileByToken(token);
+        await this.ensurePublicOrderingAvailable(profile.branch_id!);
         return runWithDbContext(
             {
                 branchId: profile.branch_id,
@@ -254,6 +264,7 @@ export class PublicTakeawayOrderService {
     async submitByToken(token: string, payload: SubmitTakeawayOrderInput) {
         const profile = await this.resolveProfileByToken(token);
         const branchId = profile.branch_id!;
+        await this.ensurePublicOrderingAvailable(branchId);
         const rawItems = Array.isArray((payload as { items?: unknown[] })?.items)
             ? ((payload as { items: unknown[] }).items ?? [])
             : [];
@@ -309,6 +320,7 @@ export class PublicTakeawayOrderService {
 
     async resolveOrderByToken(token: string, orderId: string) {
         const profile = await this.resolveProfileByToken(token);
+        await this.ensurePublicOrderingAvailable(profile.branch_id!);
 
         return runWithDbContext(
             {

@@ -12,6 +12,7 @@ import { ProductsUnit } from "../../entity/pos/ProductsUnit";
 import { Products } from "../../entity/pos/Products";
 import { ShopProfile } from "../../entity/pos/ShopProfile";
 import { OrderType } from "../../entity/pos/OrderEnums";
+import { ShiftStatus } from "../../entity/pos/Shifts";
 
 loadEnv();
 
@@ -192,11 +193,30 @@ describeIntegration("Public takeaway-order flow (DB integration)", () => {
         };
     }
 
+    async function setBranchShiftOpenState(open: boolean) {
+        await runWithDbContext({ isAdmin: true }, async () => {
+            if (open) {
+                await shiftsService.openShift(userId, 0, branchId);
+                return;
+            }
+
+            await getDbManager().query(
+                `UPDATE shifts
+                 SET status = $2,
+                     close_time = NOW()
+                 WHERE branch_id = $1
+                   AND status = $3`,
+                [branchId, ShiftStatus.CLOSED, ShiftStatus.OPEN],
+            );
+        });
+    }
+
     it("bootstraps menu and creates a new takeaway order for every submit", async () => {
         if (!integrationReady) return;
         expect(branchId).toBeTruthy();
         expect(productId).toBeTruthy();
 
+        await setBranchShiftOpenState(true);
         const fixture = await createTakeawayFixture();
         const createdOrderIds: string[] = [];
 
@@ -247,6 +267,7 @@ describeIntegration("Public takeaway-order flow (DB integration)", () => {
     it("rejects submit when customer identity is missing", async () => {
         if (!integrationReady) return;
 
+        await setBranchShiftOpenState(true);
         const fixture = await createTakeawayFixture();
         try {
             await expect(
@@ -264,6 +285,7 @@ describeIntegration("Public takeaway-order flow (DB integration)", () => {
     it("rejects modifier details payload for takeaway QR flow", async () => {
         if (!integrationReady) return;
 
+        await setBranchShiftOpenState(true);
         const fixture = await createTakeawayFixture();
         try {
             await expect(
@@ -282,6 +304,22 @@ describeIntegration("Public takeaway-order flow (DB integration)", () => {
                 statusCode: 400,
             });
         } finally {
+            await fixture.restore();
+        }
+    }, 120000);
+
+    it("rejects bootstrap when no active shift is open", async () => {
+        if (!integrationReady) return;
+
+        const fixture = await createTakeawayFixture();
+        try {
+            await setBranchShiftOpenState(false);
+
+            await expect(publicService.getBootstrapByToken(fixture.token)).rejects.toMatchObject({
+                statusCode: 403,
+            });
+        } finally {
+            await setBranchShiftOpenState(true);
             await fixture.restore();
         }
     }, 120000);

@@ -12,6 +12,7 @@ import { EntityManager } from "typeorm";
 import { SocketService } from "../socket.service";
 import { buildPublicOrderRealtimePayload } from "../../utils/publicRealtime";
 import { RealtimeEvents } from "../../utils/realtimeEvents";
+import { ShiftsService } from "../pos/shifts.service";
 
 type PublicOrderItemInput = {
     product_id: string;
@@ -35,6 +36,7 @@ const ACTIVE_VIEW_STATUSES: string[] = [
 export class PublicTableOrderService {
     private ordersService = new OrdersService(new OrdersModels());
     private socketService = SocketService.getInstance();
+    private shiftsService = new ShiftsService();
 
     private getSalesOrderRepository(manager?: EntityManager) {
         return manager ? manager.getRepository(SalesOrder) : getRepository(SalesOrder);
@@ -67,6 +69,13 @@ export class PublicTableOrderService {
     private canAddItemsToOrder(status: string | undefined | null): boolean {
         const normalized = String(status || "").trim().toLowerCase();
         return normalized === "pending" || normalized === "cooking" || normalized === "served";
+    }
+
+    private async ensurePublicOrderingAvailable(branchId: string): Promise<void> {
+        const activeShift = await this.shiftsService.getCurrentShift(branchId);
+        if (!activeShift) {
+            throw new AppError("Public ordering is unavailable while the shift is closed", 403);
+        }
     }
 
     private async findLatestOrderForTable(
@@ -279,6 +288,7 @@ export class PublicTableOrderService {
 
     async getBootstrapByToken(token: string) {
         const table = await this.resolveTableByToken(token);
+        await this.ensurePublicOrderingAvailable(table.branch_id!);
 
         return runWithDbContext(
             {
@@ -312,6 +322,7 @@ export class PublicTableOrderService {
 
     async getActiveOrderByToken(token: string) {
         const table = await this.resolveTableByToken(token);
+        await this.ensurePublicOrderingAvailable(table.branch_id!);
 
         return runWithDbContext(
             {
@@ -341,6 +352,7 @@ export class PublicTableOrderService {
     async submitByToken(token: string, payload: SubmitOrderInput) {
         const table = await this.resolveTableByToken(token);
         const branchId = table.branch_id!;
+        await this.ensurePublicOrderingAvailable(branchId);
         const rawItems = Array.isArray((payload as { items?: unknown[] })?.items)
             ? ((payload as { items: unknown[] }).items ?? [])
             : [];
@@ -453,6 +465,7 @@ export class PublicTableOrderService {
 
     async resolveOrderByToken(token: string, orderId: string) {
         const table = await this.resolveTableByToken(token);
+        await this.ensurePublicOrderingAvailable(table.branch_id!);
 
         return runWithDbContext(
             {
