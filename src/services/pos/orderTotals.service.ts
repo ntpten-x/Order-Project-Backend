@@ -1,16 +1,16 @@
 import { EntityManager } from "typeorm";
 import { SalesOrder } from "../../entity/pos/SalesOrder";
 import { SalesOrderItem } from "../../entity/pos/SalesOrderItem";
-import { DiscountType } from "../../entity/pos/Discounts";
+import { DiscountType, Discounts } from "../../entity/pos/Discounts";
 import { getRepository } from "../../database/dbContext";
 
 export const recalculateOrderTotal = async (orderId: string, manager?: EntityManager): Promise<void> => {
     const orderRepo = manager ? manager.getRepository(SalesOrder) : getRepository(SalesOrder);
     const itemRepo = manager ? manager.getRepository(SalesOrderItem) : getRepository(SalesOrderItem);
+    const discountRepo = manager ? manager.getRepository(Discounts) : getRepository(Discounts);
 
     const orderQuery = orderRepo
         .createQueryBuilder("order")
-        .leftJoinAndSelect("order.discount", "discount")
         .where("order.id = :orderId", { orderId });
 
     if (manager) {
@@ -20,6 +20,10 @@ export const recalculateOrderTotal = async (orderId: string, manager?: EntityMan
     const order = await orderQuery.getOne();
 
     if (!order) return;
+
+    const discount = order.discount_id
+        ? await discountRepo.findOneBy({ id: order.discount_id })
+        : null;
 
     const aggregate = await itemRepo
         .createQueryBuilder("item")
@@ -31,11 +35,11 @@ export const recalculateOrderTotal = async (orderId: string, manager?: EntityMan
     const subTotal = Number(aggregate?.sub_total || 0);
     let discountAmount = 0;
 
-    if (order.discount?.is_active) {
-        if (order.discount.discount_type === DiscountType.Percentage) {
-            discountAmount = (subTotal * Number(order.discount.discount_amount)) / 100;
+    if (discount?.is_active) {
+        if (discount.discount_type === DiscountType.Percentage) {
+            discountAmount = (subTotal * Number(discount.discount_amount)) / 100;
         } else {
-            discountAmount = Number(order.discount.discount_amount);
+            discountAmount = Number(discount.discount_amount);
         }
     }
 

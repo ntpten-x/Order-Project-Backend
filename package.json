@@ -30,6 +30,7 @@
     "test:realtime:contract": "vitest run src/tests/services/socket.service.test.ts",
     "test:integration:pos-flow": "vitest run src/tests/integration/pos-flow.test.ts",
     "test:integration:serving-board": "vitest run src/tests/integration/serving-board.test.ts",
+    "test:smoke:public-takeaway": "ts-node --files scripts/smoke-public-takeaway-e2e.ts",
     "ensure:e2e-user": "node scripts/ensure-e2e-user.js",
     "ensure:e2e-permission-baseline": "node scripts/ensure-e2e-permission-baseline.js",
     "ensure:e2e-domain-baseline": "node scripts/ensure-e2e-domain-baseline.js",

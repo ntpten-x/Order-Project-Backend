@@ -35,6 +35,7 @@ import salesOrderDetailPosRouter from "./src/routes/pos/salesOrderDetail.route";
 
 import shiftsPosRouter from "./src/routes/pos/shifts.route";
 import shopProfilePosRouter from "./src/routes/pos/shopProfile.route";
+import takeawayQrPosRouter from "./src/routes/pos/takeawayQr.route";
 import printSettingsPosRouter from "./src/routes/pos/printSettings.route";
 import paymentAccountPosRouter from "./src/routes/pos/paymentAccount.routes";
 import dashboardRouter from "./src/routes/pos/dashboard.route";
@@ -43,6 +44,7 @@ import branchRouter from "./src/routes/branch.route";
 import permissionsRouter from "./src/routes/permissions.route";
 import systemRouter from "./src/routes/system.route";
 import publicTableOrderRouter from "./src/routes/public/tableOrder.route";
+import publicTakeawayOrderRouter from "./src/routes/public/takeawayOrder.route";
 import { globalErrorHandler } from "./src/middleware/error.middleware";
 import { AppError } from "./src/utils/AppError";
 import { performanceMonitoring, errorTracking } from "./src/middleware/monitoring.middleware";
@@ -176,6 +178,7 @@ app.use(apiLimiter);
 app.use("/auth/login", authLimiter);
 app.use("/pos/orders", orderCreateLimiter); // Stricter limit for order creation
 app.use("/public/table-order", orderCreateLimiter); // Stricter limit for public table ordering
+app.use("/public/takeaway-order", orderCreateLimiter); // Stricter limit for public takeaway ordering
 app.use("/pos/payments", paymentLimiter); // Stricter limit for payments
 
 // CORS
@@ -442,6 +445,7 @@ app.use("/pos/salesOrderDetail", salesOrderDetailPosRouter);
 
 app.use("/pos/shifts", shiftsPosRouter);
 app.use("/pos/shopProfile", shopProfilePosRouter);
+app.use("/pos/takeaway-qr", takeawayQrPosRouter);
 app.use("/pos/print-settings", printSettingsPosRouter);
 app.use("/pos/payment-accounts", paymentAccountPosRouter);
 app.use("/pos/dashboard", dashboardRouter);
@@ -450,6 +454,7 @@ app.use("/branches", branchRouter);
 app.use("/permissions", permissionsRouter);
 app.use("/system", systemRouter);
 app.use("/public/table-order", publicTableOrderRouter);
+app.use("/public/takeaway-order", publicTakeawayOrderRouter);
 
 // Handle Unhandled Routes
 app.use((req, res, next) => {

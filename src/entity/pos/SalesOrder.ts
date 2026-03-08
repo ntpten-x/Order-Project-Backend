@@ -51,6 +51,12 @@ export class SalesOrder {
     delivery_code?: string | null; // รหัสออเดอร์จากผู้ให้บริการ (เช่น Grab: GF-123)
 
     // --- ส่วนการเงิน ---
+    @Column({ type: "varchar", length: 120, nullable: true })
+    customer_name?: string | null;
+
+    @Column({ type: "varchar", length: 20, nullable: true })
+    customer_phone?: string | null;
+
     @Column({ type: "decimal", precision: 12, scale: 2, default: 0 })
     sub_total!: number; // ยอดรวมค่าอาหาร (ก่อนหักส่วนลด/ภาษี)
 

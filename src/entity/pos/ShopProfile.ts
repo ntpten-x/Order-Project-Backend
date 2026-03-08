@@ -23,6 +23,12 @@ export class ShopProfile {
     @Column({ type: "varchar", length: 20, nullable: true })
     phone!: string
 
+    @Column({ type: "varchar", length: 128, nullable: true })
+    takeaway_qr_token?: string | null
+
+    @Column({ type: "timestamptz", nullable: true })
+    takeaway_qr_expires_at?: Date | null
+
     // Payment Config
     @Column({ type: "varchar", length: 50, nullable: true })
     promptpay_number!: string // เบอร์พร้อมเพย์ หรือ เลขบัตรประชาชน
