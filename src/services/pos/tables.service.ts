@@ -13,7 +13,7 @@ import { getTableCacheInvalidationPatterns } from "./tableCache.utils";
 const QR_TOKEN_BYTES = Math.max(16, Number(process.env.TABLE_QR_TOKEN_BYTES || 24));
 const QR_TOKEN_EXPIRE_DAYS = Number(process.env.TABLE_QR_TOKEN_EXPIRE_DAYS || 365);
 
-export type TableQrCodeListItem = Tables & {
+type TableQrCodeListItem = Tables & {
     customer_path: string | null;
 };
 

@@ -9,7 +9,7 @@ import { AppError } from "../../utils/AppError";
 import { metrics } from "../../utils/metrics";
 import { logProfileDuration } from "../../utils/queryProfiler";
 
-export type DashboardRecentOrderSummary = {
+type DashboardRecentOrderSummary = {
     id: string;
     order_no: string;
     order_type: string;
@@ -23,7 +23,7 @@ export type DashboardRecentOrderSummary = {
     items_count: number;
 };
 
-export type DashboardOverview = {
+type DashboardOverview = {
     summary: {
         period_start: string | null;
         period_end: string | null;

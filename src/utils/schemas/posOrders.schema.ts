@@ -16,12 +16,6 @@ export const orderItemIdParamSchema = z.object({
     })
 });
 
-export const servingGroupIdParamSchema = z.object({
-    params: z.object({
-        id: uuid
-    })
-});
-
 export const orderItemDetailSchema = z.object({
     detail_name: z.string().min(1),
     extra_price: z.coerce.number().min(0).optional()

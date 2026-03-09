@@ -8,7 +8,7 @@ const TAKEAWAY_QR_TOKEN_BYTES = Math.max(16, Number(process.env.TAKEAWAY_QR_TOKE
 const TAKEAWAY_QR_TOKEN_EXPIRE_DAYS = Number(process.env.TAKEAWAY_QR_TOKEN_EXPIRE_DAYS || 365);
 const TAKEAWAY_QR_TOKEN_PREFIX = "tw_";
 
-export type TakeawayQrInfo = {
+type TakeawayQrInfo = {
     token: string;
     customer_path: string;
     qr_code_expires_at: Date | null;
