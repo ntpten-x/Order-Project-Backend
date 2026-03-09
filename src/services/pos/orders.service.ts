@@ -626,6 +626,7 @@ export class OrdersService {
             .addSelect("order.order_no", "order_no")
             .addSelect("order.order_type", "order_type")
             .addSelect("order.status", "order_status")
+            .addSelect("order.customer_name", "customer_name")
             .addSelect("order.delivery_code", "delivery_code")
             .addSelect("table.table_name", "table_name")
             .addSelect("delivery.delivery_name", "delivery_name")

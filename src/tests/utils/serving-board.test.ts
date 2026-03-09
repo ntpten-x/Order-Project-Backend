@@ -10,6 +10,7 @@ describe("servingBoard utils", () => {
                 table_name: "12",
                 delivery_name: null,
                 delivery_code: null,
+                customer_name: null,
                 order_no: "ORD-001",
             })
         ).toEqual({
@@ -23,10 +24,11 @@ describe("servingBoard utils", () => {
                 table_name: null,
                 delivery_name: null,
                 delivery_code: "order#a123",
+                customer_name: "Alice",
                 order_no: "ORD-002",
             })
         ).toEqual({
-            title: "Take away order#a123",
+            title: "Take away #Alice",
             subtitle: "ORD-002",
         });
     });
@@ -39,6 +41,7 @@ describe("servingBoard utils", () => {
                 order_no: "ORD-001",
                 order_type: OrderType.DineIn,
                 order_status: "Pending",
+                customer_name: null,
                 delivery_code: null,
                 table_name: "1",
                 delivery_name: null,
@@ -58,6 +61,7 @@ describe("servingBoard utils", () => {
                 order_no: "ORD-001",
                 order_type: OrderType.DineIn,
                 order_status: "Pending",
+                customer_name: null,
                 delivery_code: null,
                 table_name: "1",
                 delivery_name: null,

@@ -6,6 +6,7 @@ export type ServingBoardRow = {
     order_no: string;
     order_type: OrderType;
     order_status: string;
+    customer_name: string | null;
     delivery_code: string | null;
     table_name: string | null;
     delivery_name: string | null;
@@ -37,6 +38,7 @@ export type ServingBoardGroup = {
     order_no: string;
     order_type: OrderType;
     order_status: string;
+    customer_name: string | null;
     source_title: string;
     source_subtitle: string | null;
     batch_created_at: string;
@@ -60,7 +62,7 @@ function toIso(value: Date | string): string {
 }
 
 export function getServingBoardSource(
-    row: Pick<ServingBoardRow, "order_type" | "table_name" | "delivery_name" | "delivery_code" | "order_no">
+    row: Pick<ServingBoardRow, "order_type" | "table_name" | "delivery_name" | "delivery_code" | "order_no" | "customer_name">
 ): {
     title: string;
     subtitle: string | null;
@@ -79,6 +81,14 @@ export function getServingBoardSource(
         return {
             title: `Delivery ${provider}`,
             subtitle: code,
+        };
+    }
+
+    const takeawayCustomerName = normalizeValue(row.customer_name);
+    if (takeawayCustomerName) {
+        return {
+            title: `Take away #${takeawayCustomerName}`,
+            subtitle: normalizeValue(row.order_no) || null,
         };
     }
 
@@ -102,6 +112,7 @@ export function groupServingBoardRows(rows: ServingBoardRow[]): ServingBoardGrou
                 order_no: row.order_no,
                 order_type: row.order_type,
                 order_status: row.order_status,
+                customer_name: row.customer_name || null,
                 source_title: source.title,
                 source_subtitle: source.subtitle,
                 batch_created_at: toIso(row.serving_group_created_at),
