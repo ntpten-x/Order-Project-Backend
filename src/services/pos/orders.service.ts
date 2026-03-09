@@ -14,8 +14,6 @@ import { randomUUID } from "crypto";
 import { recalculateOrderTotal } from "./orderTotals.service";
 import { AppError } from "../../utils/AppError";
 import { ShiftsService } from "./shifts.service";
-import { OrderQueueService } from "./orderQueue.service";
-import { QueuePriority, QueueStatus, OrderQueue } from "../../entity/pos/OrderQueue";
 import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../../utils/auditLogger";
 import { getClientIp } from "../../utils/securityLogger";
 import { getDbContext, getRepository, runInTransaction } from "../../database/dbContext";
@@ -25,6 +23,8 @@ import { metrics } from "../../utils/metrics";
 import { PermissionScope } from "../../middleware/permission.middleware";
 import { CreatedSort } from "../../utils/sortCreated";
 import { groupServingBoardRows, ServingBoardGroup, ServingBoardRow } from "../../utils/servingBoard";
+import { getTableCacheInvalidationPatterns } from "./tableCache.utils";
+import { getDashboardCacheInvalidationPatterns } from "./dashboardCache.utils";
 
 type AccessContext = {
     scope?: PermissionScope;
@@ -36,10 +36,15 @@ type ServingGroupContext = {
     createdAt: Date;
 };
 
+type MutatedOrderContext = {
+    orderId: string;
+    branchId?: string;
+    tableIdsToRefresh?: string[];
+};
+
 export class OrdersService {
     private socketService = SocketService.getInstance();
     private shiftsService = new ShiftsService();
-    private queueService = new OrderQueueService();
     private readonly LIST_CACHE_PREFIX = "orders:list";
     private readonly LIST_CACHE_TTL = Number(process.env.ORDERS_LIST_CACHE_TTL_MS || 5000);
     private readonly SUMMARY_CACHE_PREFIX = "orders:summary";
@@ -68,7 +73,10 @@ export class OrdersService {
 
     private getAccessCacheScopeParts(access?: AccessContext): Array<string> {
         const scope = access?.scope ?? "all";
-        if (scope === "own" && access?.actorUserId) {
+        if (scope === "own") {
+            if (!access?.actorUserId) {
+                return ["scope", "none"];
+            }
             return ["scope", "own", "user", access.actorUserId];
         }
         return ["scope", scope];
@@ -80,10 +88,23 @@ export class OrdersService {
             cacheKey(this.LIST_CACHE_PREFIX, ...scope),
             cacheKey(this.SUMMARY_CACHE_PREFIX, ...scope),
             cacheKey(this.STATS_CACHE_PREFIX, ...scope),
-            cacheKey("dashboard:sales", ...scope),
-            cacheKey("dashboard:top-items", ...scope),
+            ...getDashboardCacheInvalidationPatterns(branchId),
         ];
         invalidateCache(patterns);
+    }
+
+    private invalidateTableCache(branchId?: string, tableId?: string): void {
+        invalidateCache(getTableCacheInvalidationPatterns(branchId, tableId));
+    }
+
+    private async emitTableUpdate(tableId: string, branchId?: string, manager?: EntityManager): Promise<void> {
+        const repo = manager ? manager.getRepository(Tables) : getRepository(Tables);
+        const table = await repo.findOneBy({ id: tableId });
+        const effectiveBranchId = table?.branch_id || branchId;
+        this.invalidateTableCache(effectiveBranchId, tableId);
+        if (table && effectiveBranchId) {
+            this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.tables.update, table);
+        }
     }
 
     private async ensureActiveShift(branchId?: string): Promise<void> {
@@ -93,25 +114,214 @@ export class OrdersService {
         }
     }
 
-    private async ensureOrderNo(orderNo?: string): Promise<string> {
-        if (orderNo) return orderNo;
-        for (let i = 0; i < 5; i++) {
-            const now = new Date();
-            const datePart = now.toISOString().slice(0, 10).replace(/-/g, "");
-            const timePart = now.toTimeString().slice(0, 8).replace(/:/g, "");
-            const rand = Math.floor(1000 + Math.random() * 9000);
-            const candidate = `ORD-${datePart}-${timePart}-${rand}`;
-            const existing = await this.ordersModel.findOneByOrderNo(candidate);
-            if (!existing) return candidate;
-        }
-        throw new AppError("Unable to generate order number", 500);
-    }
-
     private createServingGroup(): ServingGroupContext {
         return {
             id: randomUUID(),
             createdAt: new Date(),
         };
+    }
+
+    private createOrderNoCandidate(): string {
+        const now = new Date();
+        const datePart = now.toISOString().slice(0, 10).replace(/-/g, "");
+        const timePart = now.toTimeString().slice(0, 8).replace(/:/g, "");
+        const rand = Math.floor(1000 + Math.random() * 9000);
+        return `ORD-${datePart}-${timePart}-${rand}`;
+    }
+
+    private isUniqueOrderNoError(error: unknown): boolean {
+        const code = (error as any)?.code || (error as any)?.driverError?.code;
+        const constraint = String((error as any)?.constraint || (error as any)?.driverError?.constraint || "").toLowerCase();
+        const message = String((error as any)?.message || "").toLowerCase();
+
+        return code === "23505" && (
+            constraint.includes("order_no") ||
+            constraint.includes("sales_orders") ||
+            message.includes("order_no") ||
+            message.includes("sales_orders_order_no")
+        );
+    }
+
+    private async saveOrderWithRetry(
+        manager: EntityManager,
+        orderData: Partial<SalesOrder>,
+        generatedOrderNo: boolean
+    ): Promise<SalesOrder> {
+        const orderRepo = manager.getRepository(SalesOrder);
+        const maxAttempts = generatedOrderNo ? 5 : 1;
+
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            const candidateOrder = orderRepo.create({
+                ...orderData,
+                order_no: generatedOrderNo ? this.createOrderNoCandidate() : orderData.order_no,
+            } as SalesOrder);
+
+            try {
+                return await orderRepo.save(candidateOrder);
+            } catch (error) {
+                if (!this.isUniqueOrderNoError(error)) {
+                    throw error;
+                }
+
+                if (!generatedOrderNo) {
+                    throw AppError.conflict("Order number already exists");
+                }
+
+                if (attempt === maxAttempts) {
+                    throw AppError.internal("Unable to generate unique order number");
+                }
+            }
+        }
+
+        throw AppError.internal("Unable to persist order");
+    }
+
+    private async lockOrderForUpdate(manager: EntityManager, orderId: string, branchId?: string): Promise<SalesOrder> {
+        const query = manager
+            .getRepository(SalesOrder)
+            .createQueryBuilder("order")
+            .setLock("pessimistic_write")
+            .where("order.id = :orderId", { orderId });
+
+        if (branchId) {
+            query.andWhere("order.branch_id = :branchId", { branchId });
+        }
+
+        const order = await query.getOne();
+        if (!order) {
+            throw new AppError("Order not found", 404);
+        }
+
+        return order;
+    }
+
+    private async lockItemForUpdate(manager: EntityManager, itemId: string, branchId?: string): Promise<SalesOrderItem> {
+        const itemRepo = manager.getRepository(SalesOrderItem);
+        const lockQuery = itemRepo
+            .createQueryBuilder("item")
+            .setLock("pessimistic_write")
+            .where("item.id = :itemId", { itemId });
+
+        if (branchId) {
+            lockQuery.andWhere(
+                `EXISTS (
+                    SELECT 1
+                    FROM sales_orders so
+                    WHERE so.id = item.order_id
+                      AND so.branch_id = :branchId
+                )`,
+                { branchId },
+            );
+        }
+
+        const lockedItem = await lockQuery.getOne();
+        if (!lockedItem) {
+            throw new AppError("Item not found", 404);
+        }
+
+        const query = itemRepo
+            .createQueryBuilder("item")
+            .leftJoinAndSelect("item.product", "product")
+            .leftJoinAndSelect("item.details", "details")
+            .innerJoinAndSelect("item.order", "salesOrder")
+            .where("item.id = :itemId", { itemId });
+
+        if (branchId) {
+            query.andWhere("salesOrder.branch_id = :branchId", { branchId });
+        }
+
+        const item = await query.getOne();
+        if (!item) {
+            throw new AppError("Item not found", 404);
+        }
+
+        return item;
+    }
+
+    private async lockTablesForUpdate(
+        manager: EntityManager,
+        tableIds: Array<string | null | undefined>,
+        branchId?: string
+    ): Promise<Map<string, Tables>> {
+        const uniqueTableIds = Array.from(new Set(tableIds.filter((tableId): tableId is string => Boolean(tableId))));
+        if (uniqueTableIds.length === 0) {
+            return new Map();
+        }
+
+        const query = manager
+            .getRepository(Tables)
+            .createQueryBuilder("table")
+            .setLock("pessimistic_write")
+            .where("table.id IN (:...tableIds)", { tableIds: uniqueTableIds });
+
+        if (branchId) {
+            query.andWhere("table.branch_id = :branchId", { branchId });
+        }
+
+        const tables = await query.getMany();
+        const tableMap = new Map(tables.map((table) => [table.id, table]));
+
+        for (const tableId of uniqueTableIds) {
+            if (!tableMap.has(tableId)) {
+                throw new AppError("Table not found for this branch", 404);
+            }
+        }
+
+        return tableMap;
+    }
+
+    private ensureTableAvailable(table: Tables, allowOccupiedBySameTableId?: string | null): void {
+        if (
+            table.status === TableStatus.Unavailable &&
+            (!allowOccupiedBySameTableId || table.id !== allowOccupiedBySameTableId)
+        ) {
+            throw AppError.conflict("Table is already occupied");
+        }
+    }
+
+    private async validateRelatedEntities(
+        manager: EntityManager,
+        branchId: string | undefined,
+        data: Partial<SalesOrder>
+    ): Promise<void> {
+        if (!branchId) {
+            return;
+        }
+
+        if (data.delivery_id) {
+            const delivery = await manager.getRepository(Delivery).findOneBy({ id: data.delivery_id, branch_id: branchId } as any);
+            if (!delivery) throw new AppError("Delivery not found for this branch", 404);
+        }
+
+        if (data.discount_id) {
+            const discount = await manager.getRepository(Discounts).findOneBy({ id: data.discount_id, branch_id: branchId } as any);
+            if (!discount) throw new AppError("Discount not found for this branch", 404);
+        }
+    }
+
+    private async refreshOrderAfterCommit(orderId: string, branchId?: string): Promise<SalesOrder | null> {
+        return this.ordersModel.findOne(orderId, branchId);
+    }
+
+    private async finalizeOrderMutation(context: MutatedOrderContext, event: string): Promise<SalesOrder | null> {
+        const order = await this.refreshOrderAfterCommit(context.orderId, context.branchId);
+        const effectiveBranchId = order?.branch_id || context.branchId;
+
+        this.invalidateReadCaches(effectiveBranchId);
+
+        if (effectiveBranchId) {
+            if (event === RealtimeEvents.orders.delete) {
+                this.socketService.emitToBranch(effectiveBranchId, event, { id: context.orderId });
+            } else if (order) {
+                this.socketService.emitToBranch(effectiveBranchId, event, order);
+            }
+        }
+
+        for (const tableId of context.tableIdsToRefresh ?? []) {
+            await this.emitTableUpdate(tableId, effectiveBranchId);
+        }
+
+        return order;
     }
 
     private async prepareItems(
@@ -226,8 +436,10 @@ export class OrdersService {
     }
 
     private deriveOrderStatusFromItems(items: SalesOrderItem[]): OrderStatus | null {
+        if (items.length === 0) return null;
+
         const activeItems = items.filter((item) => !isCancelledStatus(String(item.status)));
-        if (activeItems.length === 0) return null;
+        if (activeItems.length === 0) return OrderStatus.Cancelled;
 
         // Current flow keeps all active items under "Pending/กำลังดำเนินการ".
         activeItems.forEach((item) => {
@@ -322,7 +534,7 @@ export class OrdersService {
             sortCreated
         );
 
-        if (options?.bypassCache || query?.trim() || page > 1) {
+        if (options?.bypassCache || query?.trim()) {
             return this.ordersModel.findAllSummary(page, limit, statuses, type, query, branchId, access, sortCreated);
         }
 
@@ -377,9 +589,9 @@ export class OrdersService {
         return this.ordersModel.findAllItems(status, page, limit, branchId, access, sortCreated);
     }
 
-    async findOne(id: string, branchId?: string, access?: AccessContext): Promise<SalesOrder | null> {
+    async findOne(id: string, branchId?: string, access?: AccessContext, manager?: EntityManager): Promise<SalesOrder | null> {
         try {
-            return this.ordersModel.findOne(id, branchId, access)
+            return this.ordersModel.findOne(id, branchId, access, manager)
         } catch (error) {
             throw error
         }
@@ -414,11 +626,12 @@ export class OrdersService {
             .addSelect("order.order_no", "order_no")
             .addSelect("order.order_type", "order_type")
             .addSelect("order.status", "order_status")
+            .addSelect("order.customer_name", "customer_name")
             .addSelect("order.delivery_code", "delivery_code")
             .addSelect("table.table_name", "table_name")
             .addSelect("delivery.delivery_name", "delivery_name")
             .addSelect("item.product_id", "product_id")
-            .addSelect("COALESCE(product.display_name, product.product_name, '-')", "product_name")
+            .addSelect("COALESCE(product.display_name, '-')", "display_name")
             .addSelect("product.img_url", "product_image_url")
             .addSelect("item.quantity", "quantity")
             .addSelect("item.notes", "notes")
@@ -524,136 +737,72 @@ export class OrdersService {
     }
 
     async create(orders: SalesOrder, branchId?: string): Promise<SalesOrder> {
-        orders.status = orders.status
+        const normalizedStatus = orders.status
             ? this.ensureValidStatus(String(orders.status))
             : OrderStatus.Pending;
-        await this.ensureActiveShift(orders.branch_id || branchId);
-        return await runInTransaction(async (manager) => {
-            try {
-                if (orders.order_no) {
-                    const existingOrder = await this.ordersModel.findOneByOrderNo(orders.order_no)
-                    if (existingOrder) {
-                        throw new Error("เลขที่ออเดอร์นี้มีอยู่ในระบบแล้ว")
-                    }
-                } else {
-                    orders.order_no = await this.ensureOrderNo();
-                }
+        const effectiveBranchId = orders.branch_id || branchId;
+        await this.ensureActiveShift(effectiveBranchId);
 
-                const effectiveBranchId = orders.branch_id || branchId;
-                if (effectiveBranchId && !orders.branch_id) {
-                    orders.branch_id = effectiveBranchId;
-                }
+        const createdOrder = await runInTransaction(async (manager) => {
+            const orderData = {
+                ...orders,
+                branch_id: effectiveBranchId,
+                status: normalizedStatus,
+            } as Partial<SalesOrder>;
 
-                // Validate foreign keys to prevent cross-branch access
-                if (effectiveBranchId) {
-                    if (orders.table_id) {
-                        const table = await manager.getRepository(Tables).findOneBy({ id: orders.table_id, branch_id: effectiveBranchId } as any);
-                        if (!table) throw new AppError("Table not found for this branch", 404);
-                    }
+            await this.validateRelatedEntities(manager, effectiveBranchId, orderData);
 
-                    if (orders.delivery_id) {
-                        const delivery = await manager.getRepository(Delivery).findOneBy({ id: orders.delivery_id, branch_id: effectiveBranchId } as any);
-                        if (!delivery) throw new AppError("Delivery not found for this branch", 404);
-                    }
-
-                    if (orders.discount_id) {
-                        const discount = await manager.getRepository(Discounts).findOneBy({ id: orders.discount_id, branch_id: effectiveBranchId } as any);
-                        if (!discount) throw new AppError("Discount not found for this branch", 404);
-                    }
-                }
-
-                // Pass manager to create which uses it for repository
-                const createdOrder = await this.ordersModel.create(orders, manager)
-
-                // Update Table Status if DineIn
-                if (createdOrder.table_id) {
-                    const tablesRepo = manager.getRepository(Tables)
-                    await tablesRepo.update(createdOrder.table_id, { status: TableStatus.Unavailable })
-                }
-                return createdOrder;
-            } catch (error) {
-                throw error
-            }
-        }).then(async (createdOrder) => {
-            this.invalidateReadCaches(createdOrder.branch_id || branchId);
-            // Post-transaction Side Effects
-            const effectiveBranchId = createdOrder.branch_id || branchId;
-            if (effectiveBranchId) {
-                this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.create, createdOrder);
-            }
-            if (createdOrder.table_id) {
-                const tablesRepo = getRepository(Tables)
-                tablesRepo.findOneBy({ id: createdOrder.table_id }).then(t => {
-                    if (!t) return;
-                    if (effectiveBranchId) {
-                        this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.tables.update, t);
-                    }
-                })
+            const lockedTables = await this.lockTablesForUpdate(manager, [orderData.table_id], effectiveBranchId);
+            const lockedTable = orderData.table_id ? lockedTables.get(orderData.table_id) : undefined;
+            if (lockedTable) {
+                this.ensureTableAvailable(lockedTable);
             }
 
-            // Auto-add to queue if order is pending
-            if (createdOrder.status === OrderStatus.Pending) {
-                try {
-                    await this.queueService.addToQueue(
-                        createdOrder.id,
-                        QueuePriority.Normal,
-                        createdOrder.branch_id
-                    );
-                } catch (error) {
-                    // Log but don't fail if queue add fails (might already be in queue)
-                    console.warn('Failed to add order to queue:', error);
-                }
+            const savedOrder = await this.saveOrderWithRetry(manager, orderData, !orderData.order_no);
+
+            if (lockedTable) {
+                lockedTable.status = TableStatus.Unavailable;
+                await manager.getRepository(Tables).save(lockedTable);
             }
 
-            return createdOrder
-        })
+            return savedOrder;
+        });
+
+        const finalizedOrder = await this.finalizeOrderMutation(
+            {
+                orderId: createdOrder.id,
+                branchId: createdOrder.branch_id || effectiveBranchId,
+                tableIdsToRefresh: createdOrder.table_id ? [createdOrder.table_id] : [],
+            },
+            RealtimeEvents.orders.create
+        );
+
+        return finalizedOrder ?? createdOrder;
     }
 
     async createFullOrder(data: any, branchId?: string): Promise<SalesOrder> {
         const { items, ...orderData } = data;
-        await this.ensureActiveShift(orderData.branch_id || branchId);
-        return await runInTransaction(async (manager) => {
-
+        const effectiveBranchId = orderData.branch_id || branchId;
+        await this.ensureActiveShift(effectiveBranchId);
+        const createdOrder = await runInTransaction(async (manager) => {
             if (!items || !Array.isArray(items) || items.length === 0) {
                 throw new AppError("กรุณาระบุรายการสินค้า", 400);
             }
 
-            if (orderData.order_no) {
-                const existingOrder = await this.ordersModel.findOneByOrderNo(orderData.order_no)
-                if (existingOrder) {
-                    throw new Error("เลขที่ออเดอร์นี้มีอยู่ในระบบแล้ว")
-                }
-            } else {
-                orderData.order_no = await this.ensureOrderNo();
-            }
+            const nextOrderData = {
+                ...orderData,
+                branch_id: effectiveBranchId,
+                status: orderData.status
+                    ? this.ensureValidStatus(String(orderData.status))
+                    : OrderStatus.Pending,
+            } as Partial<SalesOrder>;
 
-            if (!orderData.status) {
-                orderData.status = OrderStatus.Pending;
-            } else {
-                orderData.status = this.ensureValidStatus(String(orderData.status));
-            }
+            await this.validateRelatedEntities(manager, effectiveBranchId, nextOrderData);
 
-            const effectiveBranchId = orderData.branch_id || branchId;
-            if (effectiveBranchId && !orderData.branch_id) {
-                orderData.branch_id = effectiveBranchId;
-            }
-
-            // Validate foreign keys to prevent cross-branch access
-            if (effectiveBranchId) {
-                if (orderData.table_id) {
-                    const table = await manager.getRepository(Tables).findOneBy({ id: orderData.table_id, branch_id: effectiveBranchId } as any);
-                    if (!table) throw new AppError("Table not found for this branch", 404);
-                }
-
-                if (orderData.delivery_id) {
-                    const delivery = await manager.getRepository(Delivery).findOneBy({ id: orderData.delivery_id, branch_id: effectiveBranchId } as any);
-                    if (!delivery) throw new AppError("Delivery not found for this branch", 404);
-                }
-
-                if (orderData.discount_id) {
-                    const discount = await manager.getRepository(Discounts).findOneBy({ id: orderData.discount_id, branch_id: effectiveBranchId } as any);
-                    if (!discount) throw new AppError("Discount not found for this branch", 404);
-                }
+            const lockedTables = await this.lockTablesForUpdate(manager, [nextOrderData.table_id], effectiveBranchId);
+            const lockedTable = nextOrderData.table_id ? lockedTables.get(nextOrderData.table_id) : undefined;
+            if (lockedTable) {
+                this.ensureTableAvailable(lockedTable);
             }
 
             const servingGroup = this.createServingGroup();
@@ -661,19 +810,18 @@ export class OrdersService {
                 items,
                 manager,
                 effectiveBranchId,
-                orderData.order_type,
+                nextOrderData.order_type,
                 servingGroup
             );
 
-            const orderRepo = manager.getRepository(SalesOrder);
             const itemRepo = manager.getRepository(SalesOrderItem);
             const detailRepo = manager.getRepository(SalesOrderDetail);
 
-            const savedOrder = await orderRepo.save(orderData);
+            const savedOrder = await this.saveOrderWithRetry(manager, nextOrderData, !nextOrderData.order_no);
 
-            if (savedOrder.table_id) {
-                const tablesRepo = manager.getRepository(Tables)
-                await tablesRepo.update(savedOrder.table_id, { status: TableStatus.Unavailable })
+            if (lockedTable) {
+                lockedTable.status = TableStatus.Unavailable;
+                await manager.getRepository(Tables).save(lockedTable);
             }
 
             for (const prepared of preparedItems) {
@@ -691,191 +839,155 @@ export class OrdersService {
             await recalculateOrderTotal(savedOrder.id, manager);
             await this.syncOrderStatusFromItems(savedOrder.id, effectiveBranchId, manager);
             return savedOrder;
-        }).then(async (savedOrder) => {
-            const lookupBranchId = savedOrder.branch_id || branchId;
-            const fullOrder = await this.ordersModel.findOne(savedOrder.id, lookupBranchId);
-            if (fullOrder) {
-                this.invalidateReadCaches(fullOrder.branch_id || branchId);
-                const effectiveBranchId = fullOrder.branch_id || branchId;
-                if (effectiveBranchId) {
-                    this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.create, fullOrder);
-                }
-                if (fullOrder.table_id) {
-                    const tablesRepo = getRepository(Tables)
-                    const t = await tablesRepo.findOneBy({ id: fullOrder.table_id })
-                    if (t) {
-                        if (effectiveBranchId) {
-                            this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.tables.update, t);
-                        }
-                    }
-                }
+        });
 
-                // Auto-add to queue if order is pending
-                if (fullOrder.status === OrderStatus.Pending) {
-                    try {
-                        await this.queueService.addToQueue(
-                            fullOrder.id,
-                            QueuePriority.Normal,
-                            fullOrder.branch_id
-                        );
-                    } catch (error) {
-                        // Log but don't fail if queue add fails (might already be in queue)
-                        console.warn('Failed to add order to queue:', error);
-                    }
-                }
+        const finalizedOrder = await this.finalizeOrderMutation(
+            {
+                orderId: createdOrder.id,
+                branchId: createdOrder.branch_id || effectiveBranchId,
+                tableIdsToRefresh: createdOrder.table_id ? [createdOrder.table_id] : [],
+            },
+            RealtimeEvents.orders.create
+        );
 
-                return fullOrder;
-            }
-            return savedOrder;
-        })
+        return finalizedOrder ?? createdOrder;
     }
 
     async update(id: string, orders: SalesOrder, branchId?: string): Promise<SalesOrder> {
-        try {
-            const orderToUpdate = await this.ordersModel.findOne(id, branchId)
-            if (!orderToUpdate) {
-                throw new Error("ไม่พบข้อมูลออเดอร์ที่ต้องการแก้ไข")
-            }
-
-            const effectiveBranchId = orderToUpdate.branch_id || branchId;
-
-            // Validate foreign keys to prevent cross-branch access
-            if (effectiveBranchId) {
-                if (orders.table_id !== undefined && orders.table_id !== null) {
-                    const table = await getRepository(Tables).findOneBy({ id: orders.table_id as any, branch_id: effectiveBranchId } as any);
-                    if (!table) throw new AppError("Table not found for this branch", 404);
-                }
-
-                if (orders.delivery_id !== undefined && orders.delivery_id !== null) {
-                    const delivery = await getRepository(Delivery).findOneBy({ id: orders.delivery_id as any, branch_id: effectiveBranchId } as any);
-                    if (!delivery) throw new AppError("Delivery not found for this branch", 404);
-                }
-
-                if (orders.discount_id !== undefined && orders.discount_id !== null) {
-                    const discount = await getRepository(Discounts).findOneBy({ id: orders.discount_id as any, branch_id: effectiveBranchId } as any);
-                    if (!discount) throw new AppError("Discount not found for this branch", 404);
-                }
-            }
-
-            if (orders.order_no && orders.order_no !== orderToUpdate.order_no) {
-                const existingOrder = await this.ordersModel.findOneByOrderNo(orders.order_no, effectiveBranchId)
-                if (existingOrder) {
-                    throw new Error("เลขที่ออเดอร์นี้มีอยู่ในระบบแล้ว")
-                }
-            }
-
+        const mutationContext = await runInTransaction(async (manager) => {
+            const lockedOrder = await this.lockOrderForUpdate(manager, id, branchId);
+            const effectiveBranchId = lockedOrder.branch_id || branchId;
             const normalizedStatus = orders.status
                 ? this.ensureValidStatus(String(orders.status))
                 : undefined;
 
-            const payload = normalizedStatus
-                ? ({ ...orders, status: normalizedStatus } as SalesOrder)
-                : orders;
+            await this.validateRelatedEntities(manager, effectiveBranchId, orders);
 
-            const updatedOrder = await this.ordersModel.update(id, payload, undefined, branchId)
+            const previousTableId = lockedOrder.table_id || null;
+            const nextTableId = orders.table_id !== undefined
+                ? (orders.table_id || null)
+                : previousTableId;
+            const lockedTables = await this.lockTablesForUpdate(manager, [previousTableId, nextTableId], effectiveBranchId);
+            const nextTable = nextTableId ? lockedTables.get(nextTableId) : undefined;
+            if (nextTable && nextTableId !== previousTableId) {
+                this.ensureTableAvailable(nextTable);
+            }
+
+            try {
+                Object.assign(lockedOrder, {
+                    ...orders,
+                    branch_id: effectiveBranchId,
+                    status: normalizedStatus ?? lockedOrder.status,
+                } as Partial<SalesOrder>);
+                await manager.getRepository(SalesOrder).save(lockedOrder);
+            } catch (error) {
+                if (this.isUniqueOrderNoError(error)) {
+                    throw AppError.conflict("Order number already exists");
+                }
+                throw error;
+            }
 
             if (normalizedStatus === OrderStatus.Cancelled) {
-                await this.ordersModel.updateAllItemsStatus(id, OrderStatus.Cancelled);
+                await this.ordersModel.updateAllItemsStatus(id, OrderStatus.Cancelled, manager);
             }
 
-            await recalculateOrderTotal(id);
+            await recalculateOrderTotal(id, manager);
+            await this.syncOrderStatusFromItems(id, effectiveBranchId, manager);
 
-            const refreshedOrder = await this.ordersModel.findOne(id, branchId);
-            const result = refreshedOrder ?? updatedOrder;
+            const refreshedOrder = await this.ordersModel.findOne(id, effectiveBranchId, undefined, manager);
+            if (!refreshedOrder) {
+                throw new AppError("Order not found", 404);
+            }
 
-            const finalStatus = normalizedStatus ?? this.ensureValidStatus(String(result.status));
-            // Release table if Order is Completed or Cancelled
-            if ((finalStatus === OrderStatus.Completed || finalStatus === OrderStatus.Cancelled) && result.table_id) {
-                const tablesRepo = getRepository(Tables);
-                await tablesRepo.update(result.table_id, { status: TableStatus.Available });
-                const t = await tablesRepo.findOneBy({ id: result.table_id });
-                if (t) {
-                    const effectiveBranchId = result.branch_id || branchId;
-                    if (effectiveBranchId) {
-                        this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.tables.update, t);
-                    }
+            const finalStatus = this.ensureValidStatus(String(refreshedOrder.status));
+            const finalTableId = refreshedOrder.table_id || null;
+            const tablesToPersist: Tables[] = [];
+
+            if (previousTableId && previousTableId !== finalTableId) {
+                const previousTable = lockedTables.get(previousTableId);
+                if (previousTable) {
+                    previousTable.status = TableStatus.Available;
+                    tablesToPersist.push(previousTable);
                 }
             }
 
-            // Update queue status based on order status
-            try {
-                const queueRepo = getRepository(OrderQueue);
-                const queueItem = await queueRepo.findOne({ where: { order_id: result.id } });
-
-                if (queueItem) {
-                    if (finalStatus === OrderStatus.Pending) {
-                        await this.queueService.updateStatus(queueItem.id, QueueStatus.Processing, branchId);
-                    } else if (finalStatus === OrderStatus.Completed || finalStatus === OrderStatus.Cancelled) {
-                        await this.queueService.updateStatus(queueItem.id, finalStatus === OrderStatus.Completed
-                            ? QueueStatus.Completed
-                            : QueueStatus.Cancelled, branchId);
-                    }
+            if (finalTableId) {
+                const activeTable = lockedTables.get(finalTableId);
+                if (activeTable) {
+                    activeTable.status =
+                        finalStatus === OrderStatus.Completed || finalStatus === OrderStatus.Cancelled
+                            ? TableStatus.Available
+                            : TableStatus.Unavailable;
+                    tablesToPersist.push(activeTable);
                 }
-            } catch (error) {
-                // Log but don't fail if queue update fails
-                console.warn('Failed to update queue status:', error);
             }
 
-            const emitBranchId = result.branch_id || branchId;
-            this.invalidateReadCaches(emitBranchId);
-            if (emitBranchId) {
-                this.socketService.emitToBranch(emitBranchId, RealtimeEvents.orders.update, result);
+            if (tablesToPersist.length > 0) {
+                const dedupedTables = Array.from(new Map(tablesToPersist.map((table) => [table.id, table])).values());
+                await manager.getRepository(Tables).save(dedupedTables);
             }
-            return result
-        } catch (error) {
-            throw error
+
+            return {
+                orderId: refreshedOrder.id,
+                branchId: refreshedOrder.branch_id || effectiveBranchId,
+                tableIdsToRefresh: Array.from(new Set([previousTableId, finalTableId].filter((tableId): tableId is string => Boolean(tableId)))),
+            } satisfies MutatedOrderContext;
+        });
+
+        const finalizedOrder = await this.finalizeOrderMutation(mutationContext, RealtimeEvents.orders.update);
+        if (!finalizedOrder) {
+            throw new AppError("Order not found", 404);
         }
+
+        return finalizedOrder;
     }
 
     async delete(id: string, branchId?: string): Promise<void> {
-        try {
-            const order = await this.ordersModel.findOne(id, branchId);
-            if (!order) {
-                throw new AppError("Order not found", 404);
-            }
-            if (order?.table_id) {
-                const tablesRepo = getRepository(Tables);
-                await tablesRepo.update(order.table_id, { status: TableStatus.Available });
-                const t = await tablesRepo.findOneBy({ id: order.table_id });
-                if (t) {
-                    const effectiveBranchId = order.branch_id || branchId;
-                    if (effectiveBranchId) {
-                        this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.tables.update, t);
-                    }
+        const mutationContext = await runInTransaction(async (manager) => {
+            const order = await this.lockOrderForUpdate(manager, id, branchId);
+            const effectiveBranchId = order.branch_id || branchId;
+            const lockedTables = await this.lockTablesForUpdate(manager, [order.table_id], effectiveBranchId);
+
+            if (order.table_id) {
+                const table = lockedTables.get(order.table_id);
+                if (table) {
+                    table.status = TableStatus.Available;
+                    await manager.getRepository(Tables).save(table);
                 }
             }
-            await this.ordersModel.delete(id, undefined, branchId)
-            const effectiveBranchId = order?.branch_id || branchId;
-            this.invalidateReadCaches(effectiveBranchId);
-            if (effectiveBranchId) {
-                this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.delete, { id });
-            }
-        } catch (error) {
-            throw error
-        }
+
+            await this.ordersModel.delete(id, manager, effectiveBranchId);
+            return {
+                orderId: id,
+                branchId: effectiveBranchId,
+                tableIdsToRefresh: order.table_id ? [order.table_id] : [],
+            } satisfies MutatedOrderContext;
+        });
+
+        await this.finalizeOrderMutation(mutationContext, RealtimeEvents.orders.delete);
     }
 
     async updateItemStatus(itemId: string, status: string, branchId?: string): Promise<void> {
-        try {
-            const normalized = this.ensureValidStatus(status);
-            const item = await this.ordersModel.findItemById(itemId, undefined, branchId);
-            if (!item) throw new AppError("Item not found", 404);
+        const normalized = this.ensureValidStatus(status);
+        const mutationContext = await runInTransaction(async (manager) => {
+            const item = await this.lockItemForUpdate(manager, itemId, branchId);
+            const effectiveBranchId = item.order?.branch_id || branchId;
+            await this.lockOrderForUpdate(manager, item.order_id, effectiveBranchId);
 
-            await this.ordersModel.updateItemStatus(itemId, normalized)
-            await recalculateOrderTotal(item.order_id);
-            await this.syncOrderStatusFromItems(item.order_id, branchId);
-
-            const updatedOrder = await this.ordersModel.findOne(item.order_id, branchId);
-            if (!updatedOrder) return;
-
-            const effectiveBranchId = updatedOrder.branch_id || branchId;
-            this.invalidateReadCaches(effectiveBranchId);
-            if (effectiveBranchId) {
-                this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.update, updatedOrder);
+            if (item.status !== normalized) {
+                await this.ordersModel.updateItemStatus(itemId, normalized, manager);
             }
-        } catch (error) {
-            throw error
-        }
+
+            await recalculateOrderTotal(item.order_id, manager);
+            await this.syncOrderStatusFromItems(item.order_id, effectiveBranchId, manager);
+
+            return {
+                orderId: item.order_id,
+                branchId: effectiveBranchId,
+            } satisfies MutatedOrderContext;
+        });
+
+        await this.finalizeOrderMutation(mutationContext, RealtimeEvents.orders.update);
     }
 
     async addItems(orderId: string, items: any[], branchId?: string): Promise<SalesOrder> {
@@ -885,9 +997,7 @@ export class OrdersService {
                     throw new AppError("Missing items", 400);
                 }
 
-                const orderRepo = manager.getRepository(SalesOrder);
-                const order = await orderRepo.findOneBy(branchId ? ({ id: orderId, branch_id: branchId } as any) : { id: orderId });
-                if (!order) throw new AppError("Order not found", 404);
+                const order = await this.lockOrderForUpdate(manager, orderId, branchId);
 
                 const servingGroup = this.createServingGroup();
                 const preparedItems = await this.prepareItems(
@@ -914,7 +1024,7 @@ export class OrdersService {
                 await recalculateOrderTotal(orderId, manager);
                 await this.syncOrderStatusFromItems(orderId, branchId, manager);
 
-                const updatedOrder = await this.ordersModel.findOne(orderId, branchId);
+                const updatedOrder = await this.ordersModel.findOne(orderId, branchId, undefined, manager);
                 return updatedOrder!;
             } catch (error) {
                 throw error;
@@ -938,8 +1048,8 @@ export class OrdersService {
     async updateItemDetails(itemId: string, data: { quantity?: number, notes?: string, details?: any[] }, branchId?: string): Promise<SalesOrder> {
         return await runInTransaction(async (manager) => {
             try {
-                const item = await this.ordersModel.findItemById(itemId, manager, branchId);
-                if (!item) throw new Error("Item not found");
+                const item = await this.lockItemForUpdate(manager, itemId, branchId);
+                await this.lockOrderForUpdate(manager, item.order_id, item.order?.branch_id || branchId);
 
                 const detailRepo = manager.getRepository(SalesOrderDetail);
 
@@ -988,7 +1098,12 @@ export class OrdersService {
                 await recalculateOrderTotal(updatedItemWithDetails.order_id, manager);
                 await this.syncOrderStatusFromItems(updatedItemWithDetails.order_id, branchId, manager);
 
-                const updatedOrder = await this.ordersModel.findOne(updatedItemWithDetails.order_id, branchId);
+                const updatedOrder = await this.ordersModel.findOne(
+                    updatedItemWithDetails.order_id,
+                    branchId,
+                    undefined,
+                    manager
+                );
                 return updatedOrder!;
             } catch (error) {
                 throw error;
@@ -1008,8 +1123,8 @@ export class OrdersService {
     async deleteItem(itemId: string, branchId?: string): Promise<SalesOrder> {
         return await runInTransaction(async (manager) => {
             try {
-                const item = await this.ordersModel.findItemById(itemId, manager, branchId);
-                if (!item) throw new Error("Item not found");
+                const item = await this.lockItemForUpdate(manager, itemId, branchId);
+                await this.lockOrderForUpdate(manager, item.order_id, item.order?.branch_id || branchId);
                 const orderId = item.order_id;
 
                 // Soft-cancel instead of hard delete to keep auditability and order history.
@@ -1020,7 +1135,7 @@ export class OrdersService {
                 await recalculateOrderTotal(orderId, manager);
                 await this.syncOrderStatusFromItems(orderId, branchId, manager);
 
-                const updatedOrder = await this.ordersModel.findOne(orderId, branchId);
+                const updatedOrder = await this.ordersModel.findOne(orderId, branchId, undefined, manager);
                 return updatedOrder!;
             } catch (error) {
                 throw error;

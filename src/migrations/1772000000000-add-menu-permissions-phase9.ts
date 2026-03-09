@@ -183,16 +183,6 @@ const MENU_RESOURCE_SEEDS: MenuResourceSeed[] = [
         ),
     },
     {
-        resourceKey: "menu.pos.kitchen",
-        resourceName: "POS Menu - Kitchen",
-        routePattern: "/pos/kitchen",
-        sortOrder: 2023,
-        policies: menuPolicy(
-            { Admin: true, Manager: true, Employee: true },
-            { Admin: "all", Manager: "branch", Employee: "branch" }
-        ),
-    },
-    {
         resourceKey: "menu.pos.shift",
         resourceName: "POS Menu - Shift",
         routePattern: "/pos/shift",

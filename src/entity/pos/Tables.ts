@@ -1,4 +1,4 @@
-import { Column, Entity, PrimaryGeneratedColumn, Index, ManyToOne, JoinColumn } from "typeorm";
+import { Column, Entity, PrimaryGeneratedColumn, Index, ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn } from "typeorm";
 import { Branch } from "../Branch";
 
 export enum TableStatus {
@@ -27,10 +27,10 @@ export class Tables {
     @Column({ type: "enum", enum: TableStatus, default: TableStatus.Available })
     status!: TableStatus;
 
-    @Column({ type: "timestamptz", default: () => "CURRENT_TIMESTAMP" })
+    @CreateDateColumn({ type: "timestamptz" })
     create_date!: Date;
 
-    @Column({ type: "timestamptz", default: () => "CURRENT_TIMESTAMP" })
+    @UpdateDateColumn({ type: "timestamptz" })
     update_date!: Date;
 
     @Column({ type: "boolean", default: true })

@@ -76,7 +76,7 @@ export class DiscountsController {
             new_values: req.body,
             path: req.originalUrl,
             method: req.method,
-            description: `Create discount ${discount.discount_name || discount.display_name || discount.id}`,
+            description: `Create discount ${discount.display_name || discount.id}`,
         });
         return ApiResponses.created(res, discount);
     });

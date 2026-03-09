@@ -5,12 +5,9 @@ import {
     cleanupAuditLogsOlderThan,
     cleanupCompletedStockOrdersOlderThan,
     cleanupClosedOrdersOlderThan,
-    cleanupOrderQueueOlderThan,
     DEFAULT_AUDIT_LOG_RETENTION_DAYS,
     DEFAULT_CLOSED_ORDER_STATUSES,
-    DEFAULT_ORDER_QUEUE_RETENTION_DAYS,
     DEFAULT_ORDER_RETENTION_DAYS,
-    DEFAULT_QUEUE_CLOSED_STATUSES,
     DEFAULT_STOCK_COMPLETED_STATUSES,
     DEFAULT_STOCK_ORDER_RETENTION_DAYS,
 } from "../src/services/maintenance/orderRetention.service";
@@ -55,11 +52,6 @@ async function main(): Promise<void> {
     const enabled = parseBoolean(process.env.ORDER_RETENTION_ENABLED, false);
     const dryRun = !enabled ? true : parseBoolean(process.env.ORDER_RETENTION_DRY_RUN, false);
 
-    const queueEnabled = parseBoolean(process.env.ORDER_QUEUE_RETENTION_ENABLED, false);
-    const queueDryRun = !queueEnabled ? true : parseBoolean(process.env.ORDER_QUEUE_RETENTION_DRY_RUN, false);
-    const queueDays = parseIntOrUndefined(process.env.ORDER_QUEUE_RETENTION_DAYS) ?? DEFAULT_ORDER_QUEUE_RETENTION_DAYS;
-    const queueStatuses = parseCsv(process.env.ORDER_QUEUE_RETENTION_STATUSES) ?? DEFAULT_QUEUE_CLOSED_STATUSES;
-
     const stockEnabled = parseBoolean(process.env.STOCK_ORDER_RETENTION_ENABLED, enabled);
     const stockDryRun = !stockEnabled ? true : parseBoolean(process.env.STOCK_ORDER_RETENTION_DRY_RUN, dryRun);
     const stockDays = parseIntOrUndefined(process.env.STOCK_ORDER_RETENTION_DAYS) ?? DEFAULT_STOCK_ORDER_RETENTION_DAYS;
@@ -98,9 +90,6 @@ async function main(): Promise<void> {
     if (!enabled) {
         console.log("[Retention] ORDER_RETENTION_ENABLED is not true; running in dry-run mode (no deletes).");
     }
-    if (!queueEnabled) {
-        console.log("[Retention] ORDER_QUEUE_RETENTION_ENABLED is not true; queue cleanup will run in dry-run mode.");
-    }
     if (!stockEnabled) {
         console.log("[Retention] STOCK_ORDER_RETENTION_ENABLED is not true; stock order cleanup will run in dry-run mode.");
     }
@@ -121,13 +110,6 @@ async function main(): Promise<void> {
 
         console.log("[Retention] Result:", result);
 
-        const queueResult = await cleanupOrderQueueOlderThan({
-            retentionDays: queueDays,
-            statuses: queueStatuses,
-            dryRun: queueDryRun,
-        });
-        console.log("[Retention] Queue Result:", queueResult);
-
         const stockResult = await cleanupCompletedStockOrdersOlderThan({
             retentionDays: stockDays,
             statuses: stockStatuses,
@@ -147,11 +129,9 @@ async function main(): Promise<void> {
 
         const deletedTotal =
             result.deleted.orders +
-            result.deleted.orderQueue +
             result.deleted.payments +
             result.deleted.items +
             result.deleted.details +
-            queueResult.deleted +
             stockResult.deleted.orders +
             stockResult.deleted.items +
             stockResult.deleted.details +
@@ -169,7 +149,6 @@ async function main(): Promise<void> {
             deletedTotal,
             warnDeletedThreshold,
             orders: result,
-            queue: queueResult,
             stockOrders: stockResult,
             auditLogs: auditResult,
         };

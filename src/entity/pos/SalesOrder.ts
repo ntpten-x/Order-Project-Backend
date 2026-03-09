@@ -1,4 +1,4 @@
-import { Column, Entity, PrimaryGeneratedColumn, ManyToOne, JoinColumn, OneToMany, Index } from "typeorm";
+import { Column, Entity, PrimaryGeneratedColumn, ManyToOne, JoinColumn, OneToMany, Index, CreateDateColumn, UpdateDateColumn } from "typeorm";
 import { Tables } from "./Tables";
 import { Delivery } from "./Delivery";
 import { SalesOrderItem } from "./SalesOrderItem";
@@ -51,6 +51,9 @@ export class SalesOrder {
     delivery_code?: string | null; // รหัสออเดอร์จากผู้ให้บริการ (เช่น Grab: GF-123)
 
     // --- ส่วนการเงิน ---
+    @Column({ type: "varchar", length: 120, nullable: true })
+    customer_name?: string | null;
+
     @Column({ type: "decimal", precision: 12, scale: 2, default: 0 })
     sub_total!: number; // ยอดรวมค่าอาหาร (ก่อนหักส่วนลด/ภาษี)
 
@@ -86,10 +89,10 @@ export class SalesOrder {
     @JoinColumn({ name: "created_by_id" })
     created_by?: Users | null; // ความสัมพันธ์เชื่อมไปยังข้อมูลพนักงาน
 
-    @Column({ type: "timestamptz", default: () => "CURRENT_TIMESTAMP" })
+    @CreateDateColumn({ type: "timestamptz" })
     create_date!: Date; // วันที่และเวลาที่สร้างออเดอร์
 
-    @Column({ type: "timestamptz", default: () => "CURRENT_TIMESTAMP" })
+    @UpdateDateColumn({ type: "timestamptz" })
     update_date!: Date; // วันที่และเวลาที่แก้ไขล่าสุด
 
     @OneToMany(() => SalesOrderItem, (item) => item.order)

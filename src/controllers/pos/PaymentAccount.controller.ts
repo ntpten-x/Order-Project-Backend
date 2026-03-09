@@ -40,6 +40,19 @@ export class PaymentAccountController {
         return ApiResponses.ok(res, result);
     });
 
+    getAccount = catchAsync(async (req: Request, res: Response) => {
+        const branchId = getBranchId(req as any);
+        if (!branchId) throw AppError.forbidden("Access denied: No branch assigned to user");
+
+        const { id } = req.params;
+        const account = await this.service.findOne(branchId, id);
+        if (!account) {
+            throw AppError.notFound("Payment account");
+        }
+
+        return ApiResponses.ok(res, account);
+    });
+
     createAccount = catchAsync(async (req: Request, res: Response) => {
         const branchId = getBranchId(req as any);
         if (!branchId) throw AppError.forbidden("Access denied: No branch assigned to user");

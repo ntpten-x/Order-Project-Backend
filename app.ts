@@ -5,6 +5,7 @@ import usersRouter from "./src/routes/users.route";
 import rolesRouter from "./src/routes/roles.route";
 import authRouter from "./src/routes/auth.route";
 import { createServer } from "http";
+import { createServer as createNetServer } from "net";
 import { Server } from "socket.io";
 import { SocketService } from "./src/services/socket.service";
 import cookieParser from "cookie-parser";
@@ -34,25 +35,36 @@ import salesOrderDetailPosRouter from "./src/routes/pos/salesOrderDetail.route";
 
 import shiftsPosRouter from "./src/routes/pos/shifts.route";
 import shopProfilePosRouter from "./src/routes/pos/shopProfile.route";
+import takeawayQrPosRouter from "./src/routes/pos/takeawayQr.route";
 import printSettingsPosRouter from "./src/routes/pos/printSettings.route";
 import paymentAccountPosRouter from "./src/routes/pos/paymentAccount.routes";
 import dashboardRouter from "./src/routes/pos/dashboard.route";
+import backgroundJobsPosRouter from "./src/routes/pos/backgroundJobs.route";
 import branchRouter from "./src/routes/branch.route";
-import orderQueueRouter from "./src/routes/pos/orderQueue.route";
 import permissionsRouter from "./src/routes/permissions.route";
 import systemRouter from "./src/routes/system.route";
 import publicTableOrderRouter from "./src/routes/public/tableOrder.route";
+import publicTakeawayOrderRouter from "./src/routes/public/takeawayOrder.route";
 import { globalErrorHandler } from "./src/middleware/error.middleware";
 import { AppError } from "./src/utils/AppError";
 import { performanceMonitoring, errorTracking } from "./src/middleware/monitoring.middleware";
 import { metrics } from "./src/utils/metrics";
 import { buildCorsOriginChecker, resolveAllowedOrigins } from "./src/utils/cors";
 import { startupWarmupService } from "./src/services/startupWarmup.service";
+import { logger } from "./src/utils/logger";
+import { httpLogger } from "./src/middleware/httpLogger.middleware";
+import { registerProcessErrorHandlers } from "./src/utils/processErrorHandlers";
 
 const app = express();
 const httpServer = createServer(app); // Wrap express with HTTP server
-const port = process.env.PORT || 4000;
-console.log(`[BOOT] Backend target port: ${port}`);
+const configuredPort = Number(process.env.PORT || 4000);
+const port = Number.isFinite(configuredPort) && configuredPort > 0 ? configuredPort : 4000;
+const portAutoFallbackEnabled = process.env.PORT_AUTO_FALLBACK
+    ? process.env.PORT_AUTO_FALLBACK === "true"
+    : process.env.NODE_ENV !== "production";
+const maxPortFallbackAttempts = Math.max(1, Number(process.env.PORT_AUTO_FALLBACK_ATTEMPTS || 20));
+registerProcessErrorHandlers({ server: httpServer });
+logger.info({ port }, "backend bootstrap starting");
 const rawBodyLimitMb = Number(process.env.REQUEST_BODY_LIMIT_MB || 20);
 const bodyLimitMb = Number.isFinite(rawBodyLimitMb) && rawBodyLimitMb > 0 ? rawBodyLimitMb : 20;
 const enablePerfLogs = process.env.ENABLE_PERF_LOG === "true";
@@ -70,6 +82,44 @@ const setNoStoreHeaders = (res: express.Response): void => {
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
     res.setHeader("Pragma", "no-cache");
     res.setHeader("Expires", "0");
+};
+
+const isPortAvailable = async (candidatePort: number): Promise<boolean> => {
+    return await new Promise<boolean>((resolve) => {
+        const tester = createNetServer();
+
+        tester.once("error", (error: NodeJS.ErrnoException) => {
+            if (error.code === "EADDRINUSE" || error.code === "EACCES") {
+                resolve(false);
+                return;
+            }
+
+            resolve(false);
+        });
+
+        tester.once("listening", () => {
+            tester.close(() => resolve(true));
+        });
+
+        tester.listen(candidatePort);
+    });
+};
+
+const resolveListenPort = async (preferredPort: number): Promise<number> => {
+    if (!portAutoFallbackEnabled) {
+        return preferredPort;
+    }
+
+    for (let offset = 0; offset < maxPortFallbackAttempts; offset++) {
+        const candidatePort = preferredPort + offset;
+        if (await isPortAvailable(candidatePort)) {
+            return candidatePort;
+        }
+    }
+
+    throw new Error(
+        `No available port found starting from ${preferredPort} within ${maxPortFallbackAttempts} attempts`
+    );
 };
 
 // Trust proxy only when explicitly configured.
@@ -97,38 +147,24 @@ app.get('/health', (_req, res) => {
     res.status(200).json({ status: 'ok', uptime: process.uptime() });
 });
 
+app.use(httpLogger);
+
 // Performance monitoring (always enabled)
 app.use(performanceMonitoring);
-
-// Basic performance logging (disabled in prod unless ENABLE_PERF_LOG=true)
-if (enablePerfLogs) {
-    app.use((req, res, next) => {
-        const start = process.hrtime.bigint();
-        res.on("finish", () => {
-            const end = process.hrtime.bigint();
-            const ms = Number(end - start) / 1_000_000;
-            const status = res.statusCode;
-            const method = req.method;
-            const path = req.originalUrl;
-            console.log(`[PERF] ${method} ${path} ${status} - ${ms.toFixed(1)}ms`);
-        });
-        next();
-    });
-}
 
 // Ensure JWT secret exists (no insecure default)
 if (!process.env.JWT_SECRET) {
     if (process.env.NODE_ENV === "production") {
-        console.error("JWT_SECRET is required in production.");
+        logger.fatal("JWT_SECRET is required in production");
         process.exit(1);
     } else {
         process.env.JWT_SECRET = randomBytes(32).toString("hex");
-        console.warn("JWT_SECRET not set. Generated a temporary secret for this session.");
+        logger.warn("JWT_SECRET not set. Generated a temporary secret for this session");
     }
 }
 
 if (process.env.NODE_ENV === "production" && metricsRequested && !metricsApiKey) {
-    console.error("METRICS_API_KEY is required when METRICS_ENABLED=true in production.");
+    logger.fatal("METRICS_API_KEY is required when METRICS_ENABLED=true in production");
     process.exit(1);
 }
 
@@ -142,6 +178,7 @@ app.use(apiLimiter);
 app.use("/auth/login", authLimiter);
 app.use("/pos/orders", orderCreateLimiter); // Stricter limit for order creation
 app.use("/public/table-order", orderCreateLimiter); // Stricter limit for public table ordering
+app.use("/public/takeaway-order", orderCreateLimiter); // Stricter limit for public takeaway ordering
 app.use("/pos/payments", paymentLimiter); // Stricter limit for payments
 
 // CORS
@@ -254,18 +291,18 @@ app.get('/csrf-token', (req, res, next) => {
         csrfProtection(req, res, (err) => {
             if (err) {
                 // If CSRF initialization fails, log and return error
-                console.error('CSRF token generation error:', err);
-                console.error('Error details:', {
+                logger.error({
+                    err,
                     code: (err as any).code,
                     message: err.message,
                     name: err.name
-                });
+                }, "CSRF token generation error");
                 
                 // Check if it's a missing secret error (first request)
                 if ((err as any).code === 'EBADCSRFTOKEN' || err.message?.includes('secret')) {
                     // This might be the first request - try to generate token anyway
                     // csurf should create the secret cookie on first call
-                    console.log('First CSRF request - attempting to generate secret...');
+                    logger.info("First CSRF request - attempting to generate secret");
                 }
                 
                 // Return error in consistent format (bypass global error handler)
@@ -282,7 +319,7 @@ app.get('/csrf-token', (req, res, next) => {
             try {
                 const token = req.csrfToken ? req.csrfToken() : '';
                 if (!token) {
-                    console.warn('CSRF token is empty after generation');
+                    logger.warn("CSRF token is empty after generation");
                     return res.status(500).json({ 
                         success: false,
                         error: {
@@ -298,7 +335,7 @@ app.get('/csrf-token', (req, res, next) => {
                     csrfToken: token 
                 });
             } catch (tokenError) {
-                console.error('Error getting CSRF token:', tokenError);
+                logger.error({ err: tokenError }, "Error getting CSRF token");
                 return res.status(500).json({ 
                     success: false,
                     error: {
@@ -310,7 +347,7 @@ app.get('/csrf-token', (req, res, next) => {
         });
     } catch (error) {
         // Catch any unexpected errors
-        console.error('Unexpected error in CSRF token endpoint:', error);
+        logger.error({ err: error }, "Unexpected error in CSRF token endpoint");
         return res.status(500).json({ 
             success: false,
             error: {
@@ -346,7 +383,10 @@ app.use((req, res, next) => {
             return csrfProtection(req, res, (err) => {
                 if (err) {
                     // CSRF token missing or invalid
-                    console.warn(`[CSRF] Rejected ${req.method} ${req.path} - Missing or invalid CSRF token`);
+                    logger.warn({
+                        method: req.method,
+                        path: req.path,
+                    }, "CSRF rejected request: missing or invalid token");
                     return res.status(403).json({ 
                         error: 'CSRF token required',
                         message: 'Please refresh the page and try again'
@@ -405,14 +445,16 @@ app.use("/pos/salesOrderDetail", salesOrderDetailPosRouter);
 
 app.use("/pos/shifts", shiftsPosRouter);
 app.use("/pos/shopProfile", shopProfilePosRouter);
+app.use("/pos/takeaway-qr", takeawayQrPosRouter);
 app.use("/pos/print-settings", printSettingsPosRouter);
 app.use("/pos/payment-accounts", paymentAccountPosRouter);
 app.use("/pos/dashboard", dashboardRouter);
-app.use("/pos/queue", orderQueueRouter);
+app.use("/pos/background-jobs", backgroundJobsPosRouter);
 app.use("/branches", branchRouter);
 app.use("/permissions", permissionsRouter);
 app.use("/system", systemRouter);
 app.use("/public/table-order", publicTableOrderRouter);
+app.use("/public/takeaway-order", publicTakeawayOrderRouter);
 
 // Handle Unhandled Routes
 app.use((req, res, next) => {
@@ -425,23 +467,35 @@ app.use(errorTracking);
 // Global Error Handler
 app.use(globalErrorHandler);
 
-connectDatabase().then(() => {
+connectDatabase().then(async () => {
     httpServer.on("error", (error: any) => {
         if (error?.code === "EADDRINUSE") {
-            console.error(`[BOOT] Port ${port} is already in use.`);
+            logger.error({ port, err: error }, "port is already in use");
             return;
         }
         if (error?.code === "EACCES") {
-            console.error(
-                `[BOOT] Port ${port} cannot be opened on this machine. On Windows this commonly means the port is reserved by an excluded port range. Change PORT/.env to another port such as 4000.`
-            );
+            logger.error({
+                port,
+                err: error,
+            }, "port cannot be opened on this machine; choose another PORT");
             return;
         }
-        console.error("[BOOT] Server failed to start:", error);
+        logger.error({ err: error, port }, "server failed to start");
     });
 
-    httpServer.listen(port, () => { // Listen on httpServer
-        console.log(`[BOOT] Server is running on http://localhost:${port}`);
+    const listenPort = await resolveListenPort(port);
+    if (listenPort !== port) {
+        logger.warn({
+            requestedPort: port,
+            fallbackPort: listenPort,
+        }, "requested port is busy; using fallback port");
+    }
+
+    httpServer.listen(listenPort, () => { // Listen on httpServer
+        logger.info({ port: listenPort }, "server is running");
         startupWarmupService.schedule();
     });
+}).catch((error) => {
+    logger.fatal({ err: error }, "database bootstrap failed");
+    process.exit(1);
 });

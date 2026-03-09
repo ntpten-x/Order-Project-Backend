@@ -45,7 +45,7 @@ export type DashboardOverview = {
 type TopItemQueryRow = {
     branch_id: string;
     product_id: string;
-    product_name: string;
+    display_name: string;
     img_url: string | null;
     category_id: string | null;
     total_quantity: string | number;
@@ -63,10 +63,6 @@ type RecentOrderQueryRow = {
     delivery_code: string | null;
     table_name: string | null;
     delivery_name: string | null;
-};
-
-type RecentOrderItemCountRow = {
-    order_id: string;
     items_count: string | number;
 };
 
@@ -152,6 +148,18 @@ export class DashboardService {
         };
     }
 
+    private mapTopItemRow(row: TopItemQueryRow): TopSellingItemsView {
+        return {
+            branch_id: row.branch_id,
+            product_id: row.product_id,
+            display_name: row.display_name || "",
+            img_url: row.img_url || "",
+            category_id: row.category_id || "",
+            total_quantity: Number(row.total_quantity || 0),
+            total_revenue: Number(row.total_revenue || 0),
+        } as TopSellingItemsView;
+    }
+
     async getSalesSummary(startDate?: string, endDate?: string, branchId?: string): Promise<SalesSummaryView[]> {
         const normalized = this.normalizeDateRange(startDate, endDate);
         const scope = this.getCacheScopeParts(branchId);
@@ -205,14 +213,18 @@ export class DashboardService {
             key,
             async () => {
                 const topItemsRepository = getRepository(TopSellingItemsView);
+                const query = topItemsRepository
+                    .createQueryBuilder("top_items")
+                    .orderBy("top_items.total_quantity", "DESC")
+                    .addOrderBy("top_items.total_revenue", "DESC")
+                    .limit(safeLimit);
+
+                if (branchId) {
+                    query.where("top_items.branch_id = :branchId", { branchId });
+                }
+
                 const start = process.hrtime.bigint();
-                const rows = await topItemsRepository.find({
-                    where: branchId ? ({ branch_id: branchId } as any) : undefined,
-                    order: {
-                        total_quantity: "DESC",
-                    },
-                    take: safeLimit,
-                });
+                const rows = await query.getMany();
                 const durationMs = Number(process.hrtime.bigint() - start) / 1_000_000;
                 await logProfileDuration("dashboard.top-items", durationMs);
                 return rows;
@@ -238,7 +250,7 @@ export class DashboardService {
             .leftJoin(Products, "product", "product.id = item.product_id")
             .select("order.branch_id", "branch_id")
             .addSelect("item.product_id", "product_id")
-            .addSelect("COALESCE(product.display_name, '')", "product_name")
+            .addSelect("COALESCE(product.display_name, '')", "display_name")
             .addSelect("COALESCE(product.img_url, '')", "img_url")
             .addSelect("product.category_id", "category_id")
             .addSelect("COALESCE(SUM(item.quantity), 0)::int", "total_quantity")
@@ -272,15 +284,7 @@ export class DashboardService {
             .limit(limit);
 
         const rows = await topItemsQuery.getRawMany<TopItemQueryRow>();
-        return rows.map((row) => ({
-            branch_id: row.branch_id,
-            product_id: row.product_id,
-            product_name: row.product_name || "",
-            img_url: row.img_url || "",
-            category_id: row.category_id || "",
-            total_quantity: Number(row.total_quantity || 0),
-            total_revenue: Number(row.total_revenue || 0),
-        })) as TopSellingItemsView[];
+        return rows.map((row) => this.mapTopItemRow(row));
     }
 
     private async getRecentOrdersSummary(
@@ -289,10 +293,22 @@ export class DashboardService {
         startDate?: string,
         endDate?: string
     ): Promise<DashboardRecentOrderSummary[]> {
+        const itemCountSubquery = getRepository(SalesOrderItem)
+            .createQueryBuilder("item_count")
+            .select("item_count.order_id", "order_id")
+            .addSelect("COALESCE(SUM(item_count.quantity), 0)::int", "items_count")
+            .where("item_count.status::text NOT IN ('Cancelled', 'cancelled')")
+            .groupBy("item_count.order_id");
+
         const recentOrdersQuery = getRepository(SalesOrder)
             .createQueryBuilder("order")
             .leftJoin("order.table", "table")
             .leftJoin("order.delivery", "delivery")
+            .leftJoin(
+                `(${itemCountSubquery.getQuery()})`,
+                "item_counts",
+                "item_counts.order_id = order.id"
+            )
             .select("order.id", "id")
             .addSelect("order.order_no", "order_no")
             .addSelect("order.order_type", "order_type")
@@ -303,9 +319,11 @@ export class DashboardService {
             .addSelect("order.delivery_code", "delivery_code")
             .addSelect("table.table_name", "table_name")
             .addSelect("delivery.delivery_name", "delivery_name")
+            .addSelect("COALESCE(item_counts.items_count, 0)", "items_count")
             .where("order.status IN (:...statuses)", {
                 statuses: ["Paid", "Completed", "Cancelled"],
-            });
+            })
+            .setParameters(itemCountSubquery.getParameters());
 
         if (branchId) {
             recentOrdersQuery.andWhere("order.branch_id = :branchId", { branchId });
@@ -331,21 +349,6 @@ export class DashboardService {
             return [];
         }
 
-        const orderIds = rows.map((row) => row.id);
-        const itemCountRows = await getRepository(SalesOrderItem)
-            .createQueryBuilder("item")
-            .select("item.order_id", "order_id")
-            .addSelect("COALESCE(SUM(item.quantity), 0)::int", "items_count")
-            .where("item.order_id IN (:...orderIds)", { orderIds })
-            .andWhere("item.status::text NOT IN ('Cancelled', 'cancelled')")
-            .groupBy("item.order_id")
-            .getRawMany<RecentOrderItemCountRow>();
-
-        const itemCountByOrderId = new Map<string, number>();
-        for (const itemCountRow of itemCountRows) {
-            itemCountByOrderId.set(itemCountRow.order_id, Number(itemCountRow.items_count || 0));
-        }
-
         return rows.map((row) => ({
             id: row.id,
             order_no: row.order_no,
@@ -357,7 +360,7 @@ export class DashboardService {
             delivery_code: row.delivery_code,
             table: row.table_name ? { table_name: row.table_name } : null,
             delivery: row.delivery_name ? { delivery_name: row.delivery_name } : null,
-            items_count: itemCountByOrderId.get(row.id) ?? 0,
+            items_count: Number(row.items_count || 0),
         }));
     }
 

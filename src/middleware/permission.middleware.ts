@@ -255,6 +255,44 @@ export const enforceOrderItemTargetScope = (paramName: string = "itemId") => {
     };
 };
 
+export const enforceServingGroupTargetScope = (paramName: string = "id") => {
+    return async (req: AuthRequest, res: Response, next: NextFunction) => {
+        const scope = req.permission?.scope;
+        if (!scope || scope === "none") {
+            return ApiResponses.forbidden(res, "Access denied: Data scope is none");
+        }
+
+        if (scope !== "own") {
+            return next();
+        }
+
+        const groupId = req.params?.[paramName];
+        if (!groupId) {
+            return ApiResponses.badRequest(res, "Serving group id is required");
+        }
+
+        const rows = await getDbManager().query(
+            `
+                SELECT o.created_by_id
+                FROM sales_order_item i
+                INNER JOIN sales_orders o ON o.id = i.order_id
+                WHERE i.serving_group_id = $1
+                LIMIT 1
+            `,
+            [groupId]
+        );
+        if (!rows?.[0]) {
+            return ApiResponses.notFound(res, "Serving group");
+        }
+
+        if (rows[0].created_by_id !== req.user?.id) {
+            return ApiResponses.forbidden(res, "Access denied: Own scope only");
+        }
+
+        next();
+    };
+};
+
 export const enforceBranchTargetScope = (paramName: string = "id") => {
     return (req: AuthRequest, res: Response, next: NextFunction) => {
         const scope = req.permission?.scope;

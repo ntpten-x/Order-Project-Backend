@@ -16,15 +16,27 @@ import { getClientIp } from "../../utils/securityLogger";
 export class SalesOrderItemController {
     constructor(private salesOrderItemService: SalesOrderItemService) { }
 
+    private getAccess(req: Request) {
+        const scope = (req as any).permission?.scope;
+        const actorUserId = (req as any).user?.id;
+        if (scope === "own" && !actorUserId) {
+            return { scope: "none" as const };
+        }
+        return {
+            scope,
+            actorUserId,
+        };
+    }
+
     findAll = catchAsync(async (req: Request, res: Response) => {
         const branchId = getBranchId(req as any);
-        const items = await this.salesOrderItemService.findAll(branchId);
+        const items = await this.salesOrderItemService.findAll(branchId, this.getAccess(req));
         return ApiResponses.ok(res, items);
     });
 
     findOne = catchAsync(async (req: Request, res: Response) => {
         const branchId = getBranchId(req as any);
-        const item = await this.salesOrderItemService.findOne(req.params.id, branchId);
+        const item = await this.salesOrderItemService.findOne(req.params.id, branchId, this.getAccess(req));
         if (!item) {
             throw AppError.notFound("รายการสินค้า");
         }
@@ -33,7 +45,7 @@ export class SalesOrderItemController {
 
     create = catchAsync(async (req: Request, res: Response) => {
         const branchId = getBranchId(req as any);
-        const item = await this.salesOrderItemService.create(req.body, branchId);
+        const item = await this.salesOrderItemService.create(req.body, branchId, this.getAccess(req));
 
         const userInfo = getUserInfoFromRequest(req as any);
         await auditLogger.log({
@@ -55,8 +67,9 @@ export class SalesOrderItemController {
 
     update = catchAsync(async (req: Request, res: Response) => {
         const branchId = getBranchId(req as any);
-        const oldItem = await this.salesOrderItemService.findOne(req.params.id, branchId);
-        const item = await this.salesOrderItemService.update(req.params.id, req.body, branchId);
+        const access = this.getAccess(req);
+        const oldItem = await this.salesOrderItemService.findOne(req.params.id, branchId, access);
+        const item = await this.salesOrderItemService.update(req.params.id, req.body, branchId, access);
 
         if (item) {
             const userInfo = getUserInfoFromRequest(req as any);
@@ -84,8 +97,9 @@ export class SalesOrderItemController {
 
     delete = catchAsync(async (req: Request, res: Response) => {
         const branchId = getBranchId(req as any);
-        const oldItem = await this.salesOrderItemService.findOne(req.params.id, branchId);
-        await this.salesOrderItemService.delete(req.params.id, branchId);
+        const access = this.getAccess(req);
+        const oldItem = await this.salesOrderItemService.findOne(req.params.id, branchId, access);
+        await this.salesOrderItemService.delete(req.params.id, branchId, access);
 
         const userInfo = getUserInfoFromRequest(req as any);
         await auditLogger.log({

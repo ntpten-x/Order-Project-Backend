@@ -93,9 +93,16 @@ export class TablesModels {
     }
 
     async findOneByName(table_name: string, branchId?: string): Promise<Tables | null> {
-        const where: any = { table_name };
-        if (branchId) where.branch_id = branchId;
-        return getRepository(Tables).findOneBy(where);
+        const normalizedName = table_name.trim().toLowerCase();
+        const query = getRepository(Tables)
+            .createQueryBuilder("tables")
+            .where("LOWER(TRIM(tables.table_name)) = :tableName", { tableName: normalizedName });
+
+        if (branchId) {
+            query.andWhere("tables.branch_id = :branchId", { branchId });
+        }
+
+        return query.getOne();
     }
 
     async findOneByQrToken(qrToken: string): Promise<Tables | null> {

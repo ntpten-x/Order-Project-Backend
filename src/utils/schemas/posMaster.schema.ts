@@ -20,12 +20,11 @@ export const categoryIdParamSchema = z.object({
 });
 
 export const categoryNameParamSchema = z.object({
-    params: z.object({ category_name: z.string().min(1).max(100) })
+    params: z.object({ name: z.string().min(1).max(100) })
 });
 
 export const createCategorySchema = z.object({
     body: z.object({
-        category_name: z.string().min(1).max(100),
         display_name: z.string().min(1).max(100),
         is_active: z.coerce.boolean().optional()
     }).passthrough()
@@ -34,7 +33,6 @@ export const createCategorySchema = z.object({
 export const updateCategorySchema = z.object({
     params: z.object({ id: uuid }),
     body: z.object({
-        category_name: z.string().min(1).max(100).optional(),
         display_name: z.string().min(1).max(100).optional(),
         is_active: z.coerce.boolean().optional()
     }).passthrough()
@@ -46,12 +44,11 @@ export const productIdParamSchema = z.object({
 });
 
 export const productNameParamSchema = z.object({
-    params: z.object({ product_name: z.string().min(1).max(100) })
+    params: z.object({ name: z.string().min(1).max(100) })
 });
 
 export const createProductSchema = z.object({
     body: z.object({
-        product_name: z.string().min(1).max(100),
         display_name: z.string().min(1).max(100),
         description: z.string().optional(),
         price: money.optional(),
@@ -67,7 +64,6 @@ export const createProductSchema = z.object({
 export const updateProductSchema = z.object({
     params: z.object({ id: uuid }),
     body: z.object({
-        product_name: z.string().min(1).max(100).optional(),
         display_name: z.string().min(1).max(100).optional(),
         description: z.string().optional(),
         price: money.optional(),
@@ -86,12 +82,11 @@ export const productsUnitIdParamSchema = z.object({
 });
 
 export const productsUnitNameParamSchema = z.object({
-    params: z.object({ unit_name: z.string().min(1).max(100) })
+    params: z.object({ name: z.string().min(1).max(100) })
 });
 
 export const createProductsUnitSchema = z.object({
     body: z.object({
-        unit_name: z.string().min(1).max(100),
         display_name: z.string().min(1).max(100),
         is_active: z.coerce.boolean().optional()
     }).passthrough()
@@ -100,7 +95,6 @@ export const createProductsUnitSchema = z.object({
 export const updateProductsUnitSchema = z.object({
     params: z.object({ id: uuid }),
     body: z.object({
-        unit_name: z.string().min(1).max(100).optional(),
         display_name: z.string().min(1).max(100).optional(),
         is_active: z.coerce.boolean().optional()
     }).passthrough()
@@ -173,7 +167,6 @@ export const discountNameParamSchema = z.object({
 
 export const createDiscountSchema = z.object({
     body: z.object({
-        discount_name: z.string().min(1).max(100),
         display_name: z.string().min(1).max(100),
         description: z.string().optional(),
         discount_amount: money,
@@ -185,7 +178,6 @@ export const createDiscountSchema = z.object({
 export const updateDiscountSchema = z.object({
     params: z.object({ id: uuid }),
     body: z.object({
-        discount_name: z.string().min(1).max(100).optional(),
         display_name: z.string().min(1).max(100).optional(),
         description: z.string().optional(),
         discount_amount: money.optional(),
@@ -283,7 +275,6 @@ const printAutomationSchema = z.object({
     auto_print_order_summary_after_close_shift: z.coerce.boolean(),
     auto_print_purchase_order_after_submit: z.coerce.boolean(),
     auto_print_table_qr_after_rotation: z.coerce.boolean(),
-    auto_print_kitchen_ticket_after_submit: z.coerce.boolean(),
 });
 
 export const updatePrintSettingsSchema = z.object({
@@ -297,7 +288,6 @@ export const updatePrintSettingsSchema = z.object({
             order_summary: printDocumentSettingSchema,
             purchase_order: printDocumentSettingSchema,
             table_qr: printDocumentSettingSchema,
-            kitchen_ticket: printDocumentSettingSchema,
             custom: printDocumentSettingSchema,
         }),
     }).passthrough(),

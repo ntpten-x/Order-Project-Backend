@@ -9,13 +9,6 @@ import { getClientIp } from "../../utils/securityLogger";
 import { setPrivateSwrHeaders } from "../../utils/cacheHeaders";
 import { parseCreatedSort } from "../../utils/sortCreated";
 
-/**
- * Category Controller
- * Following supabase-postgres-best-practices:
- * - Standardized API responses
- * - Consistent error handling
- * - Branch-based data isolation
- */
 export class CategoryController {
     constructor(private categoryService: CategoryService) { }
 
@@ -47,7 +40,7 @@ export class CategoryController {
         const branchId = getBranchId(req as any);
         const category = await this.categoryService.findOne(req.params.id, branchId);
         if (!category) {
-            throw AppError.notFound("หมวดหมู่");
+            throw AppError.notFound("Category");
         }
         setPrivateSwrHeaders(res);
         return ApiResponses.ok(res, category);
@@ -55,9 +48,9 @@ export class CategoryController {
 
     findOneByName = catchAsync(async (req: Request, res: Response) => {
         const branchId = getBranchId(req as any);
-        const category = await this.categoryService.findOneByName(req.params.category_name, branchId);
+        const category = await this.categoryService.findOneByName(req.params.name, branchId);
         if (!category) {
-            throw AppError.notFound("หมวดหมู่");
+            throw AppError.notFound("Category");
         }
         setPrivateSwrHeaders(res);
         return ApiResponses.ok(res, category);
@@ -82,7 +75,7 @@ export class CategoryController {
             new_values: req.body,
             path: req.originalUrl,
             method: req.method,
-            description: `Create category ${(category as any).category_name || (category as any).display_name || (category as any).id}`,
+            description: `Create category ${(category as any).display_name || (category as any).id}`,
         });
 
         return ApiResponses.created(res, category);
@@ -96,27 +89,22 @@ export class CategoryController {
         const oldCategory = await this.categoryService.findOne(req.params.id, branchId);
         const category = await this.categoryService.update(req.params.id, req.body, branchId);
 
-        if (category) {
-            const userInfo = getUserInfoFromRequest(req as any);
-            await auditLogger.log({
-                action_type: AuditActionType.CATEGORY_UPDATE,
-                ...userInfo,
-                ip_address: getClientIp(req),
-                user_agent: req.get("User-Agent"),
-                entity_type: "Category",
-                entity_id: req.params.id,
-                branch_id: branchId,
-                old_values: oldCategory as any,
-                new_values: req.body,
-                path: req.originalUrl,
-                method: req.method,
-                description: `Update category ${req.params.id}`,
-            });
-        }
+        const userInfo = getUserInfoFromRequest(req as any);
+        await auditLogger.log({
+            action_type: AuditActionType.CATEGORY_UPDATE,
+            ...userInfo,
+            ip_address: getClientIp(req),
+            user_agent: req.get("User-Agent"),
+            entity_type: "Category",
+            entity_id: req.params.id,
+            branch_id: branchId,
+            old_values: oldCategory as any,
+            new_values: req.body,
+            path: req.originalUrl,
+            method: req.method,
+            description: `Update category ${req.params.id}`,
+        });
 
-        if (!category) {
-            throw AppError.notFound("หมวดหมู่");
-        }
         return ApiResponses.ok(res, category);
     });
 
@@ -139,6 +127,6 @@ export class CategoryController {
             method: req.method,
             description: `Delete category ${req.params.id}`,
         });
-        return ApiResponses.ok(res, { message: "หมวดหมู่ลบสำเร็จ" });
+        return ApiResponses.ok(res, { message: "Category deleted successfully" });
     });
 }

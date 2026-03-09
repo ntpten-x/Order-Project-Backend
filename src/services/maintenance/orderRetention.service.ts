@@ -11,8 +11,6 @@ export const DEFAULT_CLOSED_ORDER_STATUSES = [
     "completed",
     "cancelled",
 ];
-export const DEFAULT_ORDER_QUEUE_RETENTION_DAYS = 7;
-export const DEFAULT_QUEUE_CLOSED_STATUSES = ["Completed", "Cancelled", "completed", "cancelled"];
 export const DEFAULT_STOCK_ORDER_RETENTION_DAYS = 7;
 export const DEFAULT_STOCK_COMPLETED_STATUSES = ["completed"];
 export const DEFAULT_AUDIT_LOG_RETENTION_DAYS = 7;
@@ -32,18 +30,10 @@ export type OrderRetentionCleanupResult = {
     candidateOrders: number;
     deleted: {
         orders: number;
-        orderQueue: number;
         payments: number;
         items: number;
         details: number;
     };
-};
-
-export type QueueCleanupResult = {
-    cutoffDate: Date;
-    dryRun: boolean;
-    deleted: number;
-    candidateCount: number;
 };
 
 export type StockOrderRetentionCleanupOptions = {
@@ -140,30 +130,16 @@ async function fetchCandidateIds(params: {
 
 async function deleteByOrderIds(orderIds: string[]): Promise<{
     orders: number;
-    orderQueue: number;
     payments: number;
     items: number;
     details: number;
 }> {
     if (orderIds.length === 0) {
-        return { orders: 0, orderQueue: 0, payments: 0, items: 0, details: 0 };
+        return { orders: 0, payments: 0, items: 0, details: 0 };
     }
 
     return await runInTransaction(async (manager) => {
         const idsParam = [orderIds];
-
-        const orderQueueRows = await manager.query(
-            `
-                WITH deleted AS (
-                    DELETE FROM order_queue
-                    WHERE order_id = ANY($1::uuid[])
-                    RETURNING 1
-                )
-                SELECT COUNT(*)::int AS count FROM deleted
-            `,
-            idsParam
-        );
-        const orderQueue = Number(orderQueueRows?.[0]?.count ?? 0);
 
         const paymentsRows = await manager.query(
             `
@@ -219,7 +195,7 @@ async function deleteByOrderIds(orderIds: string[]): Promise<{
         );
         const orders = Number(ordersRows?.[0]?.count ?? 0);
 
-        return { orders, orderQueue, payments, items, details };
+        return { orders, payments, items, details };
     });
 }
 
@@ -243,12 +219,12 @@ export async function cleanupClosedOrdersOlderThan(
                 dryRun,
                 batchesProcessed: 0,
                 candidateOrders,
-                deleted: { orders: 0, orderQueue: 0, payments: 0, items: 0, details: 0 },
+                deleted: { orders: 0, payments: 0, items: 0, details: 0 },
             };
         }
 
         let batchesProcessed = 0;
-        const deleted = { orders: 0, orderQueue: 0, payments: 0, items: 0, details: 0 };
+        const deleted = { orders: 0, payments: 0, items: 0, details: 0 };
 
         for (let i = 0; i < maxBatches; i++) {
             const ids = await fetchCandidateIds({ cutoffDate, statuses, limit: batchSize });
@@ -256,7 +232,6 @@ export async function cleanupClosedOrdersOlderThan(
 
             const batchDeleted = await deleteByOrderIds(ids);
             deleted.orders += batchDeleted.orders;
-            deleted.orderQueue += batchDeleted.orderQueue;
             deleted.payments += batchDeleted.payments;
             deleted.items += batchDeleted.items;
             deleted.details += batchDeleted.details;
@@ -272,35 +247,6 @@ export async function cleanupClosedOrdersOlderThan(
             deleted,
         };
     });
-}
-
-export async function cleanupOrderQueueOlderThan(options: {
-    retentionDays?: number;
-    statuses?: string[];
-    dryRun?: boolean;
-} = {}): Promise<QueueCleanupResult> {
-    const retentionDays = clampInt(options.retentionDays, DEFAULT_ORDER_QUEUE_RETENTION_DAYS, 1, 3650);
-    const statuses = normalizeStatuses(options.statuses ?? DEFAULT_QUEUE_CLOSED_STATUSES);
-    const cutoffDate = new Date(Date.now() - retentionDays * MS_PER_DAY);
-    const dryRun = Boolean(options.dryRun);
-
-    const db = getDbManager();
-    const candidateRows = await db.query(
-        `SELECT id FROM order_queue WHERE status::text = ANY($1::text[]) AND created_at < $2`,
-        [statuses, cutoffDate]
-    );
-    const candidateIds: string[] = (candidateRows ?? []).map((r: any) => String(r.id));
-
-    if (dryRun || candidateIds.length === 0) {
-        return { cutoffDate, dryRun, deleted: 0, candidateCount: candidateIds.length };
-    }
-
-    const result = await db.query(
-        `DELETE FROM order_queue WHERE id = ANY($1::uuid[]) RETURNING 1`,
-        [candidateIds]
-    );
-    const deleted = Number(result?.length ?? 0);
-    return { cutoffDate, dryRun: false, deleted, candidateCount: candidateIds.length };
 }
 
 async function countStockOrderCandidates(params: { cutoffDate: Date; statuses: string[] }): Promise<number> {

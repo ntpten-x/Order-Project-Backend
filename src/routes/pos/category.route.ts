@@ -24,8 +24,8 @@ router.use(authenticateToken)
 router.use(requireBranch)
 
 router.get("/", authorizePermission("category.page", "view"), validate(paginationQuerySchema), categoryController.findAll)
+router.get("/name/:name", authorizePermission("category.page", "view"), validate(categoryNameParamSchema), categoryController.findOneByName)
 router.get("/:id", authorizePermission("category.page", "view"), validate(categoryIdParamSchema), categoryController.findOne)
-router.get("/name/:category_name", authorizePermission("category.page", "view"), validate(categoryNameParamSchema), categoryController.findOneByName)
 
 router.post("/", authorizePermission("category.page", "create"), validate(createCategorySchema), categoryController.create)
 router.put("/:id", authorizePermission("category.page", "update"), validate(updateCategorySchema), categoryController.update)

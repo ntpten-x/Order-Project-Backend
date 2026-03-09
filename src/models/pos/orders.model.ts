@@ -21,6 +21,8 @@ export interface ChannelStats {
     takeaway_waiting_payment: number;
     delivery: number;
     delivery_waiting_payment: number;
+    pending: number;
+    waiting_payment: number;
     total: number;
 }
 
@@ -140,7 +142,7 @@ export class OrdersModels {
         if (searchTerm) {
             const search = `${searchTerm}%`;
             qb.andWhere(
-                "(order.order_no ILIKE :search OR order.delivery_code ILIKE :search OR table.table_name ILIKE :search OR delivery.delivery_name ILIKE :search)",
+                "(order.order_no ILIKE :search OR order.delivery_code ILIKE :search OR order.customer_name ILIKE :search OR table.table_name ILIKE :search OR delivery.delivery_name ILIKE :search)",
                 { search }
             );
         }
@@ -148,8 +150,12 @@ export class OrdersModels {
         if (access?.scope === "none") {
             qb.andWhere("1=0");
         }
-        if (access?.scope === "own" && access.actorUserId) {
-            qb.andWhere("order.created_by_id = :actorUserId", { actorUserId: access.actorUserId });
+        if (access?.scope === "own") {
+            if (!access.actorUserId) {
+                qb.andWhere("1=0");
+            } else {
+                qb.andWhere("order.created_by_id = :actorUserId", { actorUserId: access.actorUserId });
+            }
         }
     }
 
@@ -211,7 +217,6 @@ export class OrdersModels {
                 .leftJoinAndSelect("order.table", "table")
                 .leftJoinAndSelect("order.delivery", "delivery")
                 .leftJoinAndSelect("order.items", "items")
-                .leftJoinAndSelect("items.product", "product")
                 .select([
                     "order.id",
                     "order.order_no",
@@ -219,6 +224,7 @@ export class OrdersModels {
                     "order.table_id",
                     "order.delivery_id",
                     "order.delivery_code",
+                    "order.customer_name",
                     "order.sub_total",
                     "order.discount_id",
                     "order.discount_amount",
@@ -244,10 +250,6 @@ export class OrdersModels {
                     "items.discount_amount",
                     "items.notes",
                     "items.status",
-                    "product.id",
-                    "product.display_name",
-                    "product.img_url",
-                    "product.price",
                 ])
                 .where("order.id IN (:...pagedIds)", { pagedIds })
                 .orderBy("order.create_date", sortOrder)
@@ -303,6 +305,7 @@ export class OrdersModels {
                 whereClauses.push(`(
                     o.order_no ILIKE $${qIndex}
                     OR o.delivery_code ILIKE $${qIndex}
+                    OR o.customer_name ILIKE $${qIndex}
                     OR EXISTS (
                         SELECT 1
                         FROM tables t
@@ -325,9 +328,13 @@ export class OrdersModels {
             if (access?.scope === "none") {
                 whereClauses.push(`1=0`);
             }
-            if (access?.scope === "own" && access.actorUserId) {
-                params.push(access.actorUserId);
-                whereClauses.push(`o.created_by_id = $${params.length}`);
+            if (access?.scope === "own") {
+                if (!access.actorUserId) {
+                    whereClauses.push(`1=0`);
+                } else {
+                    params.push(access.actorUserId);
+                    whereClauses.push(`o.created_by_id = $${params.length}`);
+                }
             }
 
             const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
@@ -358,6 +365,7 @@ export class OrdersModels {
                         o.create_date,
                         o.total_amount,
                         o.delivery_code,
+                        o.customer_name,
                         o.table_id,
                         o.delivery_id
                     FROM sales_orders o
@@ -382,6 +390,7 @@ export class OrdersModels {
                     bo.create_date,
                     bo.total_amount,
                     bo.delivery_code,
+                    bo.customer_name,
                     bo.table_id,
                     bo.delivery_id,
                     t.table_name,
@@ -401,9 +410,6 @@ export class OrdersModels {
                 dataParams
             );
 
-            console.error(`[DEBUG] Final SQL Query:`, dataQuery);
-            console.error(`[DEBUG] SQL Result (First 3):`, rows.slice(0, 3).map(r => ({ id: r.id, no: r.order_no, date: r.create_date })));
-
             const data = rows.map((row: any) => ({
                 id: row.id,
                 order_no: row.order_no,
@@ -412,6 +418,7 @@ export class OrdersModels {
                 create_date: row.create_date,
                 total_amount: Number(row.total_amount),
                 delivery_code: row.delivery_code,
+                customer_name: row.customer_name,
                 table_id: row.table_id,
                 delivery_id: row.delivery_id,
                 table: row.table_name ? { table_name: row.table_name } : null,
@@ -443,9 +450,13 @@ export class OrdersModels {
             if (access?.scope === "none") {
                 whereClauses.push("1=0");
             }
-            if (access?.scope === "own" && access.actorUserId) {
-                params.push(access.actorUserId);
-                whereClauses.push(`o.created_by_id = $${params.length}`);
+            if (access?.scope === "own") {
+                if (!access.actorUserId) {
+                    whereClauses.push("1=0");
+                } else {
+                    params.push(access.actorUserId);
+                    whereClauses.push(`o.created_by_id = $${params.length}`);
+                }
             }
 
             const sql = `
@@ -455,6 +466,8 @@ export class OrdersModels {
                     COUNT(*) FILTER (WHERE o.order_type = 'TakeAway' AND LOWER(o.status::text) = 'waitingforpayment')::int AS "takeaway_waiting_payment",
                     COUNT(*) FILTER (WHERE o.order_type = 'Delivery')::int AS "delivery",
                     COUNT(*) FILTER (WHERE o.order_type = 'Delivery' AND LOWER(o.status::text) = 'waitingforpayment')::int AS "delivery_waiting_payment",
+                    COUNT(*) FILTER (WHERE LOWER(o.status::text) IN ('pending', 'cooking', 'served'))::int AS "pending",
+                    COUNT(*) FILTER (WHERE LOWER(o.status::text) = 'waitingforpayment')::int AS "waiting_payment",
                     COUNT(*)::int AS "total"
                 FROM sales_orders o
                 WHERE ${whereClauses.join(" AND ")}
@@ -466,6 +479,8 @@ export class OrdersModels {
                 takeaway_waiting_payment: number;
                 delivery: number;
                 delivery_waiting_payment: number;
+                pending: number;
+                waiting_payment: number;
                 total: number;
             }>("orders.stats.active", sql, params);
 
@@ -476,6 +491,8 @@ export class OrdersModels {
                 takeaway_waiting_payment: Number(row?.takeaway_waiting_payment ?? 0),
                 delivery: Number(row?.delivery ?? 0),
                 delivery_waiting_payment: Number(row?.delivery_waiting_payment ?? 0),
+                pending: Number(row?.pending ?? 0),
+                waiting_payment: Number(row?.waiting_payment ?? 0),
                 total: Number(row?.total ?? 0),
             };
         } catch (error) {
@@ -495,6 +512,9 @@ export class OrdersModels {
             // Need simple find with relations
             const where: any = {};
             if (status) where.status = status;
+            if (access?.scope === "none" || (access?.scope === "own" && !access.actorUserId)) {
+                where.id = "__none__";
+            }
             if (branchId || (access?.scope === "own" && access.actorUserId)) {
                 where.order = {
                     ...(branchId ? { branch_id: branchId } : {}),
@@ -523,9 +543,12 @@ export class OrdersModels {
         }
     }
 
-    async findOne(id: string, branchId?: string, access?: AccessContext): Promise<SalesOrder | null> {
+    async findOne(id: string, branchId?: string, access?: AccessContext, manager?: EntityManager): Promise<SalesOrder | null> {
         try {
             const where: any = { id };
+            if (access?.scope === "none" || (access?.scope === "own" && !access.actorUserId)) {
+                where.id = "__none__";
+            }
             if (branchId) {
                 where.branch_id = branchId;
             }
@@ -533,7 +556,9 @@ export class OrdersModels {
                 where.created_by_id = access.actorUserId;
             }
 
-            const order = await getRepository(SalesOrder).findOne({
+            const repo = manager ? manager.getRepository(SalesOrder) : getRepository(SalesOrder);
+
+            const order = await repo.findOne({
                 where,
                 relations: [
                     "table",

@@ -1,8 +1,29 @@
 import { SalesOrderItem } from "../../entity/pos/SalesOrderItem";
 import { getRepository } from "../../database/dbContext";
+import { SelectQueryBuilder } from "typeorm";
+
+type AccessContext = {
+    scope?: "none" | "own" | "branch" | "all";
+    actorUserId?: string;
+};
 
 export class SalesOrderItemModels {
-    async findAll(branchId?: string): Promise<SalesOrderItem[]> {
+    private applyAccessScope(query: SelectQueryBuilder<SalesOrderItem>, access?: AccessContext): void {
+        if (access?.scope === "none") {
+            query.andWhere("1=0");
+            return;
+        }
+
+        if (access?.scope === "own") {
+            if (!access.actorUserId) {
+                query.andWhere("1=0");
+                return;
+            }
+            query.andWhere("order.created_by_id = :actorUserId", { actorUserId: access.actorUserId });
+        }
+    }
+
+    async findAll(branchId?: string, access?: AccessContext): Promise<SalesOrderItem[]> {
         try {
             const salesOrderItemRepository = getRepository(SalesOrderItem);
             const query = salesOrderItemRepository
@@ -16,13 +37,14 @@ export class SalesOrderItemModels {
                 query.andWhere("order.branch_id = :branchId", { branchId });
             }
 
+            this.applyAccessScope(query, access);
             return query.getMany();
         } catch (error) {
             throw error
         }
     }
 
-    async findOne(id: string, branchId?: string): Promise<SalesOrderItem | null> {
+    async findOne(id: string, branchId?: string, access?: AccessContext): Promise<SalesOrderItem | null> {
         try {
             const salesOrderItemRepository = getRepository(SalesOrderItem);
             const query = salesOrderItemRepository
@@ -36,6 +58,7 @@ export class SalesOrderItemModels {
                 query.andWhere("order.branch_id = :branchId", { branchId });
             }
 
+            this.applyAccessScope(query, access);
             return query.getOne();
         } catch (error) {
             throw error
@@ -50,17 +73,17 @@ export class SalesOrderItemModels {
         }
     }
 
-    async update(id: string, data: Partial<SalesOrderItem>, branchId?: string): Promise<SalesOrderItem> {
+    async update(id: string, data: Partial<SalesOrderItem>, branchId?: string, access?: AccessContext): Promise<SalesOrderItem> {
         try {
-            if (branchId) {
-                const existing = await this.findOne(id, branchId);
+            if (branchId || access?.scope) {
+                const existing = await this.findOne(id, branchId, access);
                 if (!existing) {
                     throw new Error("Item not found");
                 }
             }
 
             await getRepository(SalesOrderItem).update(id, data)
-            const updatedItem = await this.findOne(id, branchId)
+            const updatedItem = await this.findOne(id, branchId, access)
             if (!updatedItem) {
                 throw new Error("ไม่พบข้อมูลรายการสินค้าในออเดอร์ที่ต้องการค้นหา")
             }
@@ -70,10 +93,10 @@ export class SalesOrderItemModels {
         }
     }
 
-    async delete(id: string, branchId?: string): Promise<void> {
+    async delete(id: string, branchId?: string, access?: AccessContext): Promise<void> {
         try {
-            if (branchId) {
-                const existing = await this.findOne(id, branchId);
+            if (branchId || access?.scope) {
+                const existing = await this.findOne(id, branchId, access);
                 if (!existing) {
                     throw new Error("Item not found");
                 }

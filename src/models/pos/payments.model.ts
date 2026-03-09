@@ -2,8 +2,13 @@ import { Payments } from "../../entity/pos/Payments";
 import { EntityManager } from "typeorm";
 import { getRepository } from "../../database/dbContext";
 
+type AccessContext = {
+    scope?: "none" | "own" | "branch" | "all";
+    actorUserId?: string;
+};
+
 export class PaymentsModels {
-    async findAll(branchId?: string): Promise<Payments[]> {
+    async findAll(branchId?: string, access?: AccessContext): Promise<Payments[]> {
         try {
             const paymentsRepository = getRepository(Payments);
             const query = paymentsRepository.createQueryBuilder("payments")
@@ -15,13 +20,25 @@ export class PaymentsModels {
                 query.andWhere("payments.branch_id = :branchId", { branchId });
             }
 
+            if (access?.scope === "none") {
+                query.andWhere("1=0");
+            }
+
+            if (access?.scope === "own") {
+                if (!access.actorUserId) {
+                    query.andWhere("1=0");
+                } else {
+                    query.andWhere("order.created_by_id = :actorUserId", { actorUserId: access.actorUserId });
+                }
+            }
+
             return query.getMany();
         } catch (error) {
             throw error
         }
     }
 
-    async findOne(id: string, branchId?: string): Promise<Payments | null> {
+    async findOne(id: string, branchId?: string, access?: AccessContext): Promise<Payments | null> {
         try {
             const paymentsRepository = getRepository(Payments);
             const query = paymentsRepository.createQueryBuilder("payments")
@@ -31,6 +48,18 @@ export class PaymentsModels {
 
             if (branchId) {
                 query.andWhere("payments.branch_id = :branchId", { branchId });
+            }
+
+            if (access?.scope === "none") {
+                query.andWhere("1=0");
+            }
+
+            if (access?.scope === "own") {
+                if (!access.actorUserId) {
+                    query.andWhere("1=0");
+                } else {
+                    query.andWhere("order.created_by_id = :actorUserId", { actorUserId: access.actorUserId });
+                }
             }
 
             return query.getOne();

@@ -9,7 +9,7 @@
 - ตารางหลัก: `sales_orders`
 - สถานะที่เข้าเงื่อนไข (ค่าเริ่มต้น): `Paid,Completed,Cancelled,completed,cancelled`
 - อายุข้อมูล (ค่าเริ่มต้น): `30` วัน
-- ลบข้อมูลลูกที่เกี่ยวข้องก่อน เช่น `payments`, `sales_order_item`, `sales_order_detail`, `order_queue`
+- ลบข้อมูลลูกที่เกี่ยวข้องก่อน เช่น `payments`, `sales_order_item`, `sales_order_detail`
 
 ## 2) Environment Variables ที่ต้องตั้งบน Production
 
@@ -17,7 +17,6 @@
 
 ```env
 ORDER_RETENTION_ENABLED=true
-ORDER_QUEUE_RETENTION_ENABLED=true
 ORDER_RETENTION_DAYS=30
 ORDER_RETENTION_DRY_RUN=false
 RETENTION_LOG_FILE=logs/retention-jobs.log
@@ -88,7 +87,7 @@ Get-ScheduledTaskInfo -TaskName "OrderRetentionCleanupDaily" | Select-Object Las
 เพิ่ม cron:
 
 ```cron
-0 3 * * * cd /srv/Order-Project-Backend && ORDER_RETENTION_ENABLED=true ORDER_QUEUE_RETENTION_ENABLED=true npm run maintenance:cleanup-orders >> /var/log/order-retention.log 2>&1
+0 3 * * * cd /srv/Order-Project-Backend && ORDER_RETENTION_ENABLED=true npm run maintenance:cleanup-orders >> /var/log/order-retention.log 2>&1
 ```
 
 ## 5) ยืนยันว่า “ทำงานอัตโนมัติจริง”

@@ -17,10 +17,12 @@ export class PaymentMethodController {
         const rawLimit = parseInt(req.query.limit as string);
         const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
         const q = (req.query.q as string | undefined) || undefined;
+        const statusRaw = (req.query.status as string | undefined) || undefined;
+        const status = statusRaw === "active" || statusRaw === "inactive" ? statusRaw : undefined;
         const sortCreated = parseCreatedSort(req.query.sort_created);
         const branchId = getBranchId(req as any);
 
-        const result = await this.paymentMethodService.findAll(page, limit, q, branchId, sortCreated);
+        const result = await this.paymentMethodService.findAll(page, limit, q, status, branchId, sortCreated);
         setPrivateSwrHeaders(res);
         return ApiResponses.paginated(res, result.data, {
             page: result.page,

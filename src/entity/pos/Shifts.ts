@@ -32,10 +32,9 @@ export class Shifts {
     @JoinColumn({ name: "branch_id" })
     branch?: Branch;
 
-    // Use string relations for now to avoid circular deps ambiguity mostly
-    @ManyToOne("Users")
+    @ManyToOne(() => Users)
     @JoinColumn({ name: "user_id" })
-    user!: any; // Users type
+    user!: Users;
 
     @Column({ type: "decimal", precision: 12, scale: 2, default: 0 })
     start_amount!: number; // เงินทอนเริ่มต้น
@@ -62,9 +61,9 @@ export class Shifts {
     @OneToMany(() => Payments, (payment) => payment.shift)
     payments!: Payments[];
 
-    @CreateDateColumn()
+    @CreateDateColumn({ type: "timestamptz" })
     create_date!: Date;
 
-    @UpdateDateColumn()
+    @UpdateDateColumn({ type: "timestamptz" })
     update_date!: Date;
 }

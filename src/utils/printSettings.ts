@@ -3,7 +3,6 @@ export const PRINT_DOCUMENT_TYPES = [
     "order_summary",
     "purchase_order",
     "table_qr",
-    "kitchen_ticket",
     "custom",
 ] as const;
 
@@ -61,7 +60,6 @@ export interface PrintAutomationSettings {
     auto_print_order_summary_after_close_shift: boolean;
     auto_print_purchase_order_after_submit: boolean;
     auto_print_table_qr_after_rotation: boolean;
-    auto_print_kitchen_ticket_after_submit: boolean;
 }
 
 export interface PrintSettingsDocuments {
@@ -69,7 +67,6 @@ export interface PrintSettingsDocuments {
     order_summary: PrintDocumentSetting;
     purchase_order: PrintDocumentSetting;
     table_qr: PrintDocumentSetting;
-    kitchen_ticket: PrintDocumentSetting;
     custom: PrintDocumentSetting;
 }
 
@@ -207,21 +204,6 @@ const DOCUMENT_DEFAULT_OVERRIDES: Record<
         show_order_meta: false,
         cut_paper: false,
     },
-    kitchen_ticket: {
-        preset: "thermal_80mm",
-        density: "compact",
-        margin_top: 2,
-        margin_right: 2,
-        margin_bottom: 2,
-        margin_left: 2,
-        font_scale: 96,
-        line_spacing: 1.08,
-        show_logo: false,
-        show_qr: false,
-        show_footer: false,
-        show_branch_address: false,
-        cut_paper: true,
-    },
     custom: {
         preset: "custom",
         enabled: false,
@@ -259,14 +241,12 @@ export function createDefaultPrintSettingsPayload(): PrintSettingsPayload {
             auto_print_order_summary_after_close_shift: false,
             auto_print_purchase_order_after_submit: false,
             auto_print_table_qr_after_rotation: false,
-            auto_print_kitchen_ticket_after_submit: true,
         },
         documents: {
             receipt: createDefaultDocumentSetting("receipt"),
             order_summary: createDefaultDocumentSetting("order_summary"),
             purchase_order: createDefaultDocumentSetting("purchase_order"),
             table_qr: createDefaultDocumentSetting("table_qr"),
-            kitchen_ticket: createDefaultDocumentSetting("kitchen_ticket"),
             custom: createDefaultDocumentSetting("custom"),
         },
     };
@@ -304,7 +284,6 @@ export function mergePrintSettingsPayload(
             order_summary: mergeDocument("order_summary"),
             purchase_order: mergeDocument("purchase_order"),
             table_qr: mergeDocument("table_qr"),
-            kitchen_ticket: mergeDocument("kitchen_ticket"),
             custom: mergeDocument("custom"),
         },
     };

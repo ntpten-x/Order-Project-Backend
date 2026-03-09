@@ -12,6 +12,7 @@ import { ProductsUnit } from "../../entity/pos/ProductsUnit";
 import { Products } from "../../entity/pos/Products";
 import { TableStatus, Tables } from "../../entity/pos/Tables";
 import { OrderStatus } from "../../entity/pos/OrderEnums";
+import { ShiftStatus } from "../../entity/pos/Shifts";
 
 loadEnv();
 
@@ -26,7 +27,6 @@ async function cleanupTableOrders(tableId: string): Promise<void> {
     await runWithDbContext({ isAdmin: true }, async () => {
         const db = getDbManager();
         await db.query(`DELETE FROM payments WHERE order_id IN (SELECT id FROM sales_orders WHERE table_id = $1)`, [tableId]);
-        await db.query(`DELETE FROM order_queue WHERE order_id IN (SELECT id FROM sales_orders WHERE table_id = $1)`, [tableId]);
         await db.query(
             `DELETE FROM sales_order_detail WHERE orders_item_id IN (
                 SELECT soi.id
@@ -100,21 +100,18 @@ describeIntegration("Public table-order flow (DB integration)", () => {
                 const suffix = Date.now();
                 const category = await getRepository(Category).save({
                     branch_id: branchId,
-                    category_name: `it-public-cat-${suffix}`,
                     display_name: `IT PUBLIC CAT ${suffix}`,
                     is_active: true,
                 } as any);
 
                 const unit = await getRepository(ProductsUnit).save({
                     branch_id: branchId,
-                    unit_name: `it-public-unit-${suffix}`,
                     display_name: `IT PUBLIC UNIT ${suffix}`,
                     is_active: true,
                 } as any);
 
                 const createdProduct = await getRepository(Products).save({
                     branch_id: branchId,
-                    product_name: `it-public-product-${suffix}`,
                     display_name: `IT PUBLIC PRODUCT ${suffix}`,
                     description: "integration public table order product",
                     price: 59,
@@ -165,11 +162,30 @@ describeIntegration("Public table-order flow (DB integration)", () => {
         };
     }
 
+    async function setBranchShiftOpenState(open: boolean) {
+        await runWithDbContext({ isAdmin: true }, async () => {
+            if (open) {
+                await shiftsService.openShift(userId, 0, branchId);
+                return;
+            }
+
+            await getDbManager().query(
+                `UPDATE shifts
+                 SET status = $2,
+                     close_time = NOW()
+                 WHERE branch_id = $1
+                   AND status = $3`,
+                [branchId, ShiftStatus.CLOSED, ShiftStatus.OPEN],
+            );
+        });
+    }
+
     it("creates first order and appends items to the same active order", async () => {
         if (!integrationReady) return;
         expect(branchId).toBeTruthy();
         expect(productId).toBeTruthy();
 
+        await setBranchShiftOpenState(true);
         const fixture = await createPublicTableFixture();
         try {
             const created = await publicService.submitByToken(fixture.tableToken, {
@@ -205,6 +221,7 @@ describeIntegration("Public table-order flow (DB integration)", () => {
 
     it("rejects submit when the latest table bill is locked", async () => {
         if (!integrationReady) return;
+        await setBranchShiftOpenState(true);
         const fixture = await createPublicTableFixture();
 
         try {
@@ -238,6 +255,7 @@ describeIntegration("Public table-order flow (DB integration)", () => {
 
     it("rejects modifier details payload for QR customer flow", async () => {
         if (!integrationReady) return;
+        await setBranchShiftOpenState(true);
         const fixture = await createPublicTableFixture();
 
         try {
@@ -262,6 +280,26 @@ describeIntegration("Public table-order flow (DB integration)", () => {
 
             expect(Number(rows?.[0]?.total || 0)).toBe(0);
         } finally {
+            await cleanupTableOrders(fixture.tableId);
+        }
+    }, 120000);
+
+    it("rejects bootstrap when no active shift is open", async () => {
+        if (!integrationReady) return;
+        const fixture = await createPublicTableFixture();
+
+        try {
+            await setBranchShiftOpenState(false);
+
+            await expect(publicService.getBootstrapByToken(fixture.tableToken)).rejects.toMatchObject({
+                statusCode: 403,
+            });
+
+            await expect(publicService.getActiveOrderByToken(fixture.tableToken)).rejects.toMatchObject({
+                statusCode: 403,
+            });
+        } finally {
+            await setBranchShiftOpenState(true);
             await cleanupTableOrders(fixture.tableId);
         }
     }, 120000);

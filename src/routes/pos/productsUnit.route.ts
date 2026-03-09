@@ -24,8 +24,8 @@ router.use(authenticateToken)
 router.use(requireBranch)
 
 router.get("/", authorizePermission("products_unit.page", "view"), validate(paginationQuerySchema), productsUnitController.findAll)
+router.get("/name/:name", authorizePermission("products_unit.page", "view"), validate(productsUnitNameParamSchema), productsUnitController.findOneByName)
 router.get("/:id", authorizePermission("products_unit.page", "view"), validate(productsUnitIdParamSchema), productsUnitController.findOne)
-router.get("/name/:unit_name", authorizePermission("products_unit.page", "view"), validate(productsUnitNameParamSchema), productsUnitController.findOneByName)
 
 router.post("/", authorizePermission("products_unit.page", "create"), validate(createProductsUnitSchema), productsUnitController.create)
 router.put("/:id", authorizePermission("products_unit.page", "update"), validate(updateProductsUnitSchema), productsUnitController.update)

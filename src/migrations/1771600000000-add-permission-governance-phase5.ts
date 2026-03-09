@@ -92,17 +92,6 @@ const RESOURCE_SEEDS: ResourceSeed[] = [
         },
     },
     {
-        resourceKey: "queue.page",
-        resourceName: "Order Queue",
-        routePattern: "/pos/queue",
-        sortOrder: 130,
-        policies: {
-            Admin: { scope: "all", access: "allow", view: "allow", create: "allow", update: "allow", delete: "allow" },
-            Manager: { scope: "branch", access: "allow", view: "allow", create: "allow", update: "allow", delete: "allow" },
-            Employee: { scope: "branch", access: "allow", view: "allow", create: "allow", update: "allow", delete: "allow" },
-        },
-    },
-    {
         resourceKey: "payment_accounts.page",
         resourceName: "Payment Accounts",
         routePattern: "/pos/settings/payment-accounts",

@@ -3,6 +3,7 @@ import { monitoringService } from '../utils/monitoring';
 import { AuthRequest } from './auth.middleware';
 import { metrics } from '../utils/metrics';
 import { AppError } from '../utils/AppError';
+import { logger } from '../utils/logger';
 
 const slowRequestThresholdMs = Number(process.env.SLOW_REQUEST_THRESHOLD_MS || 800);
 const enableSlowRequestLog = process.env.ENABLE_SLOW_REQUEST_LOG === 'true';
@@ -59,9 +60,14 @@ export const performanceMonitoring = (req: Request, res: Response, next: NextFun
         }
 
         if (enableSlowRequestLog && duration >= slowRequestThresholdMs) {
-            console.warn(
-                `[SLOW_REQUEST] ${req.method} ${req.originalUrl} ${res.statusCode} ${duration.toFixed(1)}ms`
-            );
+            const requestLogger = (req as Request & { log?: typeof logger }).log ?? logger;
+            requestLogger.warn({
+                method: req.method,
+                path: req.originalUrl,
+                statusCode: res.statusCode,
+                responseTimeMs: Number(duration.toFixed(1)),
+                thresholdMs: slowRequestThresholdMs,
+            }, "slow request detected");
         }
 
         metrics.observeRequest({

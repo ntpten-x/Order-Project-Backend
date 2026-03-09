@@ -14,7 +14,6 @@ cd E:\Project\Order-Project-Backend
 
 ```powershell
 [Environment]::SetEnvironmentVariable("ORDER_RETENTION_ENABLED","true","Machine")
-[Environment]::SetEnvironmentVariable("ORDER_QUEUE_RETENTION_ENABLED","true","Machine")
 [Environment]::SetEnvironmentVariable("ORDER_RETENTION_DAYS","30","Machine")
 [Environment]::SetEnvironmentVariable("ORDER_RETENTION_DRY_RUN","false","Machine")
 [Environment]::SetEnvironmentVariable("STOCK_ORDER_RETENTION_ENABLED","true","Machine")
@@ -68,7 +67,6 @@ cd /srv/Order-Project-Backend
 
 ```bash
 export ORDER_RETENTION_ENABLED=true
-export ORDER_QUEUE_RETENTION_ENABLED=true
 export ORDER_RETENTION_DAYS=30
 export ORDER_RETENTION_DRY_RUN=false
 export STOCK_ORDER_RETENTION_ENABLED=true

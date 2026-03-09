@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { AppError } from '../utils/AppError';
 import { ErrorCodes, ErrorCode } from '../utils/ApiResponse';
 import { ZodError } from 'zod';
+import { logger } from '../utils/logger';
 
 /**
  * Global Error Handler Middleware
@@ -188,9 +189,17 @@ export const globalErrorHandler = (
 
     // Log error in development or for server errors
     if (!isExpectedLookupNotFound && (isDev || statusCode >= 500)) {
-        console.error(`[ERROR ${statusCode}] ${errorCode}:`, err.message);
+        const requestLogger = (req as Request & { log?: typeof logger }).log ?? logger;
+        requestLogger.error({
+            err,
+            statusCode,
+            errorCode,
+            method: req.method,
+            path: req.originalUrl,
+            requestId: (req as Request & { id?: string | number }).id,
+        }, "request failed");
+
         if (isDev) {
-            console.error(err.stack);
             // In development, show the real error message instead of generic one
             if (message === 'Something went wrong!') {
                 message = err.message;

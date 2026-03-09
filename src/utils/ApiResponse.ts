@@ -144,6 +144,9 @@ export const ApiResponses = {
   // Success responses
   ok: <T>(res: Response, data: T, meta?: SuccessResponse<T>['meta']) => 
     sendSuccess(res, data, 200, meta),
+
+  accepted: <T>(res: Response, data: T) =>
+    sendSuccess(res, data, 202),
     
   created: <T>(res: Response, data: T) => 
     sendSuccess(res, data, 201),

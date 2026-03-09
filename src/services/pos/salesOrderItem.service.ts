@@ -8,6 +8,12 @@ import { RealtimeEvents } from "../../utils/realtimeEvents";
 import { recalculateOrderTotal } from "./orderTotals.service";
 import { normalizeOrderStatus, isCancelledStatus } from "../../utils/orderStatus";
 import { randomUUID } from "crypto";
+import { AppError } from "../../utils/AppError";
+
+type AccessContext = {
+    scope?: "none" | "own" | "branch" | "all";
+    actorUserId?: string;
+};
 
 export class SalesOrderItemService {
     private socketService = SocketService.getInstance();
@@ -23,13 +29,44 @@ export class SalesOrderItemService {
     }
 
     private deriveOrderStatusFromItems(items: SalesOrderItem[]): OrderStatus | null {
+        if (items.length === 0) return null;
+
         const activeItems = items.filter((item) => !isCancelledStatus(String(item.status)));
-        if (activeItems.length === 0) return null;
+        if (activeItems.length === 0) return OrderStatus.Cancelled;
 
         activeItems.forEach((item) => {
             normalizeOrderStatus(String(item.status));
         });
         return OrderStatus.Pending;
+    }
+
+    private async findAccessibleOrder(
+        orderId: string,
+        branchId?: string,
+        access?: AccessContext,
+    ): Promise<SalesOrder | null> {
+        const orderRepo = getRepository(SalesOrder);
+        const query = orderRepo
+            .createQueryBuilder("order")
+            .where("order.id = :orderId", { orderId });
+
+        if (branchId) {
+            query.andWhere("order.branch_id = :branchId", { branchId });
+        }
+
+        if (access?.scope === "none") {
+            query.andWhere("1=0");
+        }
+
+        if (access?.scope === "own") {
+            if (!access.actorUserId) {
+                query.andWhere("1=0");
+            } else {
+                query.andWhere("order.created_by_id = :actorUserId", { actorUserId: access.actorUserId });
+            }
+        }
+
+        return query.getOne();
     }
 
     private async syncOrderStatusFromItems(orderId: string, branchId?: string): Promise<SalesOrder | null> {
@@ -52,23 +89,23 @@ export class SalesOrderItemService {
         return order;
     }
 
-    async findAll(branchId?: string): Promise<SalesOrderItem[]> {
+    async findAll(branchId?: string, access?: AccessContext): Promise<SalesOrderItem[]> {
         try {
-            return this.salesOrderItemModel.findAll(branchId)
+            return this.salesOrderItemModel.findAll(branchId, access)
         } catch (error) {
             throw error
         }
     }
 
-    async findOne(id: string, branchId?: string): Promise<SalesOrderItem | null> {
+    async findOne(id: string, branchId?: string, access?: AccessContext): Promise<SalesOrderItem | null> {
         try {
-            return this.salesOrderItemModel.findOne(id, branchId)
+            return this.salesOrderItemModel.findOne(id, branchId, access)
         } catch (error) {
             throw error
         }
     }
 
-    async create(salesOrderItem: SalesOrderItem, branchId?: string): Promise<SalesOrderItem> {
+    async create(salesOrderItem: SalesOrderItem, branchId?: string, access?: AccessContext): Promise<SalesOrderItem> {
         try {
             if (!salesOrderItem.order_id) {
                 throw new Error("กรุณาระบุรหัสออเดอร์")
@@ -77,11 +114,13 @@ export class SalesOrderItemService {
                 throw new Error("กรุณาระบุรหัสสินค้า")
             }
 
-            if (branchId) {
-                const orderRepo = getRepository(SalesOrder);
-                const order = await orderRepo.findOneBy({ id: salesOrderItem.order_id, branch_id: branchId } as any);
+            if (branchId || access?.scope) {
+                const order = await this.findAccessibleOrder(salesOrderItem.order_id, branchId, access);
                 if (!order) {
-                    throw new Error("Order not found for this branch");
+                    if (access?.scope === "own" || access?.scope === "none") {
+                        throw AppError.forbidden("Access denied");
+                    }
+                    throw AppError.notFound("Order");
                 }
             }
 
@@ -107,7 +146,7 @@ export class SalesOrderItemService {
             const syncedOrder = await this.syncOrderStatusFromItems(createdItem.order_id, branchId);
             const effectiveBranchId = syncedOrder?.branch_id || branchId;
 
-            const completeItem = await this.salesOrderItemModel.findOne(createdItem.id, branchId)
+            const completeItem = await this.salesOrderItemModel.findOne(createdItem.id, branchId, access)
             if (completeItem) {
                 if (effectiveBranchId) {
                     // salesOrderItem events are already handled as order-affecting events on the frontend.
@@ -122,9 +161,9 @@ export class SalesOrderItemService {
         }
     }
 
-    async update(id: string, salesOrderItem: Partial<SalesOrderItem>, branchId?: string): Promise<SalesOrderItem> {
+    async update(id: string, salesOrderItem: Partial<SalesOrderItem>, branchId?: string, access?: AccessContext): Promise<SalesOrderItem> {
         try {
-            const itemToUpdate = await this.salesOrderItemModel.findOne(id, branchId)
+            const itemToUpdate = await this.salesOrderItemModel.findOne(id, branchId, access)
             if (!itemToUpdate) {
                 throw new Error("ไม่พบข้อมูลรายการสินค้าในออเดอร์ที่ต้องการแก้ไข")
             }
@@ -133,7 +172,7 @@ export class SalesOrderItemService {
                 (salesOrderItem as any).status = normalizeOrderStatus((salesOrderItem as any).status);
             }
 
-            const updatedItem = await this.salesOrderItemModel.update(id, salesOrderItem, branchId)
+            const updatedItem = await this.salesOrderItemModel.update(id, salesOrderItem, branchId, access)
             await recalculateOrderTotal(itemToUpdate.order_id);
             const syncedOrder = await this.syncOrderStatusFromItems(itemToUpdate.order_id, branchId);
             const effectiveBranchId = syncedOrder?.branch_id || branchId;
@@ -146,10 +185,10 @@ export class SalesOrderItemService {
         }
     }
 
-    async delete(id: string, branchId?: string): Promise<void> {
+    async delete(id: string, branchId?: string, access?: AccessContext): Promise<void> {
         try {
-            const item = await this.salesOrderItemModel.findOne(id, branchId)
-            await this.salesOrderItemModel.delete(id, branchId)
+            const item = await this.salesOrderItemModel.findOne(id, branchId, access)
+            await this.salesOrderItemModel.delete(id, branchId, access)
             if (item?.order_id) {
                 await recalculateOrderTotal(item.order_id);
                 const syncedOrder = await this.syncOrderStatusFromItems(item.order_id, branchId);

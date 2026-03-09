@@ -12,6 +12,7 @@ import { EntityManager } from "typeorm";
 import { SocketService } from "../socket.service";
 import { buildPublicOrderRealtimePayload } from "../../utils/publicRealtime";
 import { RealtimeEvents } from "../../utils/realtimeEvents";
+import { ShiftsService } from "../pos/shifts.service";
 
 type PublicOrderItemInput = {
     product_id: string;
@@ -35,6 +36,7 @@ const ACTIVE_VIEW_STATUSES: string[] = [
 export class PublicTableOrderService {
     private ordersService = new OrdersService(new OrdersModels());
     private socketService = SocketService.getInstance();
+    private shiftsService = new ShiftsService();
 
     private getSalesOrderRepository(manager?: EntityManager) {
         return manager ? manager.getRepository(SalesOrder) : getRepository(SalesOrder);
@@ -67,6 +69,13 @@ export class PublicTableOrderService {
     private canAddItemsToOrder(status: string | undefined | null): boolean {
         const normalized = String(status || "").trim().toLowerCase();
         return normalized === "pending" || normalized === "cooking" || normalized === "served";
+    }
+
+    private async ensurePublicOrderingAvailable(branchId: string): Promise<void> {
+        const activeShift = await this.shiftsService.getCurrentShift(branchId);
+        if (!activeShift) {
+            throw new AppError("Public ordering is unavailable while the shift is closed", 403);
+        }
     }
 
     private async findLatestOrderForTable(
@@ -149,7 +158,7 @@ export class PublicTableOrderService {
         return {
             id: item.id,
             product_id: item.product_id,
-            product_name: item.product?.display_name || item.product?.product_name || "-",
+            display_name: item.product?.display_name || "-",
             quantity: Number(item.quantity || 0),
             price: Number(item.price || 0),
             total_price: Number(item.total_price || 0),
@@ -175,6 +184,7 @@ export class PublicTableOrderService {
             order_no: order.order_no,
             status: order.status,
             order_type: order.order_type,
+            customer_name: order.customer_name || null,
             total_amount: Number(order.total_amount || 0),
             sub_total: Number(order.sub_total || 0),
             discount_amount: Number(order.discount_amount || 0),
@@ -210,7 +220,6 @@ export class PublicTableOrderService {
                 category.id,
                 {
                     id: category.id,
-                    category_name: category.category_name,
                     display_name: category.display_name,
                     items: [] as Array<{
                         id: string;
@@ -219,7 +228,7 @@ export class PublicTableOrderService {
                         description: string;
                         price: number;
                         img_url: string | null;
-                        unit_name: string | null;
+                        unit_display_name: string | null;
                     }>,
                 },
             ]),
@@ -229,7 +238,6 @@ export class PublicTableOrderService {
             if (!categoryMap.has(product.category_id)) {
                 categoryMap.set(product.category_id, {
                     id: product.category_id,
-                    category_name: product.category?.category_name || "",
                     display_name: product.category?.display_name || "Uncategorized",
                     items: [],
                 });
@@ -243,7 +251,7 @@ export class PublicTableOrderService {
                 description: product.description || "",
                 price: Number(product.price || 0),
                 img_url: product.img_url || null,
-                unit_name: product.unit?.display_name || product.unit?.unit_name || null,
+                unit_display_name: product.unit?.display_name || null,
             });
         }
 
@@ -280,6 +288,7 @@ export class PublicTableOrderService {
 
     async getBootstrapByToken(token: string) {
         const table = await this.resolveTableByToken(token);
+        await this.ensurePublicOrderingAvailable(table.branch_id!);
 
         return runWithDbContext(
             {
@@ -313,6 +322,7 @@ export class PublicTableOrderService {
 
     async getActiveOrderByToken(token: string) {
         const table = await this.resolveTableByToken(token);
+        await this.ensurePublicOrderingAvailable(table.branch_id!);
 
         return runWithDbContext(
             {
@@ -342,6 +352,7 @@ export class PublicTableOrderService {
     async submitByToken(token: string, payload: SubmitOrderInput) {
         const table = await this.resolveTableByToken(token);
         const branchId = table.branch_id!;
+        await this.ensurePublicOrderingAvailable(branchId);
         const rawItems = Array.isArray((payload as { items?: unknown[] })?.items)
             ? ((payload as { items: unknown[] }).items ?? [])
             : [];
@@ -454,6 +465,7 @@ export class PublicTableOrderService {
 
     async resolveOrderByToken(token: string, orderId: string) {
         const table = await this.resolveTableByToken(token);
+        await this.ensurePublicOrderingAvailable(table.branch_id!);
 
         return runWithDbContext(
             {

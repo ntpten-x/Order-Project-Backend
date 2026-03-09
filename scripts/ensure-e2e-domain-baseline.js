@@ -47,9 +47,9 @@ async function ensureBranch(client) {
 async function ensureProductsUnit(client, branchId) {
   const result = await client.query(
     `
-      INSERT INTO products_unit (unit_name, display_name, branch_id, is_active)
-      VALUES ('piece', 'Piece', $1, true)
-      ON CONFLICT (unit_name, branch_id)
+      INSERT INTO products_unit (display_name, branch_id, is_active)
+      VALUES ('Piece', $1, true)
+      ON CONFLICT (display_name, branch_id)
       DO UPDATE SET
         display_name = EXCLUDED.display_name,
         is_active = true
@@ -63,9 +63,9 @@ async function ensureProductsUnit(client, branchId) {
 async function ensureCategory(client, branchId) {
   const result = await client.query(
     `
-      INSERT INTO category (category_name, display_name, branch_id, is_active)
-      VALUES ('e2e_general', 'E2E General', $1, true)
-      ON CONFLICT (category_name, branch_id)
+      INSERT INTO category (display_name, branch_id, is_active)
+      VALUES ('E2E General', $1, true)
+      ON CONFLICT (display_name, branch_id)
       DO UPDATE SET
         display_name = EXCLUDED.display_name,
         is_active = true
@@ -94,7 +94,6 @@ async function ensureProduct(client, branchId, categoryId, unitId) {
     `
       INSERT INTO products (
         branch_id,
-        product_name,
         display_name,
         description,
         price,
@@ -104,7 +103,7 @@ async function ensureProduct(client, branchId, categoryId, unitId) {
         unit_id,
         is_active
       )
-      VALUES ($1, 'e2e_product_baseline', 'E2E Product Baseline', 'Seeded for e2e', 99, 40, 109, $2, $3, true)
+      VALUES ($1, 'E2E Product Baseline', 'Seeded for e2e', 99, 40, 109, $2, $3, true)
       RETURNING id
     `,
     [branchId, categoryId, unitId]

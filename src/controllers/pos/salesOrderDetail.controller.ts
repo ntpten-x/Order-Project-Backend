@@ -10,22 +10,34 @@ import { getClientIp } from "../../utils/securityLogger";
 export class SalesOrderDetailController {
     constructor(private salesOrderDetailService: SalesOrderDetailService) { }
 
+    private getAccess(req: Request) {
+        const scope = (req as any).permission?.scope;
+        const actorUserId = (req as any).user?.id;
+        if (scope === "own" && !actorUserId) {
+            return { scope: "none" as const };
+        }
+        return {
+            scope,
+            actorUserId,
+        };
+    }
+
     findAll = catchAsync(async (req: Request, res: Response) => {
         const branchId = getBranchId(req as any);
-        const details = await this.salesOrderDetailService.findAll(branchId);
+        const details = await this.salesOrderDetailService.findAll(branchId, this.getAccess(req));
         return ApiResponses.ok(res, details);
     });
 
     findOne = catchAsync(async (req: Request, res: Response) => {
         const branchId = getBranchId(req as any);
-        const detail = await this.salesOrderDetailService.findOne(req.params.id, branchId);
+        const detail = await this.salesOrderDetailService.findOne(req.params.id, branchId, this.getAccess(req));
         if (!detail) throw AppError.notFound("Sales order detail");
         return ApiResponses.ok(res, detail);
     });
 
     create = catchAsync(async (req: Request, res: Response) => {
         const branchId = getBranchId(req as any);
-        const detail = await this.salesOrderDetailService.create(req.body, branchId);
+        const detail = await this.salesOrderDetailService.create(req.body, branchId, this.getAccess(req));
 
         const userInfo = getUserInfoFromRequest(req as any);
         await auditLogger.log({
@@ -47,8 +59,9 @@ export class SalesOrderDetailController {
 
     update = catchAsync(async (req: Request, res: Response) => {
         const branchId = getBranchId(req as any);
-        const oldDetail = await this.salesOrderDetailService.findOne(req.params.id, branchId);
-        const detail = await this.salesOrderDetailService.update(req.params.id, req.body, branchId);
+        const access = this.getAccess(req);
+        const oldDetail = await this.salesOrderDetailService.findOne(req.params.id, branchId, access);
+        const detail = await this.salesOrderDetailService.update(req.params.id, req.body, branchId, access);
 
         if (detail) {
             const userInfo = getUserInfoFromRequest(req as any);
@@ -80,8 +93,9 @@ export class SalesOrderDetailController {
         } */
 
         const branchId = getBranchId(req as any);
-        const oldDetail = await this.salesOrderDetailService.findOne(req.params.id, branchId);
-        await this.salesOrderDetailService.delete(req.params.id, branchId);
+        const access = this.getAccess(req);
+        const oldDetail = await this.salesOrderDetailService.findOne(req.params.id, branchId, access);
+        await this.salesOrderDetailService.delete(req.params.id, branchId, access);
 
         const userInfo = getUserInfoFromRequest(req as any);
         await auditLogger.log({

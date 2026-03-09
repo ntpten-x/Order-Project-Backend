@@ -55,7 +55,6 @@ const CORE_PERMISSION_RESOURCES: Array<{
     { resourceKey: "menu.pos.home", resourceName: "POS Menu - Home", routePattern: "/", resourceType: "menu", sortOrder: 2020 },
     { resourceKey: "menu.pos.sell", resourceName: "POS Menu - Sell", routePattern: "/pos", resourceType: "menu", sortOrder: 2021 },
     { resourceKey: "menu.pos.orders", resourceName: "POS Menu - Orders", routePattern: "/pos/orders", resourceType: "menu", sortOrder: 2022 },
-    { resourceKey: "menu.pos.kitchen", resourceName: "POS Menu - Kitchen", routePattern: "/pos/kitchen", resourceType: "menu", sortOrder: 2023 },
     { resourceKey: "menu.pos.shift", resourceName: "POS Menu - Shift", routePattern: "/pos/shift", resourceType: "menu", sortOrder: 2024 },
     { resourceKey: "menu.pos.shiftHistory", resourceName: "POS Menu - Shift History", routePattern: "/pos/shiftHistory", resourceType: "menu", sortOrder: 2025 },
     { resourceKey: "menu.pos.dashboard", resourceName: "POS Menu - Dashboard", routePattern: "/pos/dashboard", resourceType: "menu", sortOrder: 2026 },
@@ -87,7 +86,6 @@ const CORE_PERMISSION_RESOURCES: Array<{
     { resourceKey: "products.page", resourceName: "Products", routePattern: "/pos/products", resourceType: "page", sortOrder: 21 },
     { resourceKey: "products_unit.page", resourceName: "Product Units", routePattern: "/pos/productsUnit", resourceType: "page", sortOrder: 22 },
     { resourceKey: "category.page", resourceName: "Category", routePattern: "/pos/category", resourceType: "page", sortOrder: 23 },
-    { resourceKey: "queue.page", resourceName: "Queue", routePattern: "/pos/queue", resourceType: "page", sortOrder: 24 },
     { resourceKey: "payments.page", resourceName: "Payments", routePattern: "/pos/payments", resourceType: "page", sortOrder: 25 },
     { resourceKey: "delivery.page", resourceName: "Delivery", routePattern: "/pos/delivery", resourceType: "page", sortOrder: 26 },
     { resourceKey: "discounts.page", resourceName: "Discounts", routePattern: "/pos/discounts", resourceType: "page", sortOrder: 27 },
@@ -115,7 +113,6 @@ const EMPLOYEE_READ_ALLOW = new Set<string>([
     "orders.page",
     "products.page",
     "products_unit.page",
-    "queue.page",
     "shifts.page",
     "payments.page",
     "category.page",
@@ -129,7 +126,7 @@ const EMPLOYEE_READ_ALLOW = new Set<string>([
 ]);
 
 const EMPLOYEE_MENU_PREFIX_ALLOW = ["menu.pos."];
-const EMPLOYEE_WRITE_ALLOW = new Set<string>(["orders.page", "queue.page", "payments.page", "shifts.page"]);
+const EMPLOYEE_WRITE_ALLOW = new Set<string>(["orders.page", "payments.page", "shifts.page"]);
 const ORDER_EDIT_FEATURE = "orders.edit.feature";
 const ORDER_CANCEL_FEATURE = "orders.cancel.feature";
 

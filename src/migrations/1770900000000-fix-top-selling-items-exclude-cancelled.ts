@@ -10,7 +10,7 @@ export class FixTopSellingItemsExcludeCancelled1770900000000 implements Migratio
             SELECT
                 o.branch_id AS branch_id,
                 oi.product_id AS product_id,
-                p.display_name AS product_name,
+                p.display_name AS display_name,
                 p.img_url AS img_url,
                 p.category_id AS category_id,
                 SUM(oi.quantity) AS total_quantity,
@@ -31,7 +31,7 @@ export class FixTopSellingItemsExcludeCancelled1770900000000 implements Migratio
             SELECT
                 o.branch_id AS branch_id,
                 oi.product_id AS product_id,
-                p.display_name AS product_name,
+                p.display_name AS display_name,
                 p.img_url AS img_url,
                 p.category_id AS category_id,
                 SUM(oi.quantity) AS total_quantity,
