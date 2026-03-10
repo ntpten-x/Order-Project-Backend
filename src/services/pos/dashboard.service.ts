@@ -8,6 +8,7 @@ import { cacheKey, queryCache, withCache } from "../../utils/cache";
 import { AppError } from "../../utils/AppError";
 import { metrics } from "../../utils/metrics";
 import { logProfileDuration } from "../../utils/queryProfiler";
+import { getReadModelVersionToken } from "./readModelVersion.utils";
 
 type DashboardRecentOrderSummary = {
     id: string;
@@ -91,6 +92,19 @@ export class DashboardService {
         return ["public"];
     }
 
+    private async buildVersionedCacheKey(
+        prefix: string,
+        branchId: string | undefined,
+        ...parts: Array<string | number | boolean | undefined>
+    ): Promise<string> {
+        const scope = this.getCacheScopeParts(branchId);
+        const versionToken = await getReadModelVersionToken(
+            "dashboard",
+            scope[0] === "branch" ? scope[1] : undefined
+        );
+        return cacheKey(prefix, ...scope, versionToken, ...parts);
+    }
+
     private normalizeDateRange(startDate?: string, endDate?: string): { startDate?: string; endDate?: string } {
         const hasStart = typeof startDate === "string" && startDate.length > 0;
         const hasEnd = typeof endDate === "string" && endDate.length > 0;
@@ -162,10 +176,9 @@ export class DashboardService {
 
     async getSalesSummary(startDate?: string, endDate?: string, branchId?: string): Promise<SalesSummaryView[]> {
         const normalized = this.normalizeDateRange(startDate, endDate);
-        const scope = this.getCacheScopeParts(branchId);
-        const key = cacheKey(
+        const key = await this.buildVersionedCacheKey(
             this.SALES_CACHE_PREFIX,
-            ...scope,
+            branchId,
             normalized.startDate || "all",
             normalized.endDate || "all"
         );
@@ -206,8 +219,7 @@ export class DashboardService {
 
     async getTopSellingItems(limit: number = 10, branchId?: string): Promise<TopSellingItemsView[]> {
         const safeLimit = this.toSafeLimit(limit, 10, 50);
-        const scope = this.getCacheScopeParts(branchId);
-        const key = cacheKey(this.TOP_ITEMS_CACHE_PREFIX, ...scope, safeLimit);
+        const key = await this.buildVersionedCacheKey(this.TOP_ITEMS_CACHE_PREFIX, branchId, safeLimit);
 
         return withCache(
             key,
@@ -363,11 +375,9 @@ export class DashboardService {
         const normalized = this.normalizeDateRange(startDate, endDate);
         const safeTopLimit = this.toSafeLimit(topLimit, 7, 20);
         const safeRecentLimit = this.toSafeLimit(recentLimit, 8, 30);
-        const scope = this.getCacheScopeParts(branchId);
-
-        const key = cacheKey(
+        const key = await this.buildVersionedCacheKey(
             this.OVERVIEW_CACHE_PREFIX,
-            ...scope,
+            branchId,
             normalized.startDate || "all",
             normalized.endDate || "all",
             safeTopLimit,

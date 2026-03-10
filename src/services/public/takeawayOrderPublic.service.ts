@@ -134,7 +134,15 @@ export class PublicTakeawayOrderService {
     }
 
     private async ensurePublicOrderingAvailable(branchId: string): Promise<void> {
-        const activeShift = await this.shiftsService.getCurrentShift(branchId);
+        const activeShift = await runWithDbContext(
+            {
+                branchId,
+                userId: "public-takeaway-order",
+                role: "public",
+                isAdmin: false,
+            },
+            () => this.shiftsService.getCurrentShift(branchId),
+        );
         if (!activeShift) {
             throw new AppError("Public ordering is unavailable while the shift is closed", 403);
         }
@@ -237,7 +245,6 @@ export class PublicTakeawayOrderService {
 
     async getBootstrapByToken(token: string) {
         const profile = await this.resolveProfileByToken(token);
-        await this.ensurePublicOrderingAvailable(profile.branch_id!);
         return runWithDbContext(
             {
                 branchId: profile.branch_id,
@@ -320,7 +327,6 @@ export class PublicTakeawayOrderService {
 
     async resolveOrderByToken(token: string, orderId: string) {
         const profile = await this.resolveProfileByToken(token);
-        await this.ensurePublicOrderingAvailable(profile.branch_id!);
 
         return runWithDbContext(
             {

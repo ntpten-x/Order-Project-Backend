@@ -264,13 +264,17 @@ export function cacheKey(prefix: string, ...params: (string | number | boolean |
  * Call this after create/update/delete operations
  */
 export function invalidateCache(patterns: string[]): void {
+    invalidateLocalCache(patterns);
+    void invalidateRedisCache(patterns).catch((error) => {
+        console.error("[Cache] Redis invalidation failed:", error);
+    });
+}
+
+export function invalidateLocalCache(patterns: string[]): void {
     for (const pattern of patterns) {
         queryCache.invalidatePattern(pattern);
         metadataCache.invalidatePattern(pattern);
     }
-    void invalidateRedisCache(patterns).catch((error) => {
-        console.error("[Cache] Redis invalidation failed:", error);
-    });
 }
 
 export default {
@@ -280,5 +284,6 @@ export default {
     metadataCache,
     withCache,
     cacheKey,
+    invalidateLocalCache,
     invalidateCache,
 };

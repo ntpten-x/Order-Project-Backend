@@ -72,7 +72,15 @@ export class PublicTableOrderService {
     }
 
     private async ensurePublicOrderingAvailable(branchId: string): Promise<void> {
-        const activeShift = await this.shiftsService.getCurrentShift(branchId);
+        const activeShift = await runWithDbContext(
+            {
+                branchId,
+                userId: "public-table-order",
+                role: "public",
+                isAdmin: false,
+            },
+            () => this.shiftsService.getCurrentShift(branchId),
+        );
         if (!activeShift) {
             throw new AppError("Public ordering is unavailable while the shift is closed", 403);
         }
@@ -288,7 +296,6 @@ export class PublicTableOrderService {
 
     async getBootstrapByToken(token: string) {
         const table = await this.resolveTableByToken(token);
-        await this.ensurePublicOrderingAvailable(table.branch_id!);
 
         return runWithDbContext(
             {
@@ -322,7 +329,6 @@ export class PublicTableOrderService {
 
     async getActiveOrderByToken(token: string) {
         const table = await this.resolveTableByToken(token);
-        await this.ensurePublicOrderingAvailable(table.branch_id!);
 
         return runWithDbContext(
             {
@@ -465,7 +471,6 @@ export class PublicTableOrderService {
 
     async resolveOrderByToken(token: string, orderId: string) {
         const table = await this.resolveTableByToken(token);
-        await this.ensurePublicOrderingAvailable(table.branch_id!);
 
         return runWithDbContext(
             {

@@ -2,9 +2,11 @@ import { AppDataSource } from "../database/database";
 import { Branch } from "../entity/Branch";
 import { ProductsModels } from "../models/pos/products.model";
 import { CategoryModels } from "../models/pos/category.model";
+import { OrdersModels } from "../models/pos/orders.model";
 import { runWithDbContext } from "../database/dbContext";
 import { DashboardService } from "./pos/dashboard.service";
 import { ShiftsService } from "./pos/shifts.service";
+import { OrdersService } from "./pos/orders.service";
 
 function parseBooleanEnv(value: string | undefined, fallback: boolean): boolean {
     if (value === undefined) return fallback;
@@ -35,6 +37,7 @@ class StartupWarmupService {
     private readonly productsModel = new ProductsModels();
     private readonly categoryModel = new CategoryModels();
     private readonly shiftsService = new ShiftsService();
+    private readonly ordersService = new OrdersService(new OrdersModels());
     private started = false;
 
     private readonly enabled = parseBooleanEnv(process.env.STARTUP_WARMUP_ENABLED, true);
@@ -109,6 +112,10 @@ class StartupWarmupService {
         1,
         30
     );
+    private readonly ordersReadModelEnabled = parseBooleanEnv(
+        process.env.STARTUP_WARMUP_ORDERS_READ_MODEL_ENABLED,
+        true
+    );
 
     schedule(): void {
         if (!this.enabled || this.started) {
@@ -175,6 +182,13 @@ class StartupWarmupService {
                         ),
                 },
             ];
+
+            if (this.ordersReadModelEnabled) {
+                tasks.push({
+                    name: "orders.read-models",
+                    run: () => this.ordersService.warmReadModels(branchId),
+                });
+            }
 
             if (this.productsEnabled) {
                 tasks.push({

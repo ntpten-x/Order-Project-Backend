@@ -9,6 +9,8 @@ import { CreatedSort } from "../../utils/sortCreated";
 import { AppError } from "../../utils/AppError";
 import { cacheKey, invalidateCache, queryCache, withCache } from "../../utils/cache";
 import { getTableCacheInvalidationPatterns } from "./tableCache.utils";
+import { OrderSummarySnapshotService } from "./orderSummarySnapshot.service";
+import { bumpOrderReadModelVersions, invalidateOrderReadCaches } from "./ordersReadCache.utils";
 
 const QR_TOKEN_BYTES = Math.max(16, Number(process.env.TABLE_QR_TOKEN_BYTES || 24));
 const QR_TOKEN_EXPIRE_DAYS = Number(process.env.TABLE_QR_TOKEN_EXPIRE_DAYS || 365);
@@ -19,6 +21,7 @@ type TableQrCodeListItem = Tables & {
 
 export class TablesService {
     private socketService = SocketService.getInstance();
+    private orderSummarySnapshotService = new OrderSummarySnapshotService();
     private readonly CACHE_PREFIX = "tables";
     private readonly CACHE_TTL = Number(process.env.POS_MASTER_CACHE_TTL_MS || 30_000);
 
@@ -38,6 +41,11 @@ export class TablesService {
 
     private invalidateTablesCache(branchId?: string, id?: string): void {
         invalidateCache(this.getInvalidationPatterns(branchId, id));
+    }
+
+    private async invalidateOrderReadModels(branchId?: string): Promise<void> {
+        await bumpOrderReadModelVersions(branchId);
+        invalidateOrderReadCaches(branchId);
     }
 
     async findAll(
@@ -257,6 +265,8 @@ export class TablesService {
 
         const effectiveBranchId = tableToUpdate.branch_id || branchId || tables.branch_id;
         const updatedTable = await this.tablesModel.update(id, tables, effectiveBranchId);
+        await this.orderSummarySnapshotService.syncTableMetadata(id);
+        await this.invalidateOrderReadModels(effectiveBranchId);
         this.invalidateTablesCache(effectiveBranchId, id);
         if (effectiveBranchId) {
             this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.tables.update, updatedTable);

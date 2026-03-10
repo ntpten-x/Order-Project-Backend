@@ -2,10 +2,13 @@ import { SalesOrderDetailModels } from "../../models/pos/salesOrderDetail.model"
 import { SocketService } from "../socket.service";
 import { SalesOrderDetail } from "../../entity/pos/SalesOrderDetail";
 import { SalesOrderItem } from "../../entity/pos/SalesOrderItem";
+import { SalesOrder } from "../../entity/pos/SalesOrder";
 import { recalculateOrderTotal } from "./orderTotals.service";
 import { getRepository } from "../../database/dbContext";
 import { RealtimeEvents } from "../../utils/realtimeEvents";
 import { AppError } from "../../utils/AppError";
+import { bumpOrderReadModelVersions, invalidateOrderReadCaches } from "./ordersReadCache.utils";
+import { OrderSummarySnapshotService } from "./orderSummarySnapshot.service";
 
 type AccessContext = {
     scope?: "none" | "own" | "branch" | "all";
@@ -14,8 +17,33 @@ type AccessContext = {
 
 export class SalesOrderDetailService {
     private socketService = SocketService.getInstance();
+    private orderSummarySnapshotService = new OrderSummarySnapshotService();
 
     constructor(private salesOrderDetailModel: SalesOrderDetailModels) { }
+
+    private async invalidateOrderReadModels(branchId?: string): Promise<void> {
+        await bumpOrderReadModelVersions(branchId);
+        invalidateOrderReadCaches(branchId);
+    }
+
+    private async getOrderBranchId(orderId: string, fallbackBranchId?: string): Promise<string | undefined> {
+        const order = await getRepository(SalesOrder).findOne({
+            where: fallbackBranchId ? ({ id: orderId, branch_id: fallbackBranchId } as any) : { id: orderId },
+            select: ["id", "branch_id"],
+        });
+        return order?.branch_id || fallbackBranchId;
+    }
+
+    private async emitOrderUpdate(orderId: string, branchId?: string): Promise<void> {
+        if (!branchId) return;
+
+        const summarySnapshot = await this.orderSummarySnapshotService.getPayload(orderId);
+        this.socketService.emitToBranch(branchId, RealtimeEvents.orders.update, {
+            id: orderId,
+            status: summarySnapshot?.status ?? undefined,
+            summary_snapshot: summarySnapshot,
+        });
+    }
 
     private async findAccessibleItem(
         ordersItemId: string,
@@ -47,13 +75,14 @@ export class SalesOrderDetailService {
         return query.getOne();
     }
 
-    private async recalcByItemId(ordersItemId?: string | null): Promise<void> {
-        if (!ordersItemId) return;
+    private async recalcByItemId(ordersItemId?: string | null): Promise<SalesOrderItem | null> {
+        if (!ordersItemId) return null;
         const itemRepo = getRepository(SalesOrderItem);
         const item = await itemRepo.findOneBy({ id: ordersItemId });
         if (item) {
             await recalculateOrderTotal(item.order_id);
         }
+        return item;
     }
 
     async findAll(branchId?: string, access?: AccessContext): Promise<SalesOrderDetail[]> {
@@ -89,12 +118,22 @@ export class SalesOrderDetailService {
             }
 
             const createdDetail = await this.salesOrderDetailModel.create(salesOrderDetail)
-            await this.recalcByItemId(createdDetail.orders_item_id);
+            const parentItem = await this.recalcByItemId(createdDetail.orders_item_id);
+            const effectiveBranchId = parentItem?.order_id
+                ? await this.getOrderBranchId(parentItem.order_id, branchId)
+                : branchId;
+            if (parentItem?.order_id) {
+                await this.orderSummarySnapshotService.syncOrder(parentItem.order_id);
+            }
+            await this.invalidateOrderReadModels(effectiveBranchId);
 
             const completeDetail = await this.salesOrderDetailModel.findOne(createdDetail.id, branchId, access)
             if (completeDetail) {
-                if (branchId) {
-                    this.socketService.emitToBranch(branchId, RealtimeEvents.salesOrderDetail.create, completeDetail)
+                if (effectiveBranchId) {
+                    this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.salesOrderDetail.create, completeDetail)
+                    if (parentItem?.order_id) {
+                        await this.emitOrderUpdate(parentItem.order_id, effectiveBranchId);
+                    }
                 }
                 return completeDetail
             }
@@ -112,9 +151,19 @@ export class SalesOrderDetailService {
             }
 
             const updatedDetail = await this.salesOrderDetailModel.update(id, salesOrderDetail, branchId, access)
-            await this.recalcByItemId(detailToUpdate.orders_item_id);
-            if (branchId) {
-                this.socketService.emitToBranch(branchId, RealtimeEvents.salesOrderDetail.update, updatedDetail)
+            const parentItem = await this.recalcByItemId(detailToUpdate.orders_item_id);
+            const effectiveBranchId = parentItem?.order_id
+                ? await this.getOrderBranchId(parentItem.order_id, branchId)
+                : branchId;
+            if (parentItem?.order_id) {
+                await this.orderSummarySnapshotService.syncOrder(parentItem.order_id);
+            }
+            await this.invalidateOrderReadModels(effectiveBranchId);
+            if (effectiveBranchId) {
+                this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.salesOrderDetail.update, updatedDetail)
+                if (parentItem?.order_id) {
+                    await this.emitOrderUpdate(parentItem.order_id, effectiveBranchId);
+                }
             }
             return updatedDetail
         } catch (error) {
@@ -126,9 +175,19 @@ export class SalesOrderDetailService {
         try {
             const detailToDelete = await this.salesOrderDetailModel.findOne(id, branchId, access)
             await this.salesOrderDetailModel.delete(id, branchId, access)
-            await this.recalcByItemId(detailToDelete?.orders_item_id);
-            if (branchId) {
-                this.socketService.emitToBranch(branchId, RealtimeEvents.salesOrderDetail.delete, { id })
+            const parentItem = await this.recalcByItemId(detailToDelete?.orders_item_id);
+            const effectiveBranchId = parentItem?.order_id
+                ? await this.getOrderBranchId(parentItem.order_id, branchId)
+                : branchId;
+            if (parentItem?.order_id) {
+                await this.orderSummarySnapshotService.syncOrder(parentItem.order_id);
+            }
+            await this.invalidateOrderReadModels(effectiveBranchId);
+            if (effectiveBranchId) {
+                this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.salesOrderDetail.delete, { id })
+                if (parentItem?.order_id) {
+                    await this.emitOrderUpdate(parentItem.order_id, effectiveBranchId);
+                }
             }
         } catch (error) {
             throw error

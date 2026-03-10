@@ -1,6 +1,6 @@
 import { OrdersModels, ChannelStats } from "../../models/pos/orders.model";
 import { SocketService } from "../socket.service";
-import { withCache, cacheKey, queryCache, invalidateCache } from "../../utils/cache";
+import { withCache, cacheKey, queryCache, invalidateCache, getCache } from "../../utils/cache";
 import { SalesOrder } from "../../entity/pos/SalesOrder";
 import { Tables, TableStatus } from "../../entity/pos/Tables";
 import { Delivery } from "../../entity/pos/Delivery";
@@ -25,7 +25,9 @@ import { PermissionScope } from "../../middleware/permission.middleware";
 import { CreatedSort } from "../../utils/sortCreated";
 import { groupServingBoardRows, ServingBoardGroup, ServingBoardRow } from "../../utils/servingBoard";
 import { getTableCacheInvalidationPatterns } from "./tableCache.utils";
-import { getDashboardCacheInvalidationPatterns } from "./dashboardCache.utils";
+import { getReadModelVersionToken } from "./readModelVersion.utils";
+import { bumpOrderReadModelVersions, invalidateOrderReadCaches } from "./ordersReadCache.utils";
+import { OrderSummarySnapshotService } from "./orderSummarySnapshot.service";
 
 type AccessContext = {
     scope?: PermissionScope;
@@ -46,12 +48,27 @@ type MutatedOrderContext = {
 export class OrdersService {
     private socketService = SocketService.getInstance();
     private shiftsService = new ShiftsService();
+    private orderSummarySnapshotService = new OrderSummarySnapshotService();
     private readonly LIST_CACHE_PREFIX = "orders:list";
     private readonly LIST_CACHE_TTL = Number(process.env.ORDERS_LIST_CACHE_TTL_MS || 5000);
     private readonly SUMMARY_CACHE_PREFIX = "orders:summary";
     private readonly SUMMARY_CACHE_TTL = Number(process.env.ORDERS_SUMMARY_CACHE_TTL_MS || 10000);
     private readonly STATS_CACHE_PREFIX = "orders:stats";
     private readonly STATS_CACHE_TTL = Number(process.env.ORDERS_STATS_CACHE_TTL_MS || 10000);
+    private readonly summaryPayloadCache = getCache<any>("orders-summary-payload", {
+        maxSize: 500,
+        defaultTtl: Number(process.env.ORDERS_SUMMARY_PAYLOAD_CACHE_TTL_MS || 15_000),
+    });
+    private readonly statsPayloadCache = getCache<any>("orders-stats-payload", {
+        maxSize: 200,
+        defaultTtl: Number(process.env.ORDERS_STATS_PAYLOAD_CACHE_TTL_MS || 15_000),
+    });
+    private readonly READ_MODEL_WARMUP_ENABLED = process.env.POS_READ_MODEL_WARMUP_ENABLED !== "false";
+    private readonly READ_MODEL_WARMUP_LIMIT = Math.min(
+        Math.max(Number(process.env.POS_READ_MODEL_WARMUP_LIMIT || 20), 1),
+        50
+    );
+    private readonly pendingReadModelWarmups = new Map<string, Promise<void>>();
 
     constructor(private ordersModel: OrdersModels) { }
 
@@ -83,15 +100,89 @@ export class OrdersService {
         return ["scope", scope];
     }
 
-    private invalidateReadCaches(branchId?: string): void {
+    private async buildVersionedCacheKey(
+        prefix: string,
+        branchId: string | undefined,
+        access: AccessContext | undefined,
+        ...parts: Array<string | number | boolean | undefined>
+    ): Promise<string> {
         const scope = this.getCacheScopeParts(branchId);
-        const patterns = [
-            cacheKey(this.LIST_CACHE_PREFIX, ...scope),
-            cacheKey(this.SUMMARY_CACHE_PREFIX, ...scope),
-            cacheKey(this.STATS_CACHE_PREFIX, ...scope),
-            ...getDashboardCacheInvalidationPatterns(branchId),
-        ];
-        invalidateCache(patterns);
+        const accessScope = this.getAccessCacheScopeParts(access);
+        const versionToken = await getReadModelVersionToken(
+            "orders",
+            scope[0] === "branch" ? scope[1] : undefined
+        );
+        return cacheKey(prefix, ...scope, ...accessScope, versionToken, ...parts);
+    }
+
+    private invalidateReadCaches(branchId?: string): void {
+        invalidateOrderReadCaches(branchId);
+    }
+
+    private async bumpReadModelVersions(branchId?: string): Promise<void> {
+        await bumpOrderReadModelVersions(branchId);
+    }
+
+    async warmReadModels(branchId?: string): Promise<void> {
+        if (!this.READ_MODEL_WARMUP_ENABLED) {
+            return;
+        }
+
+        const warmupKey = branchId || "global";
+        const existingWarmup = this.pendingReadModelWarmups.get(warmupKey);
+        if (existingWarmup) {
+            return existingWarmup;
+        }
+
+        const warmupPromise = (async () => {
+            const warmStatuses = [
+                undefined,
+                [OrderStatus.Pending],
+                [OrderStatus.WaitingForPayment],
+                [OrderStatus.Pending, OrderStatus.WaitingForPayment],
+            ] as Array<string[] | undefined>;
+
+            const tasks: Array<Promise<unknown>> = [
+                this.getStats(branchId, undefined, { bypassCache: false }),
+            ];
+
+            for (const statuses of warmStatuses) {
+                tasks.push(
+                    this.findAllSummary(
+                        1,
+                        this.READ_MODEL_WARMUP_LIMIT,
+                        statuses,
+                        undefined,
+                        undefined,
+                        branchId,
+                        undefined,
+                        { bypassCache: false },
+                        "old"
+                    )
+                );
+            }
+
+            await Promise.allSettled(tasks);
+        })().finally(() => {
+            this.pendingReadModelWarmups.delete(warmupKey);
+        });
+
+        this.pendingReadModelWarmups.set(warmupKey, warmupPromise);
+        return warmupPromise;
+    }
+
+    private scheduleReadModelWarmup(branchId?: string): void {
+        if (!this.READ_MODEL_WARMUP_ENABLED) {
+            return;
+        }
+
+        const timer = setTimeout(() => {
+            void this.warmReadModels(branchId);
+        }, 25);
+
+        if (typeof timer.unref === "function") {
+            timer.unref();
+        }
     }
 
     private invalidateTableCache(branchId?: string, tableId?: string): void {
@@ -304,17 +395,32 @@ export class OrdersService {
         return this.ordersModel.findOne(orderId, branchId);
     }
 
+    private async getOrderRealtimePayload(order: SalesOrder | null, orderId: string): Promise<Record<string, unknown> | null> {
+        if (!order) {
+            return null;
+        }
+
+        const summarySnapshot = await this.orderSummarySnapshotService.getPayload(orderId);
+        return {
+            ...order,
+            summary_snapshot: summarySnapshot,
+        };
+    }
+
     private async finalizeOrderMutation(context: MutatedOrderContext, event: string): Promise<SalesOrder | null> {
         const order = await this.refreshOrderAfterCommit(context.orderId, context.branchId);
         const effectiveBranchId = order?.branch_id || context.branchId;
 
+        await this.bumpReadModelVersions(effectiveBranchId);
         this.invalidateReadCaches(effectiveBranchId);
+        this.scheduleReadModelWarmup(effectiveBranchId);
 
         if (effectiveBranchId) {
             if (event === RealtimeEvents.orders.delete) {
                 this.socketService.emitToBranch(effectiveBranchId, event, { id: context.orderId });
             } else if (order) {
-                this.socketService.emitToBranch(effectiveBranchId, event, order);
+                const realtimePayload = await this.getOrderRealtimePayload(order, context.orderId);
+                this.socketService.emitToBranch(effectiveBranchId, event, realtimePayload ?? order);
             }
         }
 
@@ -476,14 +582,16 @@ export class OrdersService {
         access?: AccessContext,
         sortCreated: CreatedSort = "old"
     ): Promise<{ data: SalesOrder[], total: number, page: number, limit: number }> {
+        if (query?.trim() || page > 1) {
+            return this.ordersModel.findAll(page, limit, statuses, type, query, branchId, access, sortCreated);
+        }
+
         const statusKey = statuses?.length ? statuses.join(",") : "all";
         const typeKey = type || "all";
-        const scope = this.getCacheScopeParts(branchId);
-        const accessScope = this.getAccessCacheScopeParts(access);
-        const key = cacheKey(
+        const key = await this.buildVersionedCacheKey(
             this.LIST_CACHE_PREFIX,
-            ...scope,
-            ...accessScope,
+            branchId,
+            access,
             "list",
             page,
             limit,
@@ -491,10 +599,6 @@ export class OrdersService {
             typeKey,
             sortCreated
         );
-
-        if (query?.trim() || page > 1) {
-            return this.ordersModel.findAll(page, limit, statuses, type, query, branchId, access, sortCreated);
-        }
 
         return withCache(
             key,
@@ -519,14 +623,16 @@ export class OrdersService {
         options?: { bypassCache?: boolean },
         sortCreated: CreatedSort = "old"
     ): Promise<{ data: any[], total: number, page: number, limit: number }> {
+        if (options?.bypassCache || query?.trim()) {
+            return this.ordersModel.findAllSummary(page, limit, statuses, type, query, branchId, access, sortCreated);
+        }
+
         const statusKey = statuses?.length ? statuses.join(",") : "all";
         const typeKey = type || "all";
-        const scope = this.getCacheScopeParts(branchId);
-        const accessScope = this.getAccessCacheScopeParts(access);
-        const key = cacheKey(
+        const key = await this.buildVersionedCacheKey(
             this.SUMMARY_CACHE_PREFIX,
-            ...scope,
-            ...accessScope,
+            branchId,
+            access,
             "list",
             page,
             limit,
@@ -535,15 +641,11 @@ export class OrdersService {
             sortCreated
         );
 
-        if (options?.bypassCache || query?.trim()) {
-            return this.ordersModel.findAllSummary(page, limit, statuses, type, query, branchId, access, sortCreated);
-        }
-
         return withCache(
             key,
             () => this.ordersModel.findAllSummary(page, limit, statuses, type, query, branchId, access, sortCreated),
             this.SUMMARY_CACHE_TTL,
-            queryCache as any,
+            this.summaryPayloadCache as any,
             {
                 onHit: (source) => this.observeCache("orders.summary.list", "hit", source),
                 onMiss: () => this.observeCache("orders.summary.list", "miss"),
@@ -563,15 +665,13 @@ export class OrdersService {
             return this.ordersModel.getStats(activeStatuses, branchId, access);
         }
 
-        const scope = this.getCacheScopeParts(branchId);
-        const accessScope = this.getAccessCacheScopeParts(access);
-        const key = cacheKey(this.STATS_CACHE_PREFIX, ...scope, ...accessScope, "active");
+        const key = await this.buildVersionedCacheKey(this.STATS_CACHE_PREFIX, branchId, access, "active");
 
         return withCache(
             key,
             () => this.ordersModel.getStats(activeStatuses, branchId, access),
             this.STATS_CACHE_TTL,
-            queryCache as any,
+            this.statsPayloadCache as any,
             {
                 onHit: (source) => this.observeCache("orders.stats.active", "hit", source),
                 onMiss: () => this.observeCache("orders.stats.active", "miss"),
@@ -760,6 +860,7 @@ export class OrdersService {
             }
 
             const savedOrder = await this.saveOrderWithRetry(manager, orderData, !orderData.order_no);
+            await this.orderSummarySnapshotService.syncOrder(savedOrder.id, manager);
 
             if (lockedTable) {
                 lockedTable.status = TableStatus.Unavailable;
@@ -839,6 +940,7 @@ export class OrdersService {
 
             await recalculateOrderTotal(savedOrder.id, manager);
             await this.syncOrderStatusFromItems(savedOrder.id, effectiveBranchId, manager);
+            await this.orderSummarySnapshotService.syncOrder(savedOrder.id, manager);
             return savedOrder;
         });
 
@@ -894,6 +996,7 @@ export class OrdersService {
 
             await recalculateOrderTotal(id, manager);
             await this.syncOrderStatusFromItems(id, effectiveBranchId, manager);
+            await this.orderSummarySnapshotService.syncOrder(id, manager);
 
             const refreshedOrder = await this.ordersModel.findOne(id, effectiveBranchId, undefined, manager);
             if (!refreshedOrder) {
@@ -995,6 +1098,7 @@ export class OrdersService {
 
             await recalculateOrderTotal(item.order_id, manager);
             await this.syncOrderStatusFromItems(item.order_id, effectiveBranchId, manager);
+            await this.orderSummarySnapshotService.syncOrder(item.order_id, manager);
 
             return {
                 orderId: item.order_id,
@@ -1038,18 +1142,22 @@ export class OrdersService {
 
                 await recalculateOrderTotal(orderId, manager);
                 await this.syncOrderStatusFromItems(orderId, branchId, manager);
+                await this.orderSummarySnapshotService.syncOrder(orderId, manager);
 
                 const updatedOrder = await this.ordersModel.findOne(orderId, branchId, undefined, manager);
                 return updatedOrder!;
             } catch (error) {
                 throw error;
             }
-        }).then((updatedOrder) => {
+        }).then(async (updatedOrder) => {
             if (updatedOrder) {
                 const effectiveBranchId = updatedOrder.branch_id || branchId;
+                await this.bumpReadModelVersions(effectiveBranchId);
                 this.invalidateReadCaches(effectiveBranchId);
+                this.scheduleReadModelWarmup(effectiveBranchId);
                 if (effectiveBranchId) {
-                    this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.update, updatedOrder);
+                    const payload = await this.getOrderRealtimePayload(updatedOrder, updatedOrder.id);
+                    this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.update, payload ?? updatedOrder);
                 }
             }
             return updatedOrder!;
@@ -1112,6 +1220,7 @@ export class OrdersService {
 
                 await recalculateOrderTotal(updatedItemWithDetails.order_id, manager);
                 await this.syncOrderStatusFromItems(updatedItemWithDetails.order_id, branchId, manager);
+                await this.orderSummarySnapshotService.syncOrder(updatedItemWithDetails.order_id, manager);
 
                 const updatedOrder = await this.ordersModel.findOne(
                     updatedItemWithDetails.order_id,
@@ -1123,12 +1232,15 @@ export class OrdersService {
             } catch (error) {
                 throw error;
             }
-        }).then((updatedOrder) => {
+        }).then(async (updatedOrder) => {
             if (updatedOrder) {
                 const effectiveBranchId = updatedOrder.branch_id || branchId;
+                await this.bumpReadModelVersions(effectiveBranchId);
                 this.invalidateReadCaches(effectiveBranchId);
+                this.scheduleReadModelWarmup(effectiveBranchId);
                 if (effectiveBranchId) {
-                    this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.update, updatedOrder);
+                    const payload = await this.getOrderRealtimePayload(updatedOrder, updatedOrder.id);
+                    this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.update, payload ?? updatedOrder);
                 }
             }
             return updatedOrder!;
@@ -1149,18 +1261,22 @@ export class OrdersService {
 
                 await recalculateOrderTotal(orderId, manager);
                 await this.syncOrderStatusFromItems(orderId, branchId, manager);
+                await this.orderSummarySnapshotService.syncOrder(orderId, manager);
 
                 const updatedOrder = await this.ordersModel.findOne(orderId, branchId, undefined, manager);
                 return updatedOrder!;
             } catch (error) {
                 throw error;
             }
-        }).then((updatedOrder) => {
+        }).then(async (updatedOrder) => {
             if (updatedOrder) {
                 const effectiveBranchId = updatedOrder.branch_id || branchId;
+                await this.bumpReadModelVersions(effectiveBranchId);
                 this.invalidateReadCaches(effectiveBranchId);
+                this.scheduleReadModelWarmup(effectiveBranchId);
                 if (effectiveBranchId) {
-                    this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.update, updatedOrder);
+                    const payload = await this.getOrderRealtimePayload(updatedOrder, updatedOrder.id);
+                    this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.update, payload ?? updatedOrder);
                 }
             }
             return updatedOrder!;

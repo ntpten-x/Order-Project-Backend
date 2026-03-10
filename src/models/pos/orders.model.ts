@@ -291,39 +291,29 @@ export class OrdersModels {
 
             if (statuses && statuses.length > 0) {
                 params.push(expandStatusVariants(statuses));
-                whereClauses.push(`o.status::text = ANY($${params.length})`);
+                whereClauses.push(`s.status = ANY($${params.length}::sales_orders_status_enum[])`);
             }
 
             if (orderType) {
                 params.push(expandOrderTypeVariants(orderType));
-                whereClauses.push(`o.order_type::text = ANY($${params.length})`);
+                whereClauses.push(`s.order_type = ANY($${params.length}::sales_orders_order_type_enum[])`);
             }
 
             if (trimmedQuery) {
                 params.push(`${trimmedQuery}%`);
                 const qIndex = params.length;
                 whereClauses.push(`(
-                    o.order_no ILIKE $${qIndex}
-                    OR o.delivery_code ILIKE $${qIndex}
-                    OR o.customer_name ILIKE $${qIndex}
-                    OR EXISTS (
-                        SELECT 1
-                        FROM tables t
-                        WHERE t.id = o.table_id
-                          AND t.table_name ILIKE $${qIndex}
-                    )
-                    OR EXISTS (
-                        SELECT 1
-                        FROM delivery d
-                        WHERE d.id = o.delivery_id
-                          AND d.delivery_name ILIKE $${qIndex}
-                    )
+                    s.order_no ILIKE $${qIndex}
+                    OR s.delivery_code ILIKE $${qIndex}
+                    OR s.customer_name ILIKE $${qIndex}
+                    OR s.table_name ILIKE $${qIndex}
+                    OR s.delivery_name ILIKE $${qIndex}
                 )`);
             }
 
             if (branchId) {
                 params.push(branchId);
-                whereClauses.push(`o.branch_id = $${params.length}`);
+                whereClauses.push(`s.branch_id = $${params.length}`);
             }
             if (access?.scope === "none") {
                 whereClauses.push(`1=0`);
@@ -333,54 +323,43 @@ export class OrdersModels {
                     whereClauses.push(`1=0`);
                 } else {
                     params.push(access.actorUserId);
-                    whereClauses.push(`o.created_by_id = $${params.length}`);
+                    whereClauses.push(`s.created_by_id = $${params.length}`);
                 }
             }
 
             const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
-
-            const countQuery = `
-                SELECT COUNT(*)::int AS total
-                FROM sales_orders o
-                ${whereSql}
-            `;
-            const countResult = await executeProfiledQuery<{ total: number }>(
-                "orders.summary.count",
-                countQuery,
-                params
-            );
-            const total = countResult?.[0]?.total ?? 0;
 
             const dataParams = [...params, limit, (page - 1) * limit];
             const limitIndex = params.length + 1;
             const offsetIndex = params.length + 2;
 
             const dataQuery = `
-                WITH base_orders AS (
+                WITH filtered_orders AS (
                     SELECT
-                        o.id,
-                        o.order_no,
-                        o.order_type,
-                        o.status,
-                        o.create_date,
-                        o.total_amount,
-                        o.delivery_code,
-                        o.customer_name,
-                        o.table_id,
-                        o.delivery_id
-                    FROM sales_orders o
+                        s.order_id AS id,
+                        s.order_no,
+                        s.order_type,
+                        s.status,
+                        s.create_date,
+                        s.total_amount,
+                        s.delivery_code,
+                        s.customer_name,
+                        s.table_id,
+                        s.delivery_id,
+                        s.table_name,
+                        s.delivery_name,
+                        s.delivery_logo,
+                        s.items_count
+                    FROM order_summary_snapshots s
                     ${whereSql}
-                    ORDER BY o.create_date ${sortOrder}, o.order_no ${sortOrder}, o.id ${sortOrder}
-                    LIMIT $${limitIndex} OFFSET $${offsetIndex}
                 ),
-                item_agg AS (
+                base_orders AS (
                     SELECT
-                        order_id,
-                        SUM(i.quantity)::int AS items_count
-                    FROM sales_order_item i
-                    INNER JOIN base_orders bo ON bo.id = i.order_id
-                    WHERE i.status NOT IN ('Cancelled', 'cancelled')
-                    GROUP BY order_id
+                        fo.*,
+                        COUNT(*) OVER()::int AS total_count
+                    FROM filtered_orders fo
+                    ORDER BY fo.create_date ${sortOrder}, fo.order_no ${sortOrder}, fo.id ${sortOrder}
+                    LIMIT $${limitIndex} OFFSET $${offsetIndex}
                 )
                 SELECT
                     bo.id,
@@ -393,14 +372,12 @@ export class OrdersModels {
                     bo.customer_name,
                     bo.table_id,
                     bo.delivery_id,
-                    t.table_name,
-                    d.delivery_name,
-                    d.logo,
-                    COALESCE(ia.items_count, 0) AS items_count
+                    bo.total_count,
+                    bo.table_name,
+                    bo.delivery_name,
+                    bo.delivery_logo AS logo,
+                    COALESCE(bo.items_count, 0) AS items_count
                 FROM base_orders bo
-                LEFT JOIN tables t ON t.id = bo.table_id
-                LEFT JOIN delivery d ON d.id = bo.delivery_id
-                LEFT JOIN item_agg ia ON ia.order_id = bo.id
                 ORDER BY bo.create_date ${sortOrder}, bo.order_no ${sortOrder}, bo.id ${sortOrder}
             `;
 
@@ -409,6 +386,7 @@ export class OrdersModels {
                 dataQuery,
                 dataParams
             );
+            const total = rows?.[0]?.total_count ?? 0;
 
             const data = rows.map((row: any) => ({
                 id: row.id,
@@ -440,12 +418,12 @@ export class OrdersModels {
     async getStats(statuses: string[], branchId?: string, access?: AccessContext): Promise<ChannelStats> {
         try {
             const expandedStatuses = expandStatusVariants(statuses);
-            const whereClauses: string[] = ["o.status::text = ANY($1)"];
+            const whereClauses: string[] = ["s.status = ANY($1::sales_orders_status_enum[])"];
             const params: any[] = [expandedStatuses];
 
             if (branchId) {
                 params.push(branchId);
-                whereClauses.push(`o.branch_id = $${params.length}`);
+                whereClauses.push(`s.branch_id = $${params.length}`);
             }
             if (access?.scope === "none") {
                 whereClauses.push("1=0");
@@ -455,21 +433,21 @@ export class OrdersModels {
                     whereClauses.push("1=0");
                 } else {
                     params.push(access.actorUserId);
-                    whereClauses.push(`o.created_by_id = $${params.length}`);
+                    whereClauses.push(`s.created_by_id = $${params.length}`);
                 }
             }
 
             const sql = `
                 SELECT
-                    COUNT(*) FILTER (WHERE o.order_type = 'DineIn')::int AS "dineIn",
-                    COUNT(*) FILTER (WHERE o.order_type = 'TakeAway')::int AS "takeaway",
-                    COUNT(*) FILTER (WHERE o.order_type = 'TakeAway' AND LOWER(o.status::text) = 'waitingforpayment')::int AS "takeaway_waiting_payment",
-                    COUNT(*) FILTER (WHERE o.order_type = 'Delivery')::int AS "delivery",
-                    COUNT(*) FILTER (WHERE o.order_type = 'Delivery' AND LOWER(o.status::text) = 'waitingforpayment')::int AS "delivery_waiting_payment",
-                    COUNT(*) FILTER (WHERE LOWER(o.status::text) IN ('pending', 'cooking', 'served'))::int AS "pending",
-                    COUNT(*) FILTER (WHERE LOWER(o.status::text) = 'waitingforpayment')::int AS "waiting_payment",
+                    COUNT(*) FILTER (WHERE s.order_type = 'DineIn')::int AS "dineIn",
+                    COUNT(*) FILTER (WHERE s.order_type = 'TakeAway')::int AS "takeaway",
+                    COUNT(*) FILTER (WHERE s.order_type = 'TakeAway' AND s.status = 'WaitingForPayment')::int AS "takeaway_waiting_payment",
+                    COUNT(*) FILTER (WHERE s.order_type = 'Delivery')::int AS "delivery",
+                    COUNT(*) FILTER (WHERE s.order_type = 'Delivery' AND s.status = 'WaitingForPayment')::int AS "delivery_waiting_payment",
+                    COUNT(*) FILTER (WHERE s.status IN ('Pending', 'Cooking', 'Served'))::int AS "pending",
+                    COUNT(*) FILTER (WHERE s.status = 'WaitingForPayment')::int AS "waiting_payment",
                     COUNT(*)::int AS "total"
-                FROM sales_orders o
+                FROM order_summary_snapshots s
                 WHERE ${whereClauses.join(" AND ")}
             `;
 

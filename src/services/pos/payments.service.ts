@@ -15,6 +15,8 @@ import { ShiftsService } from "./shifts.service";
 import { SocketService } from "../socket.service";
 import { getTableCacheInvalidationPatterns } from "./tableCache.utils";
 import { getDashboardCacheInvalidationPatterns } from "./dashboardCache.utils";
+import { bumpOrderReadModelVersions, invalidateOrderReadCaches } from "./ordersReadCache.utils";
+import { OrderSummarySnapshotService } from "./orderSummarySnapshot.service";
 
 type AccessContext = {
     scope?: "none" | "own" | "branch" | "all";
@@ -24,6 +26,7 @@ type AccessContext = {
 export class PaymentsService {
     private socketService = SocketService.getInstance();
     private shiftsService = new ShiftsService();
+    private orderSummarySnapshotService = new OrderSummarySnapshotService();
 
     constructor(private paymentsModel: PaymentsModels) { }
 
@@ -41,6 +44,11 @@ export class PaymentsService {
 
     private invalidateDashboardCaches(branchId?: string): void {
         invalidateCache(getDashboardCacheInvalidationPatterns(branchId));
+    }
+
+    private async invalidateOrderReadModels(branchId?: string): Promise<void> {
+        await bumpOrderReadModelVersions(branchId);
+        invalidateOrderReadCaches(branchId);
     }
 
     private async findAccessiblePayment(
@@ -134,9 +142,15 @@ export class PaymentsService {
             where: branchId ? ({ id: orderId, branch_id: branchId } as any) : { id: orderId },
         });
         const effectiveBranchId = refreshedOrder?.branch_id || branchId;
+        await this.orderSummarySnapshotService.syncOrder(orderId, manager);
+        const summarySnapshot = await this.orderSummarySnapshotService.getPayload(orderId, manager);
+        await this.invalidateOrderReadModels(effectiveBranchId);
         this.invalidateDashboardCaches(effectiveBranchId);
         if (refreshedOrder && effectiveBranchId) {
-            this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.update, refreshedOrder);
+            this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.update, {
+                ...refreshedOrder,
+                summary_snapshot: summarySnapshot,
+            });
         }
     }
 

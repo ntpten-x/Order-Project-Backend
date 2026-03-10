@@ -308,14 +308,21 @@ describeIntegration("Public takeaway-order flow (DB integration)", () => {
         }
     }, 120000);
 
-    it("rejects bootstrap when no active shift is open", async () => {
+    it("still allows takeaway bootstrap reads when no active shift is open, but blocks submit", async () => {
         if (!integrationReady) return;
 
         const fixture = await createTakeawayFixture();
         try {
             await setBranchShiftOpenState(false);
 
-            await expect(publicService.getBootstrapByToken(fixture.token)).rejects.toMatchObject({
+            const bootstrap = await publicService.getBootstrapByToken(fixture.token);
+            expect(bootstrap.channel.kind).toBe("takeaway");
+            expect(Array.isArray(bootstrap.menu)).toBe(true);
+
+            await expect(publicService.submitByToken(fixture.token, {
+                customer_name: "Shift Closed",
+                items: [{ product_id: productId, quantity: 1, notes: "closed" }],
+            })).rejects.toMatchObject({
                 statusCode: 403,
             });
         } finally {

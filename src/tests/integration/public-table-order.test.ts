@@ -284,18 +284,26 @@ describeIntegration("Public table-order flow (DB integration)", () => {
         }
     }, 120000);
 
-    it("rejects bootstrap when no active shift is open", async () => {
+    it("still allows bootstrap reads when no active shift is open, but blocks submit", async () => {
         if (!integrationReady) return;
         const fixture = await createPublicTableFixture();
 
         try {
             await setBranchShiftOpenState(false);
 
-            await expect(publicService.getBootstrapByToken(fixture.tableToken)).rejects.toMatchObject({
-                statusCode: 403,
-            });
+            const bootstrap = await publicService.getBootstrapByToken(fixture.tableToken);
+            expect(bootstrap.table.id).toBe(fixture.tableId);
+            expect(Array.isArray(bootstrap.menu)).toBe(true);
 
-            await expect(publicService.getActiveOrderByToken(fixture.tableToken)).rejects.toMatchObject({
+            const activeOrder = await publicService.getActiveOrderByToken(fixture.tableToken);
+            expect(activeOrder.table.id).toBe(fixture.tableId);
+            expect(activeOrder.active_order).toBeNull();
+
+            await expect(
+                publicService.submitByToken(fixture.tableToken, {
+                    items: [{ product_id: productId, quantity: 1, notes: "shift closed" }],
+                }),
+            ).rejects.toMatchObject({
                 statusCode: 403,
             });
         } finally {
