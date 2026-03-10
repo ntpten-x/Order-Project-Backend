@@ -63,8 +63,15 @@ async function main() {
       return;
     }
 
-    if (!hasBypassRls || allowBypassRls) {
+    if (!hasBypassRls) {
       console.log("[db-role-rls] PASS role does not have BYPASSRLS.");
+      if (!isSuperuser || allowSuperuser) {
+        return;
+      }
+    }
+
+    if (hasBypassRls && allowBypassRls) {
+      console.warn("[db-role-rls] WARN role has BYPASSRLS but is temporarily allowed by ALLOW_BYPASSRLS=1.");
       if (!isSuperuser || allowSuperuser) {
         return;
       }

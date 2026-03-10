@@ -5,6 +5,7 @@ import type { AuthRequest } from "./auth.middleware";
 import { metrics } from "../utils/metrics";
 import { resolvePermissionDecisionWithCache } from "../utils/permissionCache";
 import { normalizeRoleName } from "../utils/role";
+import { isCancelledStatus } from "../utils/orderStatus";
 
 export type PermissionScope = "none" | "own" | "branch" | "all";
 
@@ -164,6 +165,18 @@ export const authorizePermissionOrSelf = (
         }
 
         return authorizePermission(resourceKey, actionKey)(req, res, next);
+    };
+};
+
+export const authorizeOrderCancellation = (
+    statusResolver: (req: AuthRequest) => unknown = (req) => req.body?.status
+) => {
+    return async (req: AuthRequest, res: Response, next: NextFunction) => {
+        if (!isCancelledStatus(statusResolver(req))) {
+            return next();
+        }
+
+        return authorizePermission("orders.cancel.feature", "access")(req, res, next);
     };
 };
 

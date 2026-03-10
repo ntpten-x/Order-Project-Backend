@@ -16,6 +16,9 @@ const allowlist = new Set([
     "src/routes/public/tableOrder.route.ts:get:/:token/order",
     "src/routes/public/tableOrder.route.ts:get:/:token/order/:orderId",
     "src/routes/public/tableOrder.route.ts:post:/:token/order",
+    "src/routes/public/takeawayOrder.route.ts:get:/:token",
+    "src/routes/public/takeawayOrder.route.ts:get:/:token/order/:orderId",
+    "src/routes/public/takeawayOrder.route.ts:post:/:token/order",
 ]);
 
 function walkRouteFiles(dir, acc = []) {

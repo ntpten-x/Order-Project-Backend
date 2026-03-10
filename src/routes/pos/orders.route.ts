@@ -4,7 +4,13 @@ import { OrdersService } from "../../services/pos/orders.service";
 import { OrdersController } from "../../controllers/pos/orders.controller";
 import { authenticateToken } from "../../middleware/auth.middleware";
 import { requireBranch } from "../../middleware/branch.middleware";
-import { authorizePermission, enforceOrderItemTargetScope, enforceOrderTargetScope, enforceServingGroupTargetScope } from "../../middleware/permission.middleware";
+import {
+    authorizeOrderCancellation,
+    authorizePermission,
+    enforceOrderItemTargetScope,
+    enforceOrderTargetScope,
+    enforceServingGroupTargetScope,
+} from "../../middleware/permission.middleware";
 import { validate } from "../../middleware/validate.middleware";
 import { paginationQuerySchema } from "../../utils/schemas/common.schema";
 import {
@@ -40,9 +46,23 @@ router.get("/items", authorizePermission("orders.page", "view"), ordersControlle
 router.get("/:id", authorizePermission("orders.page", "view"), enforceOrderTargetScope("id"), validate(orderIdParamSchema), ordersController.findOne)
 
 router.post("/", authorizePermission("orders.page", "create"), validate(createOrderSchema), ordersController.create)
-router.put("/:id", authorizePermission("orders.page", "update"), enforceOrderTargetScope("id"), validate(updateOrderSchema), ordersController.update)
+router.put(
+    "/:id",
+    authorizePermission("orders.page", "update"),
+    validate(updateOrderSchema),
+    authorizeOrderCancellation(),
+    enforceOrderTargetScope("id"),
+    ordersController.update
+)
 router.delete("/:id", authorizePermission("orders.page", "delete"), enforceOrderTargetScope("id"), validate(orderIdParamSchema), ordersController.delete)
-router.patch("/items/:id/status", authorizePermission("orders.page", "update"), enforceOrderItemTargetScope("id"), validate(updateOrderItemStatusSchema), ordersController.updateItemStatus)
+router.patch(
+    "/items/:id/status",
+    authorizePermission("orders.page", "update"),
+    validate(updateOrderItemStatusSchema),
+    authorizeOrderCancellation(),
+    enforceOrderItemTargetScope("id"),
+    ordersController.updateItemStatus
+)
 
 // Item Management Routes
 router.post("/:id/items", authorizePermission("orders.page", "update"), enforceOrderTargetScope("id"), validate(addOrderItemSchema), ordersController.addItem)

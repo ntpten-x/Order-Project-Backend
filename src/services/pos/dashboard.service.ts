@@ -212,19 +212,8 @@ export class DashboardService {
         return withCache(
             key,
             async () => {
-                const topItemsRepository = getRepository(TopSellingItemsView);
-                const query = topItemsRepository
-                    .createQueryBuilder("top_items")
-                    .orderBy("top_items.total_quantity", "DESC")
-                    .addOrderBy("top_items.total_revenue", "DESC")
-                    .limit(safeLimit);
-
-                if (branchId) {
-                    query.where("top_items.branch_id = :branchId", { branchId });
-                }
-
                 const start = process.hrtime.bigint();
-                const rows = await query.getMany();
+                const rows = await this.getTopSellingItemsByRange(safeLimit, branchId);
                 const durationMs = Number(process.hrtime.bigint() - start) / 1_000_000;
                 await logProfileDuration("dashboard.top-items", durationMs);
                 return rows;

@@ -5,6 +5,7 @@ import { SalesOrder } from "../../entity/pos/SalesOrder";
 import { Tables, TableStatus } from "../../entity/pos/Tables";
 import { Delivery } from "../../entity/pos/Delivery";
 import { Discounts } from "../../entity/pos/Discounts";
+import { Payments } from "../../entity/pos/Payments";
 import { SalesOrderItem } from "../../entity/pos/SalesOrderItem";
 import { SalesOrderDetail } from "../../entity/pos/SalesOrderDetail";
 import { OrderStatus, OrderType, ServingStatus } from "../../entity/pos/OrderEnums";
@@ -956,6 +957,20 @@ export class OrdersService {
                 }
             }
 
+            const itemIds = (
+                await manager.getRepository(SalesOrderItem).find({
+                    select: { id: true },
+                    where: { order_id: id },
+                })
+            ).map((item) => item.id);
+
+            await manager.getRepository(Payments).delete({ order_id: id });
+            if (itemIds.length > 0) {
+                await manager.getRepository(SalesOrderDetail).delete({
+                    orders_item_id: In(itemIds),
+                });
+            }
+            await manager.getRepository(SalesOrderItem).delete({ order_id: id });
             await this.ordersModel.delete(id, manager, effectiveBranchId);
             return {
                 orderId: id,
