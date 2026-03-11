@@ -7,6 +7,10 @@ import { runWithDbContext } from "../database/dbContext";
 import { DashboardService } from "./pos/dashboard.service";
 import { ShiftsService } from "./pos/shifts.service";
 import { OrdersService } from "./pos/orders.service";
+import { IngredientsModel } from "../models/stock/ingredients.model";
+import { IngredientsUnitModel } from "../models/stock/ingredientsUnit.model";
+import { StockOrdersModel } from "../models/stock/orders.model";
+import { OrdersService as StockOrdersService } from "./stock/orders.service";
 
 function parseBooleanEnv(value: string | undefined, fallback: boolean): boolean {
     if (value === undefined) return fallback;
@@ -38,6 +42,9 @@ class StartupWarmupService {
     private readonly categoryModel = new CategoryModels();
     private readonly shiftsService = new ShiftsService();
     private readonly ordersService = new OrdersService(new OrdersModels());
+    private readonly stockIngredientsModel = new IngredientsModel();
+    private readonly stockIngredientsUnitModel = new IngredientsUnitModel();
+    private readonly stockOrdersService = new StockOrdersService(new StockOrdersModel());
     private started = false;
 
     private readonly enabled = parseBooleanEnv(process.env.STARTUP_WARMUP_ENABLED, true);
@@ -115,6 +122,16 @@ class StartupWarmupService {
     private readonly ordersReadModelEnabled = parseBooleanEnv(
         process.env.STARTUP_WARMUP_ORDERS_READ_MODEL_ENABLED,
         true
+    );
+    private readonly stockWarmupEnabled = parseBooleanEnv(
+        process.env.STARTUP_WARMUP_STOCK_ENABLED,
+        true
+    );
+    private readonly stockPageSize = toSafeInt(
+        parseNumberEnv(process.env.STARTUP_WARMUP_STOCK_PAGE_SIZE, 20),
+        20,
+        1,
+        200
     );
 
     schedule(): void {
@@ -274,7 +291,43 @@ class StartupWarmupService {
                             page: 1,
                             limit: this.shiftsHistoryLimit,
                             sortCreated: "old",
-                        }),
+                    }),
+                });
+            }
+
+            if (this.stockWarmupEnabled) {
+                tasks.push({
+                    name: "stock.ingredients.page1",
+                    run: () =>
+                        this.stockIngredientsModel.findAllPaginated(
+                            1,
+                            this.stockPageSize,
+                            undefined,
+                            branchId,
+                            "old"
+                        ),
+                });
+                tasks.push({
+                    name: "stock.ingredients-unit.page1",
+                    run: () =>
+                        this.stockIngredientsUnitModel.findAllPaginated(
+                            1,
+                            this.stockPageSize,
+                            undefined,
+                            branchId,
+                            "old"
+                        ),
+                });
+                tasks.push({
+                    name: "stock.orders.page1",
+                    run: () =>
+                        this.stockOrdersService.getAllOrders(
+                            undefined,
+                            1,
+                            this.stockPageSize,
+                            branchId,
+                            "old"
+                        ),
                 });
             }
 

@@ -12,10 +12,10 @@ import { CreatedSort } from "../../utils/sortCreated";
  */
 export class OrdersService {
     private socketService = SocketService.getInstance();
-    private readonly CACHE_PREFIX = 'stock:orders';
-    private readonly CACHE_TTL = 2 * 60 * 1000; // 2 minutes
+    private readonly CACHE_PREFIX = "stock:orders";
+    private readonly CACHE_TTL = 2 * 60 * 1000;
 
-    constructor(private ordersModel: StockOrdersModel) { }
+    constructor(private ordersModel: StockOrdersModel) {}
 
     private getCacheScopeParts(branchId?: string): Array<string> {
         const ctx = getDbContext();
@@ -25,11 +25,15 @@ export class OrdersService {
         return ["public"];
     }
 
-    async createOrder(orderedById: string, items: { ingredient_id: string; quantity_ordered: number }[], remark?: string, branchId?: string) {
+    async createOrder(
+        orderedById: string,
+        items: { ingredient_id: string; quantity_ordered: number }[],
+        remark?: string,
+        branchId?: string
+    ) {
         const completeOrder = await this.ordersModel.createOrderWithItems(orderedById, items, remark, branchId);
         const emitBranchId = branchId || (completeOrder as any).branch_id;
-        // Invalidate list cache
-        this.invalidateCache(emitBranchId);
+        this.invalidateOrdersCache(emitBranchId);
         if (emitBranchId) {
             this.emitStockOrders(
                 emitBranchId,
@@ -42,23 +46,25 @@ export class OrdersService {
     }
 
     async getAllOrders(
-        filters?: { status?: PurchaseOrderStatus | PurchaseOrderStatus[] },
+        filters?: { status?: PurchaseOrderStatus | PurchaseOrderStatus[]; q?: string },
         page: number = 1,
         limit: number = 50,
         branchId?: string,
         sortCreated: CreatedSort = "old"
     ) {
-        const filterKey = filters?.status 
-            ? (Array.isArray(filters.status) ? filters.status.join(',') : filters.status)
-            : 'all';
+        const filterKey = JSON.stringify({
+            status: filters?.status
+                ? (Array.isArray(filters.status) ? filters.status.join(",") : filters.status)
+                : "all",
+            q: filters?.q?.trim().toLowerCase() || "",
+        });
         const scope = this.getCacheScopeParts(branchId);
-        const key = cacheKey(this.CACHE_PREFIX, ...scope, 'list', page, limit, filterKey, sortCreated);
-        
-        // Skip cache if page > 1 (too many variants)
+        const key = cacheKey(this.CACHE_PREFIX, ...scope, "list", page, limit, filterKey, sortCreated);
+
         if (page > 1) {
             return await this.ordersModel.findAll(filters, page, limit, branchId, sortCreated);
         }
-        
+
         return withCache(
             key,
             () => this.ordersModel.findAll(filters, page, limit, branchId, sortCreated),
@@ -69,8 +75,8 @@ export class OrdersService {
 
     async getOrderById(id: string, branchId?: string) {
         const scope = this.getCacheScopeParts(branchId);
-        const key = cacheKey(this.CACHE_PREFIX, ...scope, 'single', id);
-        
+        const key = cacheKey(this.CACHE_PREFIX, ...scope, "single", id);
+
         return withCache(
             key,
             () => this.ordersModel.findById(id, branchId),
@@ -82,7 +88,7 @@ export class OrdersService {
     async updateOrder(id: string, items: { ingredient_id: string; quantity_ordered: number }[], branchId?: string) {
         const updatedOrder = await this.ordersModel.updateOrderItems(id, items, branchId);
         const effectiveBranchId = branchId || (updatedOrder as any)?.branch_id;
-        this.invalidateCache(effectiveBranchId, id);
+        this.invalidateOrdersCache(effectiveBranchId, id);
         if (effectiveBranchId) {
             this.emitStockOrders(
                 effectiveBranchId,
@@ -99,7 +105,7 @@ export class OrdersService {
         if (!updatedOrder) throw new Error("ไม่พบข้อมูลการสั่งซื้อ");
 
         const effectiveBranchId = branchId || (updatedOrder as any)?.branch_id;
-        this.invalidateCache(effectiveBranchId, id);
+        this.invalidateOrdersCache(effectiveBranchId, id);
         if (effectiveBranchId) {
             this.emitStockOrders(
                 effectiveBranchId,
@@ -114,7 +120,7 @@ export class OrdersService {
     async deleteOrder(id: string, branchId?: string) {
         const deleted = await this.ordersModel.delete(id, branchId);
         if (deleted) {
-            this.invalidateCache(branchId, id);
+            this.invalidateOrdersCache(branchId, id);
             if (branchId) {
                 this.emitStockOrders(
                     branchId,
@@ -127,10 +133,15 @@ export class OrdersService {
         return { affected: deleted ? 1 : 0 };
     }
 
-    async confirmPurchase(id: string, items: { ingredient_id: string; actual_quantity: number; is_purchased: boolean }[], purchasedById: string, branchId?: string) {
+    async confirmPurchase(
+        id: string,
+        items: { ingredient_id: string; actual_quantity: number; is_purchased: boolean }[],
+        purchasedById: string,
+        branchId?: string
+    ) {
         const updatedOrder = await this.ordersModel.confirmPurchase(id, items, purchasedById, branchId);
         const effectiveBranchId = branchId || (updatedOrder as any)?.branch_id;
-        this.invalidateCache(effectiveBranchId, id);
+        this.invalidateOrdersCache(effectiveBranchId, id);
         if (effectiveBranchId) {
             this.emitStockOrders(
                 effectiveBranchId,
@@ -142,10 +153,7 @@ export class OrdersService {
         return updatedOrder;
     }
 
-    /**
-     * Invalidate orders cache
-     */
-    private invalidateCache(branchId?: string, id?: string): void {
+    private invalidateOrdersCache(branchId?: string, id?: string): void {
         const ctx = getDbContext();
         const effectiveBranchId = branchId ?? ctx?.branchId;
         if (!effectiveBranchId) {

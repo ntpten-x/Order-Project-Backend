@@ -3,8 +3,19 @@ import { StockOrdersItem } from "../../entity/stock/OrdersItem";
 import { getRepository } from "../../database/dbContext";
 
 export class StockOrdersDetailModel {
-    async findByOrderItemId(ordersItemId: string): Promise<StockOrdersDetail | null> {
-        return await getRepository(StockOrdersDetail).findOneBy({ orders_item_id: ordersItemId });
+    async findByOrderItemId(ordersItemId: string, branchId?: string): Promise<StockOrdersDetail | null> {
+        const detailRepository = getRepository(StockOrdersDetail);
+        const query = detailRepository
+            .createQueryBuilder("detail")
+            .leftJoinAndSelect("detail.ordersItem", "item")
+            .leftJoinAndSelect("item.orders", "orders")
+            .where("detail.orders_item_id = :ordersItemId", { ordersItemId });
+
+        if (branchId) {
+            query.andWhere("orders.branch_id = :branchId", { branchId });
+        }
+
+        return await query.getOne();
     }
 
     async createOrUpdate(ordersItemId: string, data: { actual_quantity: number; purchased_by_id: string; is_purchased: boolean }): Promise<StockOrdersDetail> {

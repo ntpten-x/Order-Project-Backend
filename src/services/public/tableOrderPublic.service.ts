@@ -358,6 +358,20 @@ export class PublicTableOrderService {
     async submitByToken(token: string, payload: SubmitOrderInput) {
         const table = await this.resolveTableByToken(token);
         const branchId = table.branch_id!;
+        const latestOrderBeforeShiftCheck = await runWithDbContext(
+            {
+                branchId,
+                userId: "public-table-order",
+                role: "public",
+                isAdmin: true,
+            },
+            () => this.findLatestOrderHeaderForTable(table.id, branchId, ACTIVE_VIEW_STATUSES),
+        );
+
+        if (latestOrderBeforeShiftCheck && !this.canAddItemsToOrder(String(latestOrderBeforeShiftCheck.status || ""))) {
+            throw new AppError("ไม่สามารถสั่งรายการเพิ่มได้ เนื่องจากบิลโต๊ะนี้ถูกล็อกแล้ว", 409);
+        }
+
         await this.ensurePublicOrderingAvailable(branchId);
         const rawItems = Array.isArray((payload as { items?: unknown[] })?.items)
             ? ((payload as { items: unknown[] }).items ?? [])

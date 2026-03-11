@@ -22,10 +22,10 @@ export class OrdersController {
     private ordersService = new OrdersService(this.ordersModel);
 
     createOrder = catchAsync(async (req: Request, res: Response) => {
-        const { ordered_by_id, items, remark } = req.body;
+        const { items, remark } = req.body;
         const branch_id = getBranchId(req as any);
-        
-        // Validate input
+        const ordered_by_id = (req as any).user?.id;
+
         if (!ordered_by_id || !items || !Array.isArray(items) || items.length === 0) {
             throw AppError.badRequest("ไม่พบข้อมูลการสั่งซื้อ");
         }
@@ -52,16 +52,16 @@ export class OrdersController {
 
     getAllOrders = catchAsync(async (req: Request, res: Response) => {
         const statusParam = req.query.status as string;
+        const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
         const page = Math.max(parseInt(req.query.page as string) || 1, 1);
         const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 50, 1), 200);
         const sortCreated = parseCreatedSort(req.query.sort_created);
-        
+
         let statusFilter: PurchaseOrderStatus | PurchaseOrderStatus[] | undefined;
 
         if (statusParam) {
-            const statuses = statusParam.split(',') as PurchaseOrderStatus[];
-            // Validate statuses
-            const validStatuses = statuses.filter(s => Object.values(PurchaseOrderStatus).includes(s));
+            const statuses = statusParam.split(",") as PurchaseOrderStatus[];
+            const validStatuses = statuses.filter((s) => Object.values(PurchaseOrderStatus).includes(s));
             if (validStatuses.length === 0) {
                 throw AppError.badRequest("สถานะไม่ถูกต้อง");
             }
@@ -70,13 +70,18 @@ export class OrdersController {
 
         const branch_id = getBranchId(req as any);
         const result = await this.ordersService.getAllOrders(
-            statusFilter ? { status: statusFilter } : undefined, 
-            page, 
-            limit, 
+            statusFilter || q
+                ? {
+                      ...(statusFilter ? { status: statusFilter } : {}),
+                      ...(q ? { q } : {}),
+                  }
+                : undefined,
+            page,
+            limit,
             branch_id,
             sortCreated
         );
-        
+
         return ApiResponses.paginated(res, result.data, {
             page: result.page,
             limit: result.limit,
@@ -179,20 +184,20 @@ export class OrdersController {
         if (!result || result.affected === 0) {
             throw AppError.notFound("การสั่งซื้อ");
         }
-        return ApiResponses.ok(res, { message: "การสั่งซื้อลบสำเร็จ" });
+        return ApiResponses.ok(res, { message: "ลบการสั่งซื้อเรียบร้อย" });
     });
 
     confirmPurchase = catchAsync(async (req: Request, res: Response) => {
         const { id } = req.params;
         const { items } = req.body;
-        const purchased_by_id = (req as any).user?.id || (req as any).user?.userId || req.body.purchased_by_id;
+        const purchased_by_id = (req as any).user?.id;
 
         if (!items || !Array.isArray(items) || items.length === 0) {
             throw AppError.badRequest("ไม่พบข้อมูลสินค้า");
         }
 
         if (!purchased_by_id) {
-            throw AppError.badRequest("ไม่พบข้อมูลผู้สั่งซื้อ");
+            throw AppError.badRequest("ไม่พบข้อมูลผู้ตรวจรับ");
         }
 
         const branch_id = getBranchId(req as any);

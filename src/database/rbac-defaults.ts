@@ -121,12 +121,18 @@ const EMPLOYEE_READ_ALLOW = new Set<string>([
     "payment_method.page",
     "tables.page",
     "shop_profile.page",
+    "stock.orders.page",
+    "stock.ingredients.page",
+    "stock.ingredients_unit.page",
     "menu.main.home",
+    "menu.main.stock",
+    "menu.main.orders",
     "menu.module.pos",
+    "menu.module.stock",
 ]);
 
-const EMPLOYEE_MENU_PREFIX_ALLOW = ["menu.pos."];
-const EMPLOYEE_WRITE_ALLOW = new Set<string>(["orders.page", "payments.page", "shifts.page"]);
+const EMPLOYEE_MENU_PREFIX_ALLOW = ["menu.pos.", "menu.stock."];
+const EMPLOYEE_WRITE_ALLOW = new Set<string>(["orders.page", "payments.page", "shifts.page", "stock.orders.page"]);
 const ORDER_EDIT_FEATURE = "orders.edit.feature";
 const ORDER_CANCEL_FEATURE = "orders.cancel.feature";
 
@@ -352,14 +358,14 @@ async function ensureRolePermissionDefaults(queryRunner: QueryRunner): Promise<v
                 await queryRunner.query(
                     `
                         INSERT INTO role_permissions (role_id, resource_id, action_id, effect, scope)
-                        SELECT $1, $2, $3, $4, $5
-                        WHERE NOT EXISTS (
-                            SELECT 1
-                            FROM role_permissions
-                            WHERE role_id = $1
-                              AND resource_id = $2
-                              AND action_id = $3
-                        )
+                        VALUES ($1, $2, $3, $4, $5)
+                        ON CONFLICT (role_id, resource_id, action_id)
+                        DO UPDATE SET
+                            effect = EXCLUDED.effect,
+                            scope = EXCLUDED.scope
+                        WHERE role_permissions.effect = 'deny'
+                          AND role_permissions.scope = 'none'
+                          AND EXCLUDED.effect = 'allow'
                     `,
                     [role.id, resource.id, action.id, policy.effect, policy.scope]
                 );

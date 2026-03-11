@@ -3,14 +3,10 @@ import { Ingredients } from "./Ingredients"
 import { Branch } from "../Branch"
 
 @Entity("stock_ingredients_unit")
-@Index(["unit_name", "branch_id"], { unique: true })
 @Index(["display_name", "branch_id"], { unique: true })
 export class IngredientsUnit {
     @PrimaryGeneratedColumn("uuid")
     id!: string
-
-    @Column({ type: "varchar", length: 100 })
-    unit_name!: string
 
     @Column({ type: "varchar", length: 100 })
     display_name!: string

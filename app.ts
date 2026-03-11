@@ -51,14 +51,15 @@ import { performanceMonitoring, errorTracking } from "./src/middleware/monitorin
 import { metrics } from "./src/utils/metrics";
 import { buildCorsOriginChecker, resolveAllowedOrigins } from "./src/utils/cors";
 import { startupWarmupService } from "./src/services/startupWarmup.service";
+import { retentionSchedulerService } from "./src/services/maintenance/retentionScheduler.service";
 import { logger } from "./src/utils/logger";
 import { httpLogger } from "./src/middleware/httpLogger.middleware";
 import { registerProcessErrorHandlers } from "./src/utils/processErrorHandlers";
 
 const app = express();
 const httpServer = createServer(app); // Wrap express with HTTP server
-const configuredPort = Number(process.env.PORT || 4000);
-const port = Number.isFinite(configuredPort) && configuredPort > 0 ? configuredPort : 4000;
+const configuredPort = Number(process.env.PORT || 3000);
+const port = Number.isFinite(configuredPort) && configuredPort > 0 ? configuredPort : 3000;
 const portAutoFallbackEnabled = process.env.PORT_AUTO_FALLBACK
     ? process.env.PORT_AUTO_FALLBACK === "true"
     : process.env.NODE_ENV !== "production";
@@ -494,6 +495,7 @@ connectDatabase().then(async () => {
     httpServer.listen(listenPort, () => { // Listen on httpServer
         logger.info({ port: listenPort }, "server is running");
         startupWarmupService.schedule();
+        retentionSchedulerService.schedule();
     });
 }).catch((error) => {
     logger.fatal({ err: error }, "database bootstrap failed");

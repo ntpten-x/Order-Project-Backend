@@ -1,6 +1,8 @@
 import { StockOrdersDetailModel } from "../../models/stock/ordersDetail.model";
 import { SocketService } from "../socket.service";
 import { LegacyRealtimeEvents, RealtimeEvents } from "../../utils/realtimeEvents";
+import { AppError } from "../../utils/AppError";
+import { PurchaseOrderStatus } from "../../entity/stock/PurchaseOrder";
 
 export class OrdersDetailService {
     private socketService = SocketService.getInstance();
@@ -11,7 +13,11 @@ export class OrdersDetailService {
         try {
             const orderItem = await this.ordersDetailModel.getOrderItemWithOrder(ordersItemId, branchId);
             if (!orderItem) {
-                throw new Error("Order item not found");
+                throw AppError.notFound("รายการวัตถุดิบในใบซื้อ");
+            }
+
+            if (orderItem.orders?.status !== PurchaseOrderStatus.PENDING) {
+                throw AppError.conflict("อัปเดตรายการตรวจรับได้เฉพาะใบซื้อที่ยังรอดำเนินการ");
             }
 
             const savedDetail = await this.ordersDetailModel.createOrUpdate(ordersItemId, data);
@@ -41,9 +47,9 @@ export class OrdersDetailService {
         }
     }
 
-    async getDetailByItemId(ordersItemId: string) {
+    async getDetailByItemId(ordersItemId: string, branchId?: string) {
         try {
-            return await this.ordersDetailModel.findByOrderItemId(ordersItemId);
+            return await this.ordersDetailModel.findByOrderItemId(ordersItemId, branchId);
         } catch (error) {
             throw error;
         }

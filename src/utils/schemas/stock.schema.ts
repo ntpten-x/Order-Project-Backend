@@ -7,13 +7,8 @@ export const ingredientIdParamSchema = z.object({
     params: z.object({ id: uuid })
 });
 
-export const ingredientNameParamSchema = z.object({
-    params: z.object({ ingredient_name: z.string().min(1).max(100) })
-});
-
 export const createIngredientSchema = z.object({
     body: z.object({
-        ingredient_name: z.string().min(1).max(100),
         display_name: z.string().min(1).max(100),
         description: z.string().optional(),
         unit_id: uuid,
@@ -25,7 +20,6 @@ export const createIngredientSchema = z.object({
 export const updateIngredientSchema = z.object({
     params: z.object({ id: uuid }),
     body: z.object({
-        ingredient_name: z.string().min(1).max(100).optional(),
         display_name: z.string().min(1).max(100).optional(),
         description: z.string().optional(),
         unit_id: uuid.optional(),
@@ -39,13 +33,8 @@ export const ingredientUnitIdParamSchema = z.object({
     params: z.object({ id: uuid })
 });
 
-export const ingredientUnitNameParamSchema = z.object({
-    params: z.object({ unit_name: z.string().min(1).max(100) })
-});
-
 export const createIngredientUnitSchema = z.object({
     body: z.object({
-        unit_name: z.string().min(1).max(100),
         display_name: z.string().min(1).max(100),
         is_active: z.coerce.boolean().optional()
     }).passthrough()
@@ -54,7 +43,6 @@ export const createIngredientUnitSchema = z.object({
 export const updateIngredientUnitSchema = z.object({
     params: z.object({ id: uuid }),
     body: z.object({
-        unit_name: z.string().min(1).max(100).optional(),
         display_name: z.string().min(1).max(100).optional(),
         is_active: z.coerce.boolean().optional()
     }).passthrough()
@@ -78,7 +66,7 @@ export const stockOrderIdParamSchema = z.object({
 
 export const createStockOrderSchema = z.object({
     body: z.object({
-        ordered_by_id: uuid,
+        ordered_by_id: uuid.optional(),
         items: z.array(stockOrderItemSchema).min(1),
         remark: z.string().optional()
     }).passthrough()
@@ -111,7 +99,7 @@ export const updateOrdersDetailPurchaseSchema = z.object({
     body: z.object({
         orders_item_id: uuid,
         actual_quantity: z.coerce.number().int().min(0).optional(),
-        purchased_by_id: uuid,
+        purchased_by_id: uuid.optional(),
         is_purchased: z.coerce.boolean().optional()
     }).passthrough()
 });

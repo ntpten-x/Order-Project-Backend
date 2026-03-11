@@ -1,15 +1,8 @@
+import { getRepository } from "../../database/dbContext";
 import { Ingredients } from "../../entity/stock/Ingredients";
 import { addBooleanFilter } from "../../utils/dbHelpers";
-import { getRepository } from "../../database/dbContext";
 import { CreatedSort, createdSortToOrder } from "../../utils/sortCreated";
 
-/**
- * Ingredients Model
- * Following supabase-postgres-best-practices:
- * - Uses dbHelpers for consistent query patterns
- * - Optimized queries with proper joins
- * - Branch-based data isolation support
- */
 export class IngredientsModel {
     async findAllPaginated(
         page: number,
@@ -21,7 +14,8 @@ export class IngredientsModel {
         const safePage = Math.max(page, 1);
         const safeLimit = Math.min(Math.max(limit, 1), 200);
         const ingredientsRepository = getRepository(Ingredients);
-        let query = ingredientsRepository.createQueryBuilder("ingredients")
+        let query = ingredientsRepository
+            .createQueryBuilder("ingredients")
             .leftJoinAndSelect("ingredients.unit", "unit")
             .orderBy("ingredients.create_date", createdSortToOrder(sortCreated));
 
@@ -30,15 +24,24 @@ export class IngredientsModel {
         }
 
         query = addBooleanFilter(query, filters?.is_active, "is_active", "ingredients");
+
         if (filters?.q?.trim()) {
             const q = `%${filters.q.trim().toLowerCase()}%`;
             query.andWhere(
-                "(LOWER(ingredients.display_name) LIKE :q OR LOWER(ingredients.ingredient_name) LIKE :q OR LOWER(COALESCE(ingredients.description, '')) LIKE :q)",
+                [
+                    "LOWER(ingredients.display_name) LIKE :q",
+                    "LOWER(COALESCE(ingredients.description, '')) LIKE :q",
+                    "LOWER(COALESCE(unit.display_name, '')) LIKE :q",
+                ].join(" OR "),
                 { q }
             );
         }
-        query.addOrderBy("ingredients.is_active", "DESC");
-        query.skip((safePage - 1) * safeLimit).take(safeLimit);
+
+        query
+            .addOrderBy("ingredients.is_active", "DESC")
+            .addOrderBy("ingredients.id", "ASC")
+            .skip((safePage - 1) * safeLimit)
+            .take(safeLimit);
 
         const [data, total] = await query.getManyAndCount();
         const last_page = Math.max(Math.ceil(total / safeLimit), 1);
@@ -51,84 +54,70 @@ export class IngredientsModel {
         sortCreated: CreatedSort = "old"
     ): Promise<Ingredients[]> {
         const ingredientsRepository = getRepository(Ingredients);
-        let query = ingredientsRepository.createQueryBuilder("ingredients")
+        let query = ingredientsRepository
+            .createQueryBuilder("ingredients")
             .leftJoinAndSelect("ingredients.unit", "unit")
             .orderBy("ingredients.create_date", createdSortToOrder(sortCreated));
 
-        // Filter by branch for data isolation
         if (branchId) {
             query.andWhere("ingredients.branch_id = :branchId", { branchId });
         }
 
-        // Use dbHelpers for consistent filtering
         query = addBooleanFilter(query, filters?.is_active, "is_active", "ingredients");
-
-        // Secondary sort for consistent ordering when active ones are mixed
-        query.addOrderBy("ingredients.is_active", "DESC");
+        query.addOrderBy("ingredients.is_active", "DESC").addOrderBy("ingredients.id", "ASC");
 
         return query.getMany();
     }
 
     async findOne(id: string, branchId?: string): Promise<Ingredients | null> {
-        try {
-            const ingredientsRepository = getRepository(Ingredients);
-            const query = ingredientsRepository.createQueryBuilder("ingredients")
-                .leftJoinAndSelect("ingredients.unit", "unit")
-                .where("ingredients.id = :id", { id });
+        const ingredientsRepository = getRepository(Ingredients);
+        const query = ingredientsRepository
+            .createQueryBuilder("ingredients")
+            .leftJoinAndSelect("ingredients.unit", "unit")
+            .where("ingredients.id = :id", { id });
 
-            if (branchId) {
-                query.andWhere("ingredients.branch_id = :branchId", { branchId });
-            }
-
-            return query.getOne();
-        } catch (error) {
-            throw error
+        if (branchId) {
+            query.andWhere("ingredients.branch_id = :branchId", { branchId });
         }
+
+        return query.getOne();
     }
 
-    async findOneByName(ingredient_name: string, branchId?: string): Promise<Ingredients | null> {
-        try {
-            const ingredientsRepository = getRepository(Ingredients);
-            const query = ingredientsRepository.createQueryBuilder("ingredients")
-                .leftJoinAndSelect("ingredients.unit", "unit")
-                .where("ingredients.ingredient_name = :ingredient_name", { ingredient_name });
+    async findOneByDisplayName(display_name: string, branchId?: string): Promise<Ingredients | null> {
+        const ingredientsRepository = getRepository(Ingredients);
+        const query = ingredientsRepository
+            .createQueryBuilder("ingredients")
+            .leftJoinAndSelect("ingredients.unit", "unit")
+            .where("LOWER(TRIM(ingredients.display_name)) = :display_name", {
+                display_name: display_name.trim().toLowerCase(),
+            });
 
-            if (branchId) {
-                query.andWhere("ingredients.branch_id = :branchId", { branchId });
-            }
-
-            return query.getOne();
-        } catch (error) {
-            throw error
+        if (branchId) {
+            query.andWhere("ingredients.branch_id = :branchId", { branchId });
         }
+
+        return query.getOne();
     }
 
     async create(ingredients: Ingredients): Promise<Ingredients> {
-        try {
-            return getRepository(Ingredients).save(ingredients)
-        } catch (error) {
-            throw error
-        }
+        return getRepository(Ingredients).save(ingredients);
     }
 
     async update(id: string, ingredients: Ingredients, branchId?: string): Promise<Ingredients> {
-        try {
-            return getRepository(Ingredients).save({ ...ingredients, id, ...(branchId ? { branch_id: branchId } : {}) } as any)
-        } catch (error) {
-            throw error
-        }
+        return getRepository(Ingredients).save({
+            ...ingredients,
+            id,
+            ...(branchId ? { branch_id: branchId } : {}),
+        } as Ingredients);
     }
 
     async delete(id: string, branchId?: string): Promise<void> {
-        try {
-            const ingredientsRepository = getRepository(Ingredients);
-            if (branchId) {
-                await ingredientsRepository.delete({ id, branch_id: branchId } as any)
-            } else {
-                await ingredientsRepository.delete(id)
-            }
-        } catch (error) {
-            throw error
+        const ingredientsRepository = getRepository(Ingredients);
+        if (branchId) {
+            await ingredientsRepository.delete({ id, branch_id: branchId } as any);
+            return;
         }
+
+        await ingredientsRepository.delete(id);
     }
 }
