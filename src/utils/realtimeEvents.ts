@@ -28,6 +28,11 @@ export const RealtimeEvents = {
         update: "productsUnit:update",
         delete: "productsUnit:delete",
     },
+    topping: {
+        create: "topping:create",
+        update: "topping:update",
+        delete: "topping:delete",
+    },
     categories: {
         create: "category:create",
         update: "category:update",

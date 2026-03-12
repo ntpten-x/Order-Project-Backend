@@ -100,6 +100,33 @@ export const updateProductsUnitSchema = z.object({
     }).passthrough()
 });
 
+export const toppingIdParamSchema = z.object({
+    params: z.object({ id: uuid })
+});
+
+export const toppingNameParamSchema = z.object({
+    params: z.object({ name: z.string().min(1).max(100) })
+});
+
+export const createToppingSchema = z.object({
+    body: z.object({
+        display_name: z.string().min(1).max(100),
+        price: money,
+        category_ids: z.array(uuid).min(1).max(25),
+        is_active: z.coerce.boolean().optional()
+    }).passthrough()
+});
+
+export const updateToppingSchema = z.object({
+    params: z.object({ id: uuid }),
+    body: z.object({
+        display_name: z.string().min(1).max(100).optional(),
+        price: money.optional(),
+        category_ids: z.array(uuid).min(1).max(25).optional(),
+        is_active: z.coerce.boolean().optional()
+    }).passthrough()
+});
+
 // Tables
 export const tableIdParamSchema = z.object({
     params: z.object({ id: uuid })
