@@ -67,6 +67,40 @@ export class ToppingService {
         return numericPrice;
     }
 
+    private normalizeMutableFields(topping: Partial<Topping>, fallback?: Topping): Partial<Topping> {
+        const next = { ...topping };
+
+        if (next.display_name !== undefined) {
+            const value = next.display_name.trim();
+            if (!value) {
+                throw AppError.badRequest("Topping name is required");
+            }
+            next.display_name = value;
+        }
+
+        if (next.price !== undefined) {
+            next.price = this.normalizePrice(next.price, Number(fallback?.price || 0));
+        }
+
+        const rawPriceDelivery = (next as { price_delivery?: unknown }).price_delivery;
+        if (rawPriceDelivery === undefined || rawPriceDelivery === null || rawPriceDelivery === "") {
+            if (next.price !== undefined && next.price !== null) {
+                next.price_delivery = this.normalizePrice(next.price);
+            } else if (fallback?.price_delivery !== undefined && fallback?.price_delivery !== null) {
+                next.price_delivery = Number(fallback.price_delivery);
+            }
+        } else {
+            next.price_delivery = this.normalizePrice(rawPriceDelivery, Number(fallback?.price_delivery || 0));
+        }
+
+        if (next.img !== undefined) {
+            const normalizedImg = String(next.img ?? "").trim();
+            next.img = normalizedImg || null;
+        }
+
+        return next;
+    }
+
     private async resolveCategories(categoryIds: string[] | undefined, branchId?: string): Promise<Category[]> {
         const normalizedIds = Array.from(
             new Set((categoryIds || []).map((id) => id?.trim()).filter((id): id is string => Boolean(id)))
@@ -161,17 +195,18 @@ export class ToppingService {
     }
 
     async create(topping: Partial<Topping> & { category_ids?: string[] }, branchId?: string): Promise<Topping> {
-        const effectiveBranchId = branchId || topping.branch_id;
-        const displayName = topping.display_name?.trim();
+        const normalizedTopping = this.normalizeMutableFields(topping) as Partial<Topping> & { category_ids?: string[] };
+        const effectiveBranchId = branchId || normalizedTopping.branch_id;
+        const displayName = normalizedTopping.display_name?.trim();
 
         if (!displayName) {
             throw AppError.badRequest("Topping name is required");
         }
 
-        topping.display_name = displayName;
-        topping.price = this.normalizePrice(topping.price);
+        normalizedTopping.display_name = displayName;
+        normalizedTopping.price = this.normalizePrice(normalizedTopping.price);
         if (effectiveBranchId) {
-            topping.branch_id = effectiveBranchId;
+            normalizedTopping.branch_id = effectiveBranchId;
         }
 
         const existingTopping = await this.toppingModel.findOneByName(displayName, effectiveBranchId);
@@ -179,8 +214,8 @@ export class ToppingService {
             throw AppError.conflict("Topping name already exists");
         }
 
-        const categories = await this.resolveCategories(topping.category_ids, effectiveBranchId);
-        const payload = { ...(topping as Partial<Topping> & { category_ids?: string[] }) };
+        const categories = await this.resolveCategories(normalizedTopping.category_ids, effectiveBranchId);
+        const payload = { ...(normalizedTopping as Partial<Topping> & { category_ids?: string[] }) };
         delete (payload as { category_ids?: string[] }).category_ids;
         const createdTopping = await this.toppingModel.create({
             ...payload,
@@ -200,36 +235,27 @@ export class ToppingService {
             throw AppError.notFound("Topping");
         }
         const scopedBranchId = effectiveBranchId || existingTopping.branch_id;
+        const normalizedTopping = this.normalizeMutableFields(topping, existingTopping) as Partial<Topping> & { category_ids?: string[] };
 
-        if (topping.display_name !== undefined) {
-            topping.display_name = topping.display_name.trim();
-            if (!topping.display_name) {
-                throw AppError.badRequest("Topping name is required");
-            }
-        }
-
-        const normalizedIncomingName = topping.display_name?.trim().toLowerCase();
+        const normalizedIncomingName = normalizedTopping.display_name?.trim().toLowerCase();
         const normalizedCurrentName = existingTopping.display_name?.trim().toLowerCase();
 
         if (normalizedIncomingName && normalizedIncomingName !== normalizedCurrentName) {
-            const foundTopping = await this.toppingModel.findOneByName(topping.display_name!, scopedBranchId);
+            const foundTopping = await this.toppingModel.findOneByName(normalizedTopping.display_name!, scopedBranchId);
             if (foundTopping && foundTopping.id !== id) {
                 throw AppError.conflict("Topping name already exists");
             }
         }
 
         if (scopedBranchId) {
-            topping.branch_id = scopedBranchId;
+            normalizedTopping.branch_id = scopedBranchId;
         }
 
-        const payload = { ...(topping as Partial<Topping> & { category_ids?: string[] }) };
+        const payload = { ...(normalizedTopping as Partial<Topping> & { category_ids?: string[] }) };
         delete (payload as { category_ids?: string[] }).category_ids;
         const nextPayload: Partial<Topping> = { ...payload };
-        if (topping.price !== undefined) {
-            nextPayload.price = this.normalizePrice(topping.price, Number(existingTopping.price || 0));
-        }
-        if (topping.category_ids !== undefined) {
-            nextPayload.categories = await this.resolveCategories(topping.category_ids, scopedBranchId);
+        if (normalizedTopping.category_ids !== undefined) {
+            nextPayload.categories = await this.resolveCategories(normalizedTopping.category_ids, scopedBranchId);
         }
 
         const updatedTopping = await this.toppingModel.update(id, nextPayload, scopedBranchId);

@@ -112,6 +112,8 @@ export const createToppingSchema = z.object({
     body: z.object({
         display_name: z.string().min(1).max(100),
         price: money,
+        price_delivery: money.optional(),
+        img: z.string().optional().nullable(),
         category_ids: z.array(uuid).min(1).max(25),
         is_active: z.coerce.boolean().optional()
     }).passthrough()
@@ -122,6 +124,8 @@ export const updateToppingSchema = z.object({
     body: z.object({
         display_name: z.string().min(1).max(100).optional(),
         price: money.optional(),
+        price_delivery: money.optional(),
+        img: z.string().optional().nullable(),
         category_ids: z.array(uuid).min(1).max(25).optional(),
         is_active: z.coerce.boolean().optional()
     }).passthrough()

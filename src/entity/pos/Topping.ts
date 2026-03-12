@@ -26,6 +26,20 @@ export class Topping {
     @Column({ type: "decimal", precision: 12, scale: 2, default: 0 })
     price!: number
 
+    @Column({ name: "price_delivery", type: "decimal", precision: 12, scale: 2, default: 0 })
+    price_delivery!: number
+
+    @Column({ type: "text", nullable: true })
+    img!: string | null
+
+    @ManyToMany(() => Category, (category) => category.toppings)
+    @JoinTable({
+        name: "topping_categories",
+        joinColumn: { name: "topping_id", referencedColumnName: "id" },
+        inverseJoinColumn: { name: "category_id", referencedColumnName: "id" },
+    })
+    categories!: Category[]
+
     @Index()
     @Column({ name: "branch_id", type: "uuid" })
     branch_id?: string
@@ -43,12 +57,4 @@ export class Topping {
     @Index()
     @Column({ type: "boolean", default: true })
     is_active!: boolean
-
-    @ManyToMany(() => Category, (category) => category.toppings)
-    @JoinTable({
-        name: "topping_categories",
-        joinColumn: { name: "topping_id", referencedColumnName: "id" },
-        inverseJoinColumn: { name: "category_id", referencedColumnName: "id" },
-    })
-    categories!: Category[]
 }
