@@ -379,15 +379,25 @@ export const salesOrderDetailIdParamSchema = z.object({
 export const createSalesOrderDetailSchema = z.object({
     body: z.object({
         orders_item_id: uuid,
-        detail_name: z.string().min(1).max(255),
+        topping_id: uuid.optional(),
+        detail_name: z.string().trim().min(1).max(255).optional(),
         extra_price: money.optional()
+    }).superRefine((value, ctx) => {
+        if (!value.topping_id && !value.detail_name) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "detail_name or topping_id is required",
+                path: ["detail_name"],
+            });
+        }
     }).passthrough()
 });
 
 export const updateSalesOrderDetailSchema = z.object({
     params: z.object({ id: uuid }),
     body: z.object({
-        detail_name: z.string().min(1).max(255).optional(),
+        topping_id: uuid.nullable().optional(),
+        detail_name: z.string().trim().min(1).max(255).optional(),
         extra_price: money.optional()
     }).passthrough()
 });

@@ -11,6 +11,7 @@ import { Category } from "../../entity/pos/Category";
 import { ProductsUnit } from "../../entity/pos/ProductsUnit";
 import { Products } from "../../entity/pos/Products";
 import { TableStatus, Tables } from "../../entity/pos/Tables";
+import { Topping } from "../../entity/pos/Topping";
 import { OrderStatus } from "../../entity/pos/OrderEnums";
 import { ShiftStatus } from "../../entity/pos/Shifts";
 
@@ -47,6 +48,10 @@ describeIntegration("Public table-order flow (DB integration)", () => {
     let branchId = "";
     let userId = "";
     let productId = "";
+    let categoryId = "";
+    let toppingId = "";
+    let toppingPrice = 0;
+    let createdToppingId = "";
 
     beforeAll(async () => {
         process.env.TYPEORM_SYNC = "false";
@@ -94,35 +99,66 @@ describeIntegration("Public table-order flow (DB integration)", () => {
 
                 if (existingProduct) {
                     productId = existingProduct.id;
+                    categoryId = existingProduct.category_id;
+                } else {
+                    const suffix = Date.now();
+                    const category = await getRepository(Category).save({
+                        branch_id: branchId,
+                        display_name: `IT PUBLIC CAT ${suffix}`,
+                        is_active: true,
+                    } as any);
+
+                    const unit = await getRepository(ProductsUnit).save({
+                        branch_id: branchId,
+                        display_name: `IT PUBLIC UNIT ${suffix}`,
+                        is_active: true,
+                    } as any);
+
+                    const createdProduct = await getRepository(Products).save({
+                        branch_id: branchId,
+                        display_name: `IT PUBLIC PRODUCT ${suffix}`,
+                        description: "integration public table order product",
+                        price: 59,
+                        cost: 20,
+                        price_delivery: 59,
+                        category_id: category.id,
+                        unit_id: unit.id,
+                        is_active: true,
+                    } as any);
+
+                    productId = createdProduct.id;
+                    categoryId = category.id;
+                }
+
+                const existingTopping = await getRepository(Topping)
+                    .createQueryBuilder("topping")
+                    .leftJoin("topping.categories", "category")
+                    .where("topping.branch_id = :branchId", { branchId })
+                    .andWhere("topping.is_active = true")
+                    .andWhere("category.id = :categoryId", { categoryId })
+                    .orderBy("topping.create_date", "ASC")
+                    .getOne();
+
+                if (existingTopping) {
+                    toppingId = existingTopping.id;
+                    toppingPrice = Number(existingTopping.price || 0);
                     return;
                 }
 
-                const suffix = Date.now();
-                const category = await getRepository(Category).save({
+                const category = await getRepository(Category).findOneByOrFail({ id: categoryId } as any);
+                const createdTopping = await getRepository(Topping).save({
                     branch_id: branchId,
-                    display_name: `IT PUBLIC CAT ${suffix}`,
+                    display_name: `IT PUBLIC TOPPING ${Date.now()}`,
+                    price: 12,
+                    price_delivery: 18,
+                    img: null,
+                    categories: [category],
                     is_active: true,
                 } as any);
 
-                const unit = await getRepository(ProductsUnit).save({
-                    branch_id: branchId,
-                    display_name: `IT PUBLIC UNIT ${suffix}`,
-                    is_active: true,
-                } as any);
-
-                const createdProduct = await getRepository(Products).save({
-                    branch_id: branchId,
-                    display_name: `IT PUBLIC PRODUCT ${suffix}`,
-                    description: "integration public table order product",
-                    price: 59,
-                    cost: 20,
-                    price_delivery: 59,
-                    category_id: category.id,
-                    unit_id: unit.id,
-                    is_active: true,
-                } as any);
-
-                productId = createdProduct.id;
+                createdToppingId = createdTopping.id;
+                toppingId = createdTopping.id;
+                toppingPrice = Number(createdTopping.price || 0);
             });
 
             integrationReady = true;
@@ -133,6 +169,12 @@ describeIntegration("Public table-order flow (DB integration)", () => {
     }, 120000);
 
     afterAll(async () => {
+        if (createdToppingId) {
+            await runWithDbContext({ isAdmin: true }, async () => {
+                await getRepository(Topping).delete(createdToppingId);
+            });
+        }
+
         if (AppDataSource.isInitialized) {
             await AppDataSource.destroy();
         }
@@ -180,6 +222,18 @@ describeIntegration("Public table-order flow (DB integration)", () => {
         });
     }
 
+    async function submitWithOpenShift(token: string, payload: Parameters<typeof publicService.submitByToken>[1]) {
+        try {
+            return await publicService.submitByToken(token, payload);
+        } catch (error) {
+            if (error instanceof Error && error.message.includes("Active Shift Required")) {
+                await setBranchShiftOpenState(true);
+                return publicService.submitByToken(token, payload);
+            }
+            throw error;
+        }
+    }
+
     it("creates first order and appends items to the same active order", async () => {
         if (!integrationReady) return;
         expect(branchId).toBeTruthy();
@@ -188,8 +242,8 @@ describeIntegration("Public table-order flow (DB integration)", () => {
         await setBranchShiftOpenState(true);
         const fixture = await createPublicTableFixture();
         try {
-            const created = await publicService.submitByToken(fixture.tableToken, {
-                items: [{ product_id: productId, quantity: 1, notes: "ไม่เผ็ด" }],
+            const created = await submitWithOpenShift(fixture.tableToken, {
+                items: [{ product_id: productId, quantity: 1, notes: "เธเธกเธเธฑเธ”" }],
             });
             const createdOrder = created.order;
 
@@ -201,8 +255,8 @@ describeIntegration("Public table-order flow (DB integration)", () => {
             expect(createdOrder.id).toBeTruthy();
             expect(createdOrder.items.length).toBeGreaterThanOrEqual(1);
 
-            const appended = await publicService.submitByToken(fixture.tableToken, {
-                items: [{ product_id: productId, quantity: 2, notes: "หวานน้อย" }],
+            const appended = await submitWithOpenShift(fixture.tableToken, {
+                items: [{ product_id: productId, quantity: 2, notes: "เธซเธงเธฒเธเธเนเธญเธข" }],
             });
             const appendedOrder = appended.order;
 
@@ -225,8 +279,8 @@ describeIntegration("Public table-order flow (DB integration)", () => {
         const fixture = await createPublicTableFixture();
 
         try {
-            const created = await publicService.submitByToken(fixture.tableToken, {
-                items: [{ product_id: productId, quantity: 1, notes: "ทดสอบ lock" }],
+            const created = await submitWithOpenShift(fixture.tableToken, {
+                items: [{ product_id: productId, quantity: 1, notes: "เธ—เธ”เธชเธญเธ lock" }],
             });
             const createdOrder = created.order;
             expect(createdOrder).toBeTruthy();
@@ -243,7 +297,7 @@ describeIntegration("Public table-order flow (DB integration)", () => {
 
             await expect(
                 publicService.submitByToken(fixture.tableToken, {
-                    items: [{ product_id: productId, quantity: 1, notes: "ต้องถูกปฏิเสธ" }],
+                    items: [{ product_id: productId, quantity: 1, notes: "เธ•เนเธญเธเธ–เธนเธเธเธเธดเน€เธชเธ" }],
                 }),
             ).rejects.toMatchObject({
                 statusCode: 409,
@@ -253,32 +307,34 @@ describeIntegration("Public table-order flow (DB integration)", () => {
         }
     }, 120000);
 
-    it("rejects modifier details payload for QR customer flow", async () => {
+    it("accepts topping details payload for QR customer flow", async () => {
         if (!integrationReady) return;
         await setBranchShiftOpenState(true);
         const fixture = await createPublicTableFixture();
 
         try {
-            await expect(
-                publicService.submitByToken(fixture.tableToken, {
-                    items: [
-                        {
-                            product_id: productId,
-                            quantity: 1,
-                            notes: "ทดสอบ modifier",
-                            details: [{ detail_name: "เพิ่มชีส", extra_price: 10 }],
-                        },
-                    ],
-                } as any),
-            ).rejects.toMatchObject({
-                statusCode: 400,
-            });
+            const result = await submitWithOpenShift(fixture.tableToken, {
+                items: [
+                    {
+                        product_id: productId,
+                        quantity: 1,
+                        notes: "เธ—เธ”เธชเธญเธ topping",
+                        details: [{ topping_id: toppingId }],
+                    },
+                ],
+            } as any);
 
-            const rows = await runWithDbContext({ isAdmin: true }, async () => {
-                return getDbManager().query(`SELECT COUNT(*)::int AS total FROM sales_orders WHERE table_id = $1`, [fixture.tableId]);
-            });
+            expect(result.order).toBeTruthy();
+            if (!result.order) {
+                throw new Error("Expected QR customer order with topping");
+            }
 
-            expect(Number(rows?.[0]?.total || 0)).toBe(0);
+            const firstItem = result.order.items[0];
+            expect(firstItem).toBeTruthy();
+            expect(Array.isArray(firstItem?.details)).toBe(true);
+            expect(firstItem?.details?.[0]?.topping_id).toBe(toppingId);
+            expect(Number(firstItem?.details?.[0]?.extra_price || 0)).toBe(toppingPrice);
+            expect(Number(firstItem?.total_price || 0)).toBe(Number(firstItem?.price || 0) + toppingPrice);
         } finally {
             await cleanupTableOrders(fixture.tableId);
         }
@@ -294,6 +350,8 @@ describeIntegration("Public table-order flow (DB integration)", () => {
             const bootstrap = await publicService.getBootstrapByToken(fixture.tableToken);
             expect(bootstrap.table.id).toBe(fixture.tableId);
             expect(Array.isArray(bootstrap.menu)).toBe(true);
+            expect(Array.isArray((bootstrap as any).toppings)).toBe(true);
+            expect((bootstrap as any).toppings.some((item: { id: string }) => item.id === toppingId)).toBe(true);
 
             const activeOrder = await publicService.getActiveOrderByToken(fixture.tableToken);
             expect(activeOrder.table.id).toBe(fixture.tableId);

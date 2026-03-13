@@ -11,6 +11,7 @@ import { Category } from "../../entity/pos/Category";
 import { ProductsUnit } from "../../entity/pos/ProductsUnit";
 import { Products } from "../../entity/pos/Products";
 import { ShopProfile } from "../../entity/pos/ShopProfile";
+import { Topping } from "../../entity/pos/Topping";
 import { OrderType } from "../../entity/pos/OrderEnums";
 import { ShiftStatus } from "../../entity/pos/Shifts";
 
@@ -45,6 +46,10 @@ describeIntegration("Public takeaway-order flow (DB integration)", () => {
     let branchId = "";
     let userId = "";
     let productId = "";
+    let categoryId = "";
+    let toppingId = "";
+    let toppingPrice = 0;
+    let createdToppingId = "";
 
     beforeAll(async () => {
         process.env.TYPEORM_SYNC = "false";
@@ -92,35 +97,66 @@ describeIntegration("Public takeaway-order flow (DB integration)", () => {
 
                 if (existingProduct) {
                     productId = existingProduct.id;
+                    categoryId = existingProduct.category_id;
+                } else {
+                    const suffix = Date.now();
+                    const category = await getRepository(Category).save({
+                        branch_id: branchId,
+                        display_name: `IT TAKEAWAY CAT ${suffix}`,
+                        is_active: true,
+                    } as any);
+
+                    const unit = await getRepository(ProductsUnit).save({
+                        branch_id: branchId,
+                        display_name: `IT TAKEAWAY UNIT ${suffix}`,
+                        is_active: true,
+                    } as any);
+
+                    const createdProduct = await getRepository(Products).save({
+                        branch_id: branchId,
+                        display_name: `IT TAKEAWAY PRODUCT ${suffix}`,
+                        description: "integration public takeaway order product",
+                        price: 59,
+                        cost: 20,
+                        price_delivery: 59,
+                        category_id: category.id,
+                        unit_id: unit.id,
+                        is_active: true,
+                    } as any);
+
+                    productId = createdProduct.id;
+                    categoryId = category.id;
+                }
+
+                const existingTopping = await getRepository(Topping)
+                    .createQueryBuilder("topping")
+                    .leftJoin("topping.categories", "category")
+                    .where("topping.branch_id = :branchId", { branchId })
+                    .andWhere("topping.is_active = true")
+                    .andWhere("category.id = :categoryId", { categoryId })
+                    .orderBy("topping.create_date", "ASC")
+                    .getOne();
+
+                if (existingTopping) {
+                    toppingId = existingTopping.id;
+                    toppingPrice = Number(existingTopping.price || 0);
                     return;
                 }
 
-                const suffix = Date.now();
-                const category = await getRepository(Category).save({
+                const category = await getRepository(Category).findOneByOrFail({ id: categoryId } as any);
+                const createdTopping = await getRepository(Topping).save({
                     branch_id: branchId,
-                    display_name: `IT TAKEAWAY CAT ${suffix}`,
+                    display_name: `IT TAKEAWAY TOPPING ${Date.now()}`,
+                    price: 14,
+                    price_delivery: 19,
+                    img: null,
+                    categories: [category],
                     is_active: true,
                 } as any);
 
-                const unit = await getRepository(ProductsUnit).save({
-                    branch_id: branchId,
-                    display_name: `IT TAKEAWAY UNIT ${suffix}`,
-                    is_active: true,
-                } as any);
-
-                const createdProduct = await getRepository(Products).save({
-                    branch_id: branchId,
-                    display_name: `IT TAKEAWAY PRODUCT ${suffix}`,
-                    description: "integration public takeaway order product",
-                    price: 59,
-                    cost: 20,
-                    price_delivery: 59,
-                    category_id: category.id,
-                    unit_id: unit.id,
-                    is_active: true,
-                } as any);
-
-                productId = createdProduct.id;
+                createdToppingId = createdTopping.id;
+                toppingId = createdTopping.id;
+                toppingPrice = Number(createdTopping.price || 0);
             });
 
             integrationReady = true;
@@ -131,6 +167,12 @@ describeIntegration("Public takeaway-order flow (DB integration)", () => {
     }, 120000);
 
     afterAll(async () => {
+        if (createdToppingId) {
+            await runWithDbContext({ isAdmin: true }, async () => {
+                await getRepository(Topping).delete(createdToppingId);
+            });
+        }
+
         if (AppDataSource.isInitialized) {
             await AppDataSource.destroy();
         }
@@ -211,6 +253,18 @@ describeIntegration("Public takeaway-order flow (DB integration)", () => {
         });
     }
 
+    async function submitWithOpenShift(token: string, payload: Parameters<typeof publicService.submitByToken>[1]) {
+        try {
+            return await publicService.submitByToken(token, payload);
+        } catch (error) {
+            if (error instanceof Error && error.message.includes("Active Shift Required")) {
+                await setBranchShiftOpenState(true);
+                return publicService.submitByToken(token, payload);
+            }
+            throw error;
+        }
+    }
+
     it("bootstraps menu and creates a new takeaway order for every submit", async () => {
         if (!integrationReady) return;
         expect(branchId).toBeTruthy();
@@ -225,9 +279,11 @@ describeIntegration("Public takeaway-order flow (DB integration)", () => {
             expect(bootstrap.channel.kind).toBe("takeaway");
             expect(Array.isArray(bootstrap.menu)).toBe(true);
             expect(bootstrap.menu.length).toBeGreaterThan(0);
+            expect(Array.isArray((bootstrap as any).toppings)).toBe(true);
+            expect((bootstrap as any).toppings.some((item: { id: string }) => item.id === toppingId)).toBe(true);
             expect(bootstrap.policy.requires_customer_identity).toBe(true);
 
-            const first = await publicService.submitByToken(fixture.token, {
+            const first = await submitWithOpenShift(fixture.token, {
                 customer_name: `IT CUSTOMER ${Date.now()}`,
                 items: [{ product_id: productId, quantity: 1, notes: "no chili" }],
             });
@@ -241,7 +297,7 @@ describeIntegration("Public takeaway-order flow (DB integration)", () => {
             expect(first.order.order_type).toBe(OrderType.TakeAway);
             expect(first.order.customer_name).toBeTruthy();
 
-            const second = await publicService.submitByToken(fixture.token, {
+            const second = await submitWithOpenShift(fixture.token, {
                 customer_name: "0891234567",
                 items: [{ product_id: productId, quantity: 2, notes: "less sweet" }],
             });
@@ -282,28 +338,38 @@ describeIntegration("Public takeaway-order flow (DB integration)", () => {
         }
     }, 120000);
 
-    it("rejects modifier details payload for takeaway QR flow", async () => {
+    it("accepts topping details payload for takeaway QR flow", async () => {
         if (!integrationReady) return;
 
         await setBranchShiftOpenState(true);
         const fixture = await createTakeawayFixture();
+        const createdOrderIds: string[] = [];
         try {
-            await expect(
-                publicService.submitByToken(fixture.token, {
-                    customer_name: "Modifier Test",
-                    items: [
-                        {
-                            product_id: productId,
-                            quantity: 1,
-                            notes: "modifier should fail",
-                            details: [{ detail_name: "extra cheese", extra_price: 10 }],
-                        },
-                    ],
-                } as any),
-            ).rejects.toMatchObject({
-                statusCode: 400,
-            });
+            const result = await submitWithOpenShift(fixture.token, {
+                customer_name: "Modifier Test",
+                items: [
+                    {
+                        product_id: productId,
+                        quantity: 1,
+                        notes: "modifier allowed",
+                        details: [{ topping_id: toppingId }],
+                    },
+                ],
+            } as any);
+
+            expect(result.order).toBeTruthy();
+            if (!result.order) {
+                throw new Error("Expected takeaway order with topping");
+            }
+            createdOrderIds.push(result.order.id);
+
+            const firstItem = result.order.items[0];
+            expect(firstItem).toBeTruthy();
+            expect(firstItem?.details?.[0]?.topping_id).toBe(toppingId);
+            expect(Number(firstItem?.details?.[0]?.extra_price || 0)).toBe(toppingPrice);
+            expect(Number(firstItem?.total_price || 0)).toBe(Number(firstItem?.price || 0) + toppingPrice);
         } finally {
+            await cleanupOrders(createdOrderIds);
             await fixture.restore();
         }
     }, 120000);

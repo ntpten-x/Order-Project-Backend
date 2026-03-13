@@ -6,6 +6,7 @@ import { Products } from "../../entity/pos/Products";
 import { SalesOrder } from "../../entity/pos/SalesOrder";
 import { SalesOrderItem } from "../../entity/pos/SalesOrderItem";
 import { ShopProfile } from "../../entity/pos/ShopProfile";
+import { Topping } from "../../entity/pos/Topping";
 import { OrdersModels } from "../../models/pos/orders.model";
 import { AppError } from "../../utils/AppError";
 import { OrdersService } from "../pos/orders.service";
@@ -15,6 +16,9 @@ type PublicOrderItemInput = {
     product_id: string;
     quantity: number;
     notes?: string;
+    details?: Array<{
+        topping_id: string;
+    }>;
 };
 
 type SubmitTakeawayOrderInput = {
@@ -66,19 +70,6 @@ export class PublicTakeawayOrderService {
         };
     }
 
-    private assertNoCustomerModifiers(items: unknown[]): void {
-        const hasDetails = items.some(
-            (item) =>
-                item &&
-                typeof item === "object" &&
-                Object.prototype.hasOwnProperty.call(item as Record<string, unknown>, "details"),
-        );
-
-        if (hasDetails) {
-            throw new AppError("QR ordering supports notes only. Modifiers are not allowed.", 400);
-        }
-    }
-
     private async assertProductsAvailableForPublicOrder(
         branchId: string,
         items: PublicOrderItemInput[],
@@ -123,6 +114,7 @@ export class PublicTakeawayOrderService {
                       id: detail.id,
                       detail_name: detail.detail_name,
                       extra_price: Number(detail.extra_price || 0),
+                      topping_id: detail.topping_id ?? null,
                   }))
                 : [],
         };
@@ -232,6 +224,40 @@ export class PublicTakeawayOrderService {
         return Array.from(categoryMap.values()).filter((category) => category.items.length > 0);
     }
 
+    private async loadToppings(branchId: string) {
+        const toppings = await getRepository(Topping)
+            .createQueryBuilder("topping")
+            .leftJoinAndSelect("topping.categories", "category")
+            .where("topping.branch_id = :branchId", { branchId })
+            .andWhere("topping.is_active = true")
+            .andWhere("(category.id IS NULL OR category.is_active = true)")
+            .orderBy("topping.display_name", "ASC")
+            .addOrderBy("category.display_name", "ASC")
+            .getMany();
+
+        return toppings.map((topping) => ({
+            id: topping.id,
+            display_name: topping.display_name,
+            price: Number(topping.price || 0),
+            price_delivery: Number(topping.price_delivery ?? topping.price ?? 0),
+            img: topping.img || null,
+            create_date: topping.create_date,
+            update_date: topping.update_date,
+            is_active: Boolean(topping.is_active),
+            categories: Array.isArray(topping.categories)
+                ? topping.categories
+                    .filter((category) => category.is_active)
+                    .map((category) => ({
+                        id: category.id,
+                        display_name: category.display_name,
+                        create_date: category.create_date,
+                        update_date: category.update_date,
+                        is_active: Boolean(category.is_active),
+                    }))
+                : [],
+        }));
+    }
+
     private toOrderItemsInput(items: PublicOrderItemInput[]) {
         return items.map((item) => ({
             product_id: item.product_id,
@@ -239,7 +265,11 @@ export class PublicTakeawayOrderService {
             discount_amount: 0,
             notes: typeof item.notes === "string" ? item.notes.trim() : "",
             status: OrderStatus.Pending,
-            details: [],
+            details: Array.isArray(item.details)
+                ? item.details.map((detail) => ({
+                    topping_id: String(detail.topping_id || "").trim(),
+                }))
+                : [],
         }));
     }
 
@@ -258,6 +288,7 @@ export class PublicTakeawayOrderService {
                     shop_name: profile.shop_name || "POS Shop",
                 },
                 menu: await this.loadMenu(profile.branch_id!),
+                toppings: await this.loadToppings(profile.branch_id!),
                 policy: {
                     requires_customer_identity: true,
                     can_customer_cancel: false,
@@ -279,8 +310,6 @@ export class PublicTakeawayOrderService {
         if (rawItems.length === 0) {
             throw new AppError("Please add at least one item", 400);
         }
-
-        this.assertNoCustomerModifiers(rawItems);
 
         const normalizedItems = this.toOrderItemsInput(payload.items || []);
         const { customerName } = this.normalizeCustomerIdentity(payload);

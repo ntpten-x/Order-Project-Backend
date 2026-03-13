@@ -547,6 +547,7 @@ export class OrdersModels {
                     "items.product",
                     "items.product.category",
                     "items.details",
+                    "items.details.topping",
                     "payments",
                     "payments.payment_method"
                 ]
@@ -720,6 +721,7 @@ export class OrdersModels {
         const query = repo.createQueryBuilder("item")
             .leftJoinAndSelect("item.product", "product")
             .leftJoinAndSelect("item.details", "details")
+            .leftJoinAndSelect("details.topping", "detailTopping")
             .leftJoinAndSelect("item.order", "order")
             .where("item.id = :id", { id });
 

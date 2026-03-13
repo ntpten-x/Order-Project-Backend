@@ -10,6 +10,7 @@ import { SalesOrderItem } from "../../entity/pos/SalesOrderItem";
 import { SalesOrderDetail } from "../../entity/pos/SalesOrderDetail";
 import { OrderStatus, OrderType, ServingStatus } from "../../entity/pos/OrderEnums";
 import { Products } from "../../entity/pos/Products";
+import { Topping } from "../../entity/pos/Topping";
 import { EntityManager, In } from "typeorm";
 import { randomUUID } from "crypto";
 import { recalculateOrderTotal } from "./orderTotals.service";
@@ -407,6 +408,97 @@ export class OrdersService {
         };
     }
 
+    private getToppingDisplayPrice(topping: Topping, orderType?: OrderType): number {
+        if (orderType === OrderType.Delivery) {
+            return Number(topping.price_delivery ?? topping.price ?? 0);
+        }
+
+        return Number(topping.price ?? 0);
+    }
+
+    private async loadAvailableToppingsMap(
+        toppingIds: string[],
+        manager: EntityManager,
+        branchId?: string
+    ): Promise<Map<string, Topping>> {
+        const normalizedIds = Array.from(new Set(toppingIds.map((id) => String(id || "").trim()).filter(Boolean)));
+        if (normalizedIds.length === 0) {
+            return new Map();
+        }
+
+        const toppingRepo = manager.getRepository(Topping);
+        const query = toppingRepo
+            .createQueryBuilder("topping")
+            .leftJoinAndSelect("topping.categories", "category")
+            .where("topping.id IN (:...ids)", { ids: normalizedIds })
+            .andWhere("topping.is_active = true");
+
+        if (branchId) {
+            query.andWhere("topping.branch_id = :branchId", { branchId });
+        }
+
+        const toppings = await query.getMany();
+        if (toppings.length !== normalizedIds.length) {
+            throw AppError.badRequest("One or more selected toppings are unavailable");
+        }
+
+        return new Map(toppings.map((topping) => [topping.id, topping]));
+    }
+
+    private buildPreparedDetails(
+        detailsData: any[],
+        product: Products,
+        toppingMap: Map<string, Topping>,
+        orderType?: OrderType
+    ): SalesOrderDetail[] {
+        const details: SalesOrderDetail[] = [];
+
+        for (const rawDetail of detailsData) {
+            const toppingId = typeof rawDetail?.topping_id === "string" ? rawDetail.topping_id.trim() : "";
+
+            if (toppingId) {
+                const topping = toppingMap.get(toppingId);
+                if (!topping) {
+                    throw AppError.badRequest("One or more selected toppings are unavailable");
+                }
+
+                const categoryIds = (topping.categories || []).map((category) => category.id);
+                if (product.category_id && categoryIds.length > 0 && !categoryIds.includes(product.category_id)) {
+                    throw AppError.badRequest(`Topping "${topping.display_name}" is not available for this product`);
+                }
+
+                const detail = new SalesOrderDetail();
+                detail.topping_id = topping.id;
+                detail.detail_name = topping.display_name;
+                detail.extra_price = this.getToppingDisplayPrice(topping, orderType);
+                details.push(detail);
+                continue;
+            }
+
+            const detailName = String(rawDetail?.detail_name ?? "").trim();
+            const extraPrice = Number(rawDetail?.extra_price || 0);
+
+            if (!detailName) {
+                if (!extraPrice) {
+                    continue;
+                }
+                throw AppError.badRequest("Detail name is required");
+            }
+
+            if (!Number.isFinite(extraPrice) || extraPrice < 0) {
+                throw AppError.badRequest("Invalid extra price");
+            }
+
+            const detail = new SalesOrderDetail();
+            detail.topping_id = null;
+            detail.detail_name = detailName;
+            detail.extra_price = extraPrice;
+            details.push(detail);
+        }
+
+        return details;
+    }
+
     private async finalizeOrderMutation(context: MutatedOrderContext, event: string): Promise<SalesOrder | null> {
         const order = await this.refreshOrderAfterCommit(context.orderId, context.branchId);
         const effectiveBranchId = order?.branch_id || context.branchId;
@@ -464,6 +556,20 @@ export class OrdersService {
 
         // 3. Create Map for O(1) Lookup
         const productMap = new Map(products.map(p => [p.id, p]));
+        const toppingIds = Array.from(
+            new Set(
+                items.flatMap((item) =>
+                    Array.isArray(item?.details)
+                        ? item.details
+                              .map((detail: any) =>
+                                  typeof detail?.topping_id === "string" ? detail.topping_id.trim() : ""
+                              )
+                              .filter(Boolean)
+                        : []
+                )
+            )
+        );
+        const toppingMap = await this.loadAvailableToppingsMap(toppingIds, manager, branchId);
 
         const prepared: Array<{ item: SalesOrderItem; details: SalesOrderDetail[] }> = [];
 
@@ -490,7 +596,8 @@ export class OrdersService {
             }
 
             const detailsData = Array.isArray(itemData.details) ? itemData.details : [];
-            const detailsTotal = detailsData.reduce((sum: number, d: any) => sum + (Number(d?.extra_price) || 0), 0);
+            const details = this.buildPreparedDetails(detailsData, product, toppingMap, orderType);
+            const detailsTotal = details.reduce((sum: number, detail) => sum + (Number(detail.extra_price) || 0), 0);
 
             const unitPrice =
                 orderType === OrderType.Delivery
@@ -511,13 +618,6 @@ export class OrdersService {
             item.status = itemData.status
                 ? this.ensureValidStatus(String(itemData.status))
                 : OrderStatus.Pending;
-
-            const details: SalesOrderDetail[] = detailsData.map((d: any) => {
-                const detail = new SalesOrderDetail();
-                detail.detail_name = d?.detail_name ?? "";
-                detail.extra_price = Number(d?.extra_price || 0);
-                return detail;
-            });
 
             prepared.push({ item, details });
         }
@@ -1177,17 +1277,38 @@ export class OrdersService {
                 const detailRepo = manager.getRepository(SalesOrderDetail);
 
                 if (data.details !== undefined) {
+                    if (!item.product) {
+                        throw AppError.notFound("Product");
+                    }
+
+                    const toppingIds = Array.from(
+                        new Set(
+                            (Array.isArray(data.details) ? data.details : [])
+                                .map((detail: any) =>
+                                    typeof detail?.topping_id === "string" ? detail.topping_id.trim() : ""
+                                )
+                                .filter(Boolean)
+                        )
+                    );
+                    const toppingMap = await this.loadAvailableToppingsMap(
+                        toppingIds,
+                        manager,
+                        item.order?.branch_id || branchId
+                    );
+                    const nextDetails = this.buildPreparedDetails(
+                        Array.isArray(data.details) ? data.details : [],
+                        item.product,
+                        toppingMap,
+                        item.order?.order_type
+                    );
+
                     // 1. Delete existing details
                     await detailRepo.delete({ orders_item_id: itemId });
 
                     // 2. Add new details
-                    if (Array.isArray(data.details) && data.details.length > 0) {
-                        for (const d of data.details) {
-                            if (!d.detail_name && !d.extra_price) continue;
-                            const detail = new SalesOrderDetail();
+                    if (nextDetails.length > 0) {
+                        for (const detail of nextDetails) {
                             detail.orders_item_id = itemId;
-                            detail.detail_name = d.detail_name || "";
-                            detail.extra_price = Number(d.extra_price || 0);
                             await detailRepo.save(detail);
                         }
                     }
