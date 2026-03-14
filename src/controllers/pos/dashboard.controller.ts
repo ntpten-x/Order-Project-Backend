@@ -25,19 +25,21 @@ export class DashboardController {
     }
 
     getSalesSummary = catchAsync(async (req: Request, res: Response) => {
-        const { startDate, endDate } = req.query;
+        const { startDate, endDate, startAt, endAt } = req.query;
         const branchId = getBranchId(req as any);
         const result = await this.dashboardService.getSalesSummary(
             startDate as string,
             endDate as string,
-            branchId
+            branchId,
+            startAt as string | undefined,
+            endAt as string | undefined,
         );
         this.setCacheHeaders(res);
         return ApiResponses.ok(res, result);
     });
 
     getOverview = catchAsync(async (req: Request, res: Response) => {
-        const { startDate, endDate } = req.query;
+        const { startDate, endDate, startAt, endAt } = req.query;
         const topLimit = parseInt(req.query.topLimit as string, 10) || 7;
         const recentLimit = parseInt(req.query.recentLimit as string, 10) || 8;
         const branchId = getBranchId(req as any);
@@ -46,7 +48,9 @@ export class DashboardController {
             endDate as string | undefined,
             branchId,
             topLimit,
-            recentLimit
+            recentLimit,
+            startAt as string | undefined,
+            endAt as string | undefined,
         );
         this.setCacheHeaders(res);
         return ApiResponses.ok(res, result);
