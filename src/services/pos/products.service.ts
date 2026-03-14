@@ -6,6 +6,7 @@ import { RealtimeEvents } from "../../utils/realtimeEvents";
 import { CreatedSort } from "../../utils/sortCreated";
 import { getRepository } from "../../database/dbContext";
 import { SalesOrderItem } from "../../entity/pos/SalesOrderItem";
+import { ToppingGroup } from "../../entity/pos/ToppingGroup";
 
 export class ProductsService {
     private socketService = SocketService.getInstance();
@@ -38,6 +39,32 @@ export class ProductsService {
         return next;
     }
 
+    private async resolveToppingGroups(groupIds: string[] | undefined, branchId?: string): Promise<ToppingGroup[]> {
+        const normalizedIds = Array.from(
+            new Set((groupIds || []).map((id) => id?.trim()).filter((id): id is string => Boolean(id)))
+        );
+
+        if (normalizedIds.length === 0) {
+            return [];
+        }
+
+        const repository = getRepository(ToppingGroup);
+        const query = repository
+            .createQueryBuilder("topping_group")
+            .where("topping_group.id IN (:...ids)", { ids: normalizedIds });
+
+        if (branchId) {
+            query.andWhere("topping_group.branch_id = :branchId", { branchId });
+        }
+
+        const toppingGroups = await query.getMany();
+        if (toppingGroups.length !== normalizedIds.length) {
+            throw AppError.badRequest("One or more topping groups are invalid for this branch");
+        }
+
+        return toppingGroups.sort((a, b) => normalizedIds.indexOf(a.id) - normalizedIds.indexOf(b.id));
+    }
+
     async findAll(
         page: number,
         limit: number,
@@ -62,8 +89,8 @@ export class ProductsService {
         return this.productsModel.findOneByName(name, branchId);
     }
 
-    async create(products: Products): Promise<Products> {
-        const normalizedProducts = this.normalizeMutableFields(products) as Products;
+    async create(products: Partial<Products> & { topping_group_ids?: string[] }): Promise<Products> {
+        const normalizedProducts = this.normalizeMutableFields(products) as Partial<Products> & { topping_group_ids?: string[] };
         const branchId = normalizedProducts.branch_id;
 
         if (!normalizedProducts.category_id) {
@@ -81,7 +108,12 @@ export class ProductsService {
             throw AppError.conflict("Product name already exists");
         }
 
-        const savedProducts = await this.productsModel.create(normalizedProducts);
+        const payload = { ...(normalizedProducts as Partial<Products> & { topping_group_ids?: string[] }) };
+        delete (payload as { topping_group_ids?: string[] }).topping_group_ids;
+        const savedProducts = await this.productsModel.create({
+            ...(payload as Products),
+            topping_groups: await this.resolveToppingGroups(normalizedProducts.topping_group_ids, branchId),
+        } as Products);
         const createdProducts = await this.productsModel.findOne(savedProducts.id, branchId);
 
         if (!createdProducts) {
@@ -94,13 +126,13 @@ export class ProductsService {
         return createdProducts;
     }
 
-    async update(id: string, products: Products, branchId?: string): Promise<Products> {
+    async update(id: string, products: Partial<Products> & { topping_group_ids?: string[] }, branchId?: string): Promise<Products> {
         const existingProduct = await this.productsModel.findOne(id, branchId || products.branch_id);
         if (!existingProduct) {
             throw AppError.notFound("Product");
         }
 
-        const normalizedProducts = this.normalizeMutableFields(products, existingProduct) as Products;
+        const normalizedProducts = this.normalizeMutableFields(products, existingProduct) as Partial<Products> & { topping_group_ids?: string[] };
         const effectiveBranchId = branchId || existingProduct.branch_id || normalizedProducts.branch_id;
         if (effectiveBranchId) {
             normalizedProducts.branch_id = effectiveBranchId;
@@ -116,7 +148,15 @@ export class ProductsService {
             }
         }
 
-        await this.productsModel.update(id, normalizedProducts, effectiveBranchId);
+        const payload = { ...(normalizedProducts as Partial<Products> & { topping_group_ids?: string[] }) };
+        delete (payload as { topping_group_ids?: string[] }).topping_group_ids;
+
+        const nextPayload: Partial<Products> = { ...payload };
+        if (normalizedProducts.topping_group_ids !== undefined) {
+            nextPayload.topping_groups = await this.resolveToppingGroups(normalizedProducts.topping_group_ids, effectiveBranchId);
+        }
+
+        await this.productsModel.update(id, nextPayload as Products, effectiveBranchId);
         const updatedProducts = await this.productsModel.findOne(id, effectiveBranchId);
 
         if (!updatedProducts) {

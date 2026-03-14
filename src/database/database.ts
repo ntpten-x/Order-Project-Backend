@@ -19,6 +19,7 @@ import { Category } from "../entity/pos/Category"
 import { Products } from "../entity/pos/Products"
 import { ProductsUnit } from "../entity/pos/ProductsUnit"
 import { Topping } from "../entity/pos/Topping"
+import { ToppingGroup } from "../entity/pos/ToppingGroup"
 import { Tables } from "../entity/pos/Tables"
 import { Delivery } from "../entity/pos/Delivery"
 import { Discounts } from "../entity/pos/Discounts"
@@ -114,7 +115,7 @@ export const AppDataSource = new DataSource({
     username: process.env.DATABASE_USER,
     password: process.env.DATABASE_PASSWORD,
     database: process.env.DATABASE_NAME,
-    entities: [Users, Roles, Branch, IngredientsUnit, Ingredients, PurchaseOrder, StockOrdersItem, StockOrdersDetail, SalesOrder, SalesOrderItem, SalesOrderDetail, Category, Products, ProductsUnit, Topping, Tables, Delivery, Discounts, Payments, PaymentMethod, Shifts, ShopProfile, ShopPaymentAccount, PrintSettings, OrderSummarySnapshot, SalesSummaryView, TopSellingItemsView, AuditLog, PermissionResource, PermissionAction, RolePermission, UserPermission, PermissionAudit, PermissionOverrideApproval],
+    entities: [Users, Roles, Branch, IngredientsUnit, Ingredients, PurchaseOrder, StockOrdersItem, StockOrdersDetail, SalesOrder, SalesOrderItem, SalesOrderDetail, Category, Products, ProductsUnit, Topping, ToppingGroup, Tables, Delivery, Discounts, Payments, PaymentMethod, Shifts, ShopProfile, ShopPaymentAccount, PrintSettings, OrderSummarySnapshot, SalesSummaryView, TopSellingItemsView, AuditLog, PermissionResource, PermissionAction, RolePermission, UserPermission, PermissionAudit, PermissionOverrideApproval],
     synchronize: synchronize as boolean,
     logging: typeormLogging,
     ssl: sslOptions,

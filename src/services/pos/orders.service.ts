@@ -315,6 +315,7 @@ export class OrdersService {
         const query = itemRepo
             .createQueryBuilder("item")
             .leftJoinAndSelect("item.product", "product")
+            .leftJoinAndSelect("product.topping_groups", "topping_group")
             .leftJoinAndSelect("item.details", "details")
             .innerJoinAndSelect("item.order", "salesOrder")
             .where("item.id = :itemId", { itemId });
@@ -416,6 +417,12 @@ export class OrdersService {
         return Number(topping.price ?? 0);
     }
 
+    private getProductToppingGroupIds(product: Partial<Products> | null | undefined): string[] {
+        return (product?.topping_groups || [])
+            .map((toppingGroup) => toppingGroup?.id)
+            .filter((id): id is string => Boolean(id));
+    }
+
     private async loadAvailableToppingsMap(
         toppingIds: string[],
         manager: EntityManager,
@@ -430,6 +437,7 @@ export class OrdersService {
         const query = toppingRepo
             .createQueryBuilder("topping")
             .leftJoinAndSelect("topping.categories", "category")
+            .leftJoinAndSelect("topping.topping_groups", "topping_group")
             .where("topping.id IN (:...ids)", { ids: normalizedIds })
             .andWhere("topping.is_active = true");
 
@@ -462,8 +470,13 @@ export class OrdersService {
                     throw AppError.badRequest("One or more selected toppings are unavailable");
                 }
 
-                const categoryIds = (topping.categories || []).map((category) => category.id);
-                if (product.category_id && categoryIds.length > 0 && !categoryIds.includes(product.category_id)) {
+                const toppingGroupIds = (topping.topping_groups || []).map((toppingGroup) => toppingGroup.id);
+                const productToppingGroupIds = this.getProductToppingGroupIds(product);
+                if (
+                    productToppingGroupIds.length === 0 ||
+                    toppingGroupIds.length === 0 ||
+                    !productToppingGroupIds.some((id) => toppingGroupIds.includes(id))
+                ) {
                     throw AppError.badRequest(`Topping "${topping.display_name}" is not available for this product`);
                 }
 
@@ -541,18 +554,17 @@ export class OrdersService {
             throw new AppError("ไม่มีรายการสินค้าในคำสั่งซื้อ", 400);
         }
 
-        // 2. Optimization: Batch Fetch Products (Single Query)
-        // Instead of querying N times inside the loop
-        const where: any = {
-            id: In(productIds),
-            is_active: true
-        };
+        const productsQuery = productRepo
+            .createQueryBuilder("product")
+            .leftJoinAndSelect("product.topping_groups", "topping_group")
+            .where("product.id IN (:...productIds)", { productIds })
+            .andWhere("product.is_active = true");
 
         if (branchId) {
-            where.branch_id = branchId;
+            productsQuery.andWhere("product.branch_id = :branchId", { branchId });
         }
 
-        const products = await productRepo.findBy(where);
+        const products = await productsQuery.getMany();
 
         // 3. Create Map for O(1) Lookup
         const productMap = new Map(products.map(p => [p.id, p]));

@@ -13,6 +13,7 @@ import {
 
 import { Branch } from "../Branch"
 import { Category } from "./Category"
+import { ToppingGroup } from "./ToppingGroup"
 
 @Entity("topping")
 @Index(["display_name", "branch_id"], { unique: true })
@@ -39,6 +40,14 @@ export class Topping {
         inverseJoinColumn: { name: "category_id", referencedColumnName: "id" },
     })
     categories!: Category[]
+
+    @ManyToMany(() => ToppingGroup, (toppingGroup) => toppingGroup.toppings)
+    @JoinTable({
+        name: "topping_group_toppings",
+        joinColumn: { name: "topping_id", referencedColumnName: "id" },
+        inverseJoinColumn: { name: "topping_group_id", referencedColumnName: "id" },
+    })
+    topping_groups!: ToppingGroup[]
 
     @Index()
     @Column({ name: "branch_id", type: "uuid" })

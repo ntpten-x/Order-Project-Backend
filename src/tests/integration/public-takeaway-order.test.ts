@@ -12,6 +12,7 @@ import { ProductsUnit } from "../../entity/pos/ProductsUnit";
 import { Products } from "../../entity/pos/Products";
 import { ShopProfile } from "../../entity/pos/ShopProfile";
 import { Topping } from "../../entity/pos/Topping";
+import { ToppingGroup } from "../../entity/pos/ToppingGroup";
 import { OrderType } from "../../entity/pos/OrderEnums";
 import { ShiftStatus } from "../../entity/pos/Shifts";
 
@@ -46,10 +47,15 @@ describeIntegration("Public takeaway-order flow (DB integration)", () => {
     let branchId = "";
     let userId = "";
     let productId = "";
-    let categoryId = "";
     let toppingId = "";
     let toppingPrice = 0;
-    let createdToppingId = "";
+    const cleanupIds: {
+        categoryId?: string;
+        unitId?: string;
+        productId?: string;
+        toppingId?: string;
+        toppingGroupId?: string;
+    } = {};
 
     beforeAll(async () => {
         process.env.TYPEORM_SYNC = "false";
@@ -86,75 +92,56 @@ describeIntegration("Public takeaway-order flow (DB integration)", () => {
                     },
                 );
 
-                const existingProduct = await getRepository(Products)
-                    .createQueryBuilder("product")
-                    .innerJoin("product.category", "category")
-                    .where("product.branch_id = :branchId", { branchId })
-                    .andWhere("product.is_active = true")
-                    .andWhere("category.is_active = true")
-                    .orderBy("product.create_date", "ASC")
-                    .getOne();
+                const suffix = Date.now();
+                const category = await getRepository(Category).save({
+                    branch_id: branchId,
+                    display_name: `IT TAKEAWAY CAT ${suffix}`,
+                    is_active: true,
+                } as any);
+                cleanupIds.categoryId = category.id;
 
-                if (existingProduct) {
-                    productId = existingProduct.id;
-                    categoryId = existingProduct.category_id;
-                } else {
-                    const suffix = Date.now();
-                    const category = await getRepository(Category).save({
-                        branch_id: branchId,
-                        display_name: `IT TAKEAWAY CAT ${suffix}`,
-                        is_active: true,
-                    } as any);
+                const unit = await getRepository(ProductsUnit).save({
+                    branch_id: branchId,
+                    display_name: `IT TAKEAWAY UNIT ${suffix}`,
+                    is_active: true,
+                } as any);
+                cleanupIds.unitId = unit.id;
 
-                    const unit = await getRepository(ProductsUnit).save({
-                        branch_id: branchId,
-                        display_name: `IT TAKEAWAY UNIT ${suffix}`,
-                        is_active: true,
-                    } as any);
+                const toppingGroup = await getRepository(ToppingGroup).save({
+                    branch_id: branchId,
+                    display_name: `IT TAKEAWAY TOPPING GROUP ${suffix}`,
+                    is_active: true,
+                } as any);
+                cleanupIds.toppingGroupId = toppingGroup.id;
 
-                    const createdProduct = await getRepository(Products).save({
-                        branch_id: branchId,
-                        display_name: `IT TAKEAWAY PRODUCT ${suffix}`,
-                        description: "integration public takeaway order product",
-                        price: 59,
-                        cost: 20,
-                        price_delivery: 59,
-                        category_id: category.id,
-                        unit_id: unit.id,
-                        is_active: true,
-                    } as any);
+                const createdProduct = await getRepository(Products).save({
+                    branch_id: branchId,
+                    display_name: `IT TAKEAWAY PRODUCT ${suffix}`,
+                    description: "integration public takeaway order product",
+                    price: 59,
+                    cost: 20,
+                    price_delivery: 59,
+                    category_id: category.id,
+                    unit_id: unit.id,
+                    is_active: true,
+                    topping_groups: [toppingGroup],
+                } as any);
 
-                    productId = createdProduct.id;
-                    categoryId = category.id;
-                }
+                cleanupIds.productId = createdProduct.id;
+                productId = createdProduct.id;
 
-                const existingTopping = await getRepository(Topping)
-                    .createQueryBuilder("topping")
-                    .leftJoin("topping.categories", "category")
-                    .where("topping.branch_id = :branchId", { branchId })
-                    .andWhere("topping.is_active = true")
-                    .andWhere("category.id = :categoryId", { categoryId })
-                    .orderBy("topping.create_date", "ASC")
-                    .getOne();
-
-                if (existingTopping) {
-                    toppingId = existingTopping.id;
-                    toppingPrice = Number(existingTopping.price || 0);
-                    return;
-                }
-
-                const category = await getRepository(Category).findOneByOrFail({ id: categoryId } as any);
                 const createdTopping = await getRepository(Topping).save({
                     branch_id: branchId,
-                    display_name: `IT TAKEAWAY TOPPING ${Date.now()}`,
+                    display_name: `IT TAKEAWAY TOPPING ${suffix}`,
                     price: 14,
                     price_delivery: 19,
                     img: null,
                     categories: [category],
+                    topping_groups: [toppingGroup],
                     is_active: true,
                 } as any);
 
-                createdToppingId = createdTopping.id;
+                cleanupIds.toppingId = createdTopping.id;
                 toppingId = createdTopping.id;
                 toppingPrice = Number(createdTopping.price || 0);
             });
@@ -167,11 +154,23 @@ describeIntegration("Public takeaway-order flow (DB integration)", () => {
     }, 120000);
 
     afterAll(async () => {
-        if (createdToppingId) {
-            await runWithDbContext({ isAdmin: true }, async () => {
-                await getRepository(Topping).delete(createdToppingId);
-            });
-        }
+        await runWithDbContext({ isAdmin: true }, async () => {
+            if (cleanupIds.toppingId) {
+                await getRepository(Topping).delete(cleanupIds.toppingId);
+            }
+            if (cleanupIds.productId) {
+                await getRepository(Products).delete(cleanupIds.productId);
+            }
+            if (cleanupIds.toppingGroupId) {
+                await getRepository(ToppingGroup).delete(cleanupIds.toppingGroupId);
+            }
+            if (cleanupIds.unitId) {
+                await getRepository(ProductsUnit).delete(cleanupIds.unitId);
+            }
+            if (cleanupIds.categoryId) {
+                await getRepository(Category).delete(cleanupIds.categoryId);
+            }
+        });
 
         if (AppDataSource.isInitialized) {
             await AppDataSource.destroy();

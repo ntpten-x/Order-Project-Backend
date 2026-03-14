@@ -56,6 +56,7 @@ export class SalesOrderDetailService {
         const query = itemRepo
             .createQueryBuilder("item")
             .leftJoinAndSelect("item.product", "product")
+            .leftJoinAndSelect("product.topping_groups", "topping_group")
             .innerJoinAndSelect("item.order", "order")
             .where("item.id = :id", { id: ordersItemId });
 
@@ -86,6 +87,12 @@ export class SalesOrderDetailService {
         return Number(topping.price ?? 0);
     }
 
+    private getProductToppingGroupIds(item: SalesOrderItem | null | undefined): string[] {
+        return (item?.product?.topping_groups || [])
+            .map((toppingGroup) => toppingGroup?.id)
+            .filter((id): id is string => Boolean(id));
+    }
+
     private async normalizeDetailPayload(
         salesOrderDetail: SalesOrderDetail,
         ordersItemId: string,
@@ -105,6 +112,7 @@ export class SalesOrderDetailService {
             const toppingQuery = getRepository(Topping)
                 .createQueryBuilder("topping")
                 .leftJoinAndSelect("topping.categories", "category")
+                .leftJoinAndSelect("topping.topping_groups", "topping_group")
                 .where("topping.id = :id", { id: toppingId })
                 .andWhere("topping.is_active = true");
 
@@ -117,8 +125,13 @@ export class SalesOrderDetailService {
                 throw AppError.badRequest("Selected topping is unavailable");
             }
 
-            const categoryIds = (topping.categories || []).map((category) => category.id);
-            if (item.product?.category_id && categoryIds.length > 0 && !categoryIds.includes(item.product.category_id)) {
+            const toppingGroupIds = (topping.topping_groups || []).map((toppingGroup) => toppingGroup.id);
+            const productToppingGroupIds = this.getProductToppingGroupIds(item);
+            if (
+                productToppingGroupIds.length === 0 ||
+                toppingGroupIds.length === 0 ||
+                !productToppingGroupIds.some((id) => toppingGroupIds.includes(id))
+            ) {
                 throw AppError.badRequest(`Topping "${topping.display_name}" is not available for this product`);
             }
 
