@@ -19,7 +19,7 @@ type PendingOrderTypeSummary = {
     count: number;
 };
 
-export type ShiftClosePreview = {
+type ShiftClosePreview = {
     shiftId: string;
     startAmount: number;
     endAmount: number;

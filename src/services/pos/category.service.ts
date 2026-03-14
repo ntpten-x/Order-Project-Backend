@@ -2,6 +2,7 @@ import { CategoryModels } from "../../models/pos/category.model";
 import { SocketService } from "../socket.service";
 import { Category } from "../../entity/pos/Category";
 import { Products } from "../../entity/pos/Products";
+import { Topping } from "../../entity/pos/Topping";
 import { getDbContext, getRepository } from "../../database/dbContext";
 import { RealtimeEvents } from "../../utils/realtimeEvents";
 import { CreatedSort } from "../../utils/sortCreated";
@@ -187,6 +188,16 @@ export class CategoryService {
 
         if (productCount > 0) {
             throw AppError.conflict("Category cannot be deleted because it is referenced by products");
+        }
+
+        const toppingCount = await getRepository(Topping)
+            .createQueryBuilder("topping")
+            .innerJoin("topping.categories", "category", "category.id = :categoryId", { categoryId: id })
+            .andWhere(effectiveBranchId ? "topping.branch_id = :branchId" : "1=1", effectiveBranchId ? { branchId: effectiveBranchId } : {})
+            .getCount();
+
+        if (toppingCount > 0) {
+            throw AppError.conflict("Category cannot be deleted because it is referenced by toppings");
         }
 
         await this.categoryModel.delete(id, branchId);

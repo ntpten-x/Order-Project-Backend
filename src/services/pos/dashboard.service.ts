@@ -1,6 +1,8 @@
 import { SalesOrder } from "../../entity/pos/SalesOrder";
 import { SalesOrderItem } from "../../entity/pos/SalesOrderItem";
 import { Products } from "../../entity/pos/Products";
+import { Payments } from "../../entity/pos/Payments";
+import { PaymentMethod } from "../../entity/pos/PaymentMethod";
 import { SalesSummaryView } from "../../entity/pos/views/SalesSummaryView";
 import { TopSellingItemsView } from "../../entity/pos/views/TopSellingItemsView";
 import { getDbContext, getRepository } from "../../database/dbContext";
@@ -8,8 +10,10 @@ import { cacheKey, queryCache, withCache } from "../../utils/cache";
 import { AppError } from "../../utils/AppError";
 import { metrics } from "../../utils/metrics";
 import { logProfileDuration } from "../../utils/queryProfiler";
+import { getReadModelVersionToken } from "./readModelVersion.utils";
+import { SelectQueryBuilder } from "typeorm";
 
-export type DashboardRecentOrderSummary = {
+type DashboardRecentOrderSummary = {
     id: string;
     order_no: string;
     order_type: string;
@@ -23,7 +27,7 @@ export type DashboardRecentOrderSummary = {
     items_count: number;
 };
 
-export type DashboardOverview = {
+type DashboardOverview = {
     summary: {
         period_start: string | null;
         period_end: string | null;
@@ -66,6 +70,31 @@ type RecentOrderQueryRow = {
     items_count: string | number;
 };
 
+type SalesSummaryQueryRow = {
+    branch_id: string;
+    date: string;
+    total_orders: string | number;
+    total_sales: string | number;
+    total_discount: string | number;
+    cash_sales: string | number;
+    qr_sales: string | number;
+    dine_in_sales: string | number;
+    takeaway_sales: string | number;
+    delivery_sales: string | number;
+};
+
+type DashboardFilterRange = {
+    startDate?: string;
+    endDate?: string;
+    startAtTs?: string;
+    endAtTs?: string;
+    periodStart: string | null;
+    periodEnd: string | null;
+    cacheStart: string;
+    cacheEnd: string;
+    hasTimePrecision: boolean;
+};
+
 export class DashboardService {
     private readonly SALES_CACHE_PREFIX = "dashboard:sales";
     private readonly TOP_ITEMS_CACHE_PREFIX = "dashboard:top-items";
@@ -73,6 +102,8 @@ export class DashboardService {
     private readonly SALES_CACHE_TTL = Number(process.env.DASHBOARD_SALES_CACHE_TTL_MS || 20000);
     private readonly TOP_ITEMS_CACHE_TTL = Number(process.env.DASHBOARD_TOP_ITEMS_CACHE_TTL_MS || 20000);
     private readonly OVERVIEW_CACHE_TTL = Number(process.env.DASHBOARD_OVERVIEW_CACHE_TTL_MS || 20000);
+    private readonly dashboardTimeZone = "Asia/Bangkok";
+    private readonly dashboardUtcOffset = "+07:00";
 
     private observeCache(operation: string, result: "hit" | "miss", source?: "memory" | "redis"): void {
         metrics.observeCache({
@@ -89,6 +120,19 @@ export class DashboardService {
         if (effectiveBranchId) return ["branch", effectiveBranchId];
         if (ctx?.isAdmin) return ["admin"];
         return ["public"];
+    }
+
+    private async buildVersionedCacheKey(
+        prefix: string,
+        branchId: string | undefined,
+        ...parts: Array<string | number | boolean | undefined>
+    ): Promise<string> {
+        const scope = this.getCacheScopeParts(branchId);
+        const versionToken = await getReadModelVersionToken(
+            "dashboard",
+            scope[0] === "branch" ? scope[1] : undefined
+        );
+        return cacheKey(prefix, ...scope, versionToken, ...parts);
     }
 
     private normalizeDateRange(startDate?: string, endDate?: string): { startDate?: string; endDate?: string } {
@@ -125,6 +169,35 @@ export class DashboardService {
         return { startDate: start, endDate: end };
     }
 
+    private normalizeDateTimeRange(startAt?: string, endAt?: string): { startAtTs?: string; endAtTs?: string } {
+        const hasStart = typeof startAt === "string" && startAt.length > 0;
+        const hasEnd = typeof endAt === "string" && endAt.length > 0;
+
+        if (hasStart !== hasEnd) {
+            throw new AppError("startAt and endAt must be provided together", 400);
+        }
+
+        if (!hasStart || !hasEnd) {
+            return {};
+        }
+
+        const startDate = new Date(String(startAt));
+        const endDate = new Date(String(endAt));
+
+        if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+            throw new AppError("Invalid date time range", 400);
+        }
+
+        if (startDate.getTime() > endDate.getTime()) {
+            throw new AppError("startAt cannot be greater than endAt", 400);
+        }
+
+        return {
+            startAtTs: startDate.toISOString(),
+            endAtTs: endDate.toISOString(),
+        };
+    }
+
     private toSafeLimit(value: number, fallback: number, max: number): number {
         if (!Number.isFinite(value)) return fallback;
         return Math.min(Math.max(Math.trunc(value), 1), max);
@@ -133,19 +206,72 @@ export class DashboardService {
     private toDateRangeBounds(
         startDate?: string,
         endDate?: string
-    ): { startDateTs?: string; endDateExclusiveTs?: string } {
+    ): { startAtTs?: string; endAtTs?: string } {
         if (!startDate || !endDate) {
             return {};
         }
 
-        const startDateTs = `${startDate}T00:00:00.000Z`;
-        const endDateExclusive = new Date(`${endDate}T00:00:00.000Z`);
-        endDateExclusive.setUTCDate(endDateExclusive.getUTCDate() + 1);
+        const startAt = new Date(`${startDate}T00:00:00.000${this.dashboardUtcOffset}`);
+        const endAt = new Date(`${endDate}T23:59:59.999${this.dashboardUtcOffset}`);
 
         return {
-            startDateTs,
-            endDateExclusiveTs: endDateExclusive.toISOString(),
+            startAtTs: startAt.toISOString(),
+            endAtTs: endAt.toISOString(),
         };
+    }
+
+    private toDashboardDateExpression(column: string): string {
+        return `DATE(${column} AT TIME ZONE '${this.dashboardTimeZone}')`;
+    }
+
+    private normalizeFilterRange(
+        startDate?: string,
+        endDate?: string,
+        startAt?: string,
+        endAt?: string
+    ): DashboardFilterRange {
+        const normalizedDateTimes = this.normalizeDateTimeRange(startAt, endAt);
+        if (normalizedDateTimes.startAtTs && normalizedDateTimes.endAtTs) {
+            return {
+                startDate: normalizedDateTimes.startAtTs.slice(0, 10),
+                endDate: normalizedDateTimes.endAtTs.slice(0, 10),
+                startAtTs: normalizedDateTimes.startAtTs,
+                endAtTs: normalizedDateTimes.endAtTs,
+                periodStart: normalizedDateTimes.startAtTs,
+                periodEnd: normalizedDateTimes.endAtTs,
+                cacheStart: normalizedDateTimes.startAtTs,
+                cacheEnd: normalizedDateTimes.endAtTs,
+                hasTimePrecision: true,
+            };
+        }
+
+        const normalizedDates = this.normalizeDateRange(startDate, endDate);
+        const bounds = this.toDateRangeBounds(normalizedDates.startDate, normalizedDates.endDate);
+        return {
+            startDate: normalizedDates.startDate,
+            endDate: normalizedDates.endDate,
+            startAtTs: bounds.startAtTs,
+            endAtTs: bounds.endAtTs,
+            periodStart: normalizedDates.startDate || null,
+            periodEnd: normalizedDates.endDate || null,
+            cacheStart: normalizedDates.startDate || "all",
+            cacheEnd: normalizedDates.endDate || "all",
+            hasTimePrecision: false,
+        };
+    }
+
+    private applyTimestampRange<T extends SelectQueryBuilder<any>>(
+        query: T,
+        column: string,
+        range: DashboardFilterRange
+    ): T {
+        if (range.startAtTs && range.endAtTs) {
+            query.andWhere(`${column} >= :startAtTs AND ${column} <= :endAtTs`, {
+                startAtTs: range.startAtTs,
+                endAtTs: range.endAtTs,
+            });
+        }
+        return query;
     }
 
     private mapTopItemRow(row: TopItemQueryRow): TopSellingItemsView {
@@ -160,37 +286,119 @@ export class DashboardService {
         } as TopSellingItemsView;
     }
 
-    async getSalesSummary(startDate?: string, endDate?: string, branchId?: string): Promise<SalesSummaryView[]> {
-        const normalized = this.normalizeDateRange(startDate, endDate);
-        const scope = this.getCacheScopeParts(branchId);
-        const key = cacheKey(
+    private async getSalesSummaryByRange(
+        range: DashboardFilterRange,
+        branchId?: string
+    ): Promise<SalesSummaryView[]> {
+        const orderDailyQuery = getRepository(SalesOrder)
+            .createQueryBuilder("order")
+            .select("order.branch_id", "branch_id")
+            .addSelect(this.toDashboardDateExpression("order.create_date"), "date")
+            .addSelect("COUNT(*)::int", "total_orders")
+            .addSelect("COALESCE(SUM(order.total_amount), 0)", "total_sales")
+            .addSelect("COALESCE(SUM(order.discount_amount), 0)", "total_discount")
+            .where("order.status IN (:...statuses)", { statuses: ["Paid", "Completed"] });
+
+        if (branchId) {
+            orderDailyQuery.andWhere("order.branch_id = :branchId", { branchId });
+        }
+
+        this.applyTimestampRange(orderDailyQuery, "order.create_date", range);
+
+        orderDailyQuery
+            .groupBy("order.branch_id")
+            .addGroupBy(this.toDashboardDateExpression("order.create_date"));
+
+        const paymentDailyQuery = getRepository(SalesOrder)
+            .createQueryBuilder("order")
+            .leftJoin(Payments, "payment", "payment.order_id = order.id AND payment.status = :paymentStatus", {
+                paymentStatus: "Success",
+            })
+            .leftJoin(PaymentMethod, "payment_method", "payment.payment_method_id = payment_method.id")
+            .select("order.branch_id", "branch_id")
+            .addSelect(this.toDashboardDateExpression("order.create_date"), "date")
+            .addSelect(
+                "COALESCE(SUM(CASE WHEN payment_method.payment_method_name ILIKE '%cash%' OR payment_method.display_name ILIKE '%สด%' THEN payment.amount ELSE 0 END), 0)",
+                "cash_sales"
+            )
+            .addSelect(
+                "COALESCE(SUM(CASE WHEN payment_method.payment_method_name ILIKE '%qr%' OR payment_method.payment_method_name ILIKE '%prompt%' THEN payment.amount ELSE 0 END), 0)",
+                "qr_sales"
+            )
+            .addSelect("COALESCE(SUM(CASE WHEN order.order_type = 'DineIn' THEN payment.amount ELSE 0 END), 0)", "dine_in_sales")
+            .addSelect("COALESCE(SUM(CASE WHEN order.order_type = 'TakeAway' THEN payment.amount ELSE 0 END), 0)", "takeaway_sales")
+            .addSelect("COALESCE(SUM(CASE WHEN order.order_type = 'Delivery' THEN payment.amount ELSE 0 END), 0)", "delivery_sales")
+            .where("order.status IN (:...statuses)", { statuses: ["Paid", "Completed"] });
+
+        if (branchId) {
+            paymentDailyQuery.andWhere("order.branch_id = :branchId", { branchId });
+        }
+
+        this.applyTimestampRange(paymentDailyQuery, "order.create_date", range);
+
+        paymentDailyQuery
+            .groupBy("order.branch_id")
+            .addGroupBy(this.toDashboardDateExpression("order.create_date"));
+
+        const query = getRepository(SalesOrder).manager
+            .createQueryBuilder()
+            .select("order_daily.branch_id", "branch_id")
+            .addSelect("order_daily.date", "date")
+            .addSelect("order_daily.total_orders", "total_orders")
+            .addSelect("order_daily.total_sales", "total_sales")
+            .addSelect("order_daily.total_discount", "total_discount")
+            .addSelect("COALESCE(payment_daily.cash_sales, 0)", "cash_sales")
+            .addSelect("COALESCE(payment_daily.qr_sales, 0)", "qr_sales")
+            .addSelect("COALESCE(payment_daily.dine_in_sales, 0)", "dine_in_sales")
+            .addSelect("COALESCE(payment_daily.takeaway_sales, 0)", "takeaway_sales")
+            .addSelect("COALESCE(payment_daily.delivery_sales, 0)", "delivery_sales")
+            .from(`(${orderDailyQuery.getQuery()})`, "order_daily")
+            .leftJoin(
+                `(${paymentDailyQuery.getQuery()})`,
+                "payment_daily",
+                "payment_daily.branch_id = order_daily.branch_id AND payment_daily.date = order_daily.date"
+            )
+            .setParameters({
+                ...orderDailyQuery.getParameters(),
+                ...paymentDailyQuery.getParameters(),
+            })
+            .orderBy("order_daily.date", "DESC");
+
+        const rows = await query.getRawMany<SalesSummaryQueryRow>();
+        return rows.map((row) => ({
+            branch_id: row.branch_id,
+            date: row.date,
+            total_orders: Number(row.total_orders || 0),
+            total_sales: Number(row.total_sales || 0),
+            total_discount: Number(row.total_discount || 0),
+            cash_sales: Number(row.cash_sales || 0),
+            qr_sales: Number(row.qr_sales || 0),
+            dine_in_sales: Number(row.dine_in_sales || 0),
+            takeaway_sales: Number(row.takeaway_sales || 0),
+            delivery_sales: Number(row.delivery_sales || 0),
+        } as SalesSummaryView));
+    }
+
+    async getSalesSummary(
+        startDate?: string,
+        endDate?: string,
+        branchId?: string,
+        startAt?: string,
+        endAt?: string
+    ): Promise<SalesSummaryView[]> {
+        const range = this.normalizeFilterRange(startDate, endDate, startAt, endAt);
+        const key = await this.buildVersionedCacheKey(
             this.SALES_CACHE_PREFIX,
-            ...scope,
-            normalized.startDate || "all",
-            normalized.endDate || "all"
+            branchId,
+            range.cacheStart,
+            range.cacheEnd
         );
 
         return withCache(
             key,
             async () => {
-                const salesRepository = getRepository(SalesSummaryView);
-                const query = salesRepository.createQueryBuilder("sales");
-
-                if (normalized.startDate && normalized.endDate) {
-                    query.where("sales.date BETWEEN :startDate AND :endDate", {
-                        startDate: normalized.startDate,
-                        endDate: normalized.endDate,
-                    });
-                }
-
-                if (branchId) {
-                    query.andWhere("sales.branch_id = :branchId", { branchId });
-                }
-
-                query.orderBy("sales.date", "DESC");
-
                 const start = process.hrtime.bigint();
-                const rows = await query.getMany();
+                const rows = await this.getSalesSummaryByRange(range, branchId);
                 const durationMs = Number(process.hrtime.bigint() - start) / 1_000_000;
                 await logProfileDuration("dashboard.sales.summary", durationMs);
                 return rows;
@@ -206,25 +414,13 @@ export class DashboardService {
 
     async getTopSellingItems(limit: number = 10, branchId?: string): Promise<TopSellingItemsView[]> {
         const safeLimit = this.toSafeLimit(limit, 10, 50);
-        const scope = this.getCacheScopeParts(branchId);
-        const key = cacheKey(this.TOP_ITEMS_CACHE_PREFIX, ...scope, safeLimit);
+        const key = await this.buildVersionedCacheKey(this.TOP_ITEMS_CACHE_PREFIX, branchId, safeLimit);
 
         return withCache(
             key,
             async () => {
-                const topItemsRepository = getRepository(TopSellingItemsView);
-                const query = topItemsRepository
-                    .createQueryBuilder("top_items")
-                    .orderBy("top_items.total_quantity", "DESC")
-                    .addOrderBy("top_items.total_revenue", "DESC")
-                    .limit(safeLimit);
-
-                if (branchId) {
-                    query.where("top_items.branch_id = :branchId", { branchId });
-                }
-
                 const start = process.hrtime.bigint();
-                const rows = await query.getMany();
+                const rows = await this.getTopSellingItemsByRange(safeLimit, branchId);
                 const durationMs = Number(process.hrtime.bigint() - start) / 1_000_000;
                 await logProfileDuration("dashboard.top-items", durationMs);
                 return rows;
@@ -241,8 +437,7 @@ export class DashboardService {
     private async getTopSellingItemsByRange(
         limit: number,
         branchId?: string,
-        startDate?: string,
-        endDate?: string
+        range?: DashboardFilterRange
     ): Promise<TopSellingItemsView[]> {
         const topItemsQuery = getRepository(SalesOrderItem)
             .createQueryBuilder("item")
@@ -262,15 +457,8 @@ export class DashboardService {
             topItemsQuery.andWhere("order.branch_id = :branchId", { branchId });
         }
 
-        if (startDate && endDate) {
-            const bounds = this.toDateRangeBounds(startDate, endDate);
-            topItemsQuery.andWhere(
-                "order.create_date >= :startDateTs AND order.create_date < :endDateExclusiveTs",
-                {
-                    startDateTs: bounds.startDateTs,
-                    endDateExclusiveTs: bounds.endDateExclusiveTs,
-                }
-            );
+        if (range) {
+            this.applyTimestampRange(topItemsQuery, "order.create_date", range);
         }
 
         topItemsQuery
@@ -290,8 +478,7 @@ export class DashboardService {
     private async getRecentOrdersSummary(
         limit: number,
         branchId?: string,
-        startDate?: string,
-        endDate?: string
+        range?: DashboardFilterRange
     ): Promise<DashboardRecentOrderSummary[]> {
         const itemCountSubquery = getRepository(SalesOrderItem)
             .createQueryBuilder("item_count")
@@ -329,15 +516,8 @@ export class DashboardService {
             recentOrdersQuery.andWhere("order.branch_id = :branchId", { branchId });
         }
 
-        if (startDate && endDate) {
-            const bounds = this.toDateRangeBounds(startDate, endDate);
-            recentOrdersQuery.andWhere(
-                "order.update_date >= :startDateTs AND order.update_date < :endDateExclusiveTs",
-                {
-                    startDateTs: bounds.startDateTs,
-                    endDateExclusiveTs: bounds.endDateExclusiveTs,
-                }
-            );
+        if (range) {
+            this.applyTimestampRange(recentOrdersQuery, "order.update_date", range);
         }
 
         recentOrdersQuery
@@ -369,18 +549,18 @@ export class DashboardService {
         endDate?: string,
         branchId?: string,
         topLimit: number = 7,
-        recentLimit: number = 8
+        recentLimit: number = 8,
+        startAt?: string,
+        endAt?: string
     ): Promise<DashboardOverview> {
-        const normalized = this.normalizeDateRange(startDate, endDate);
+        const range = this.normalizeFilterRange(startDate, endDate, startAt, endAt);
         const safeTopLimit = this.toSafeLimit(topLimit, 7, 20);
         const safeRecentLimit = this.toSafeLimit(recentLimit, 8, 30);
-        const scope = this.getCacheScopeParts(branchId);
-
-        const key = cacheKey(
+        const key = await this.buildVersionedCacheKey(
             this.OVERVIEW_CACHE_PREFIX,
-            ...scope,
-            normalized.startDate || "all",
-            normalized.endDate || "all",
+            branchId,
+            range.cacheStart,
+            range.cacheEnd,
             safeTopLimit,
             safeRecentLimit
         );
@@ -389,20 +569,18 @@ export class DashboardService {
             key,
             async () => {
                 const [summaryRows, topItems, recentOrders] = await Promise.all([
-                    this.getSalesSummary(normalized.startDate, normalized.endDate, branchId),
-                    normalized.startDate && normalized.endDate
+                    this.getSalesSummary(range.startDate, range.endDate, branchId, range.startAtTs, range.endAtTs),
+                    range.startAtTs && range.endAtTs
                         ? this.getTopSellingItemsByRange(
                             safeTopLimit,
                             branchId,
-                            normalized.startDate,
-                            normalized.endDate
+                            range
                         )
                         : this.getTopSellingItems(safeTopLimit, branchId),
                     this.getRecentOrdersSummary(
                         safeRecentLimit,
                         branchId,
-                        normalized.startDate,
-                        normalized.endDate
+                        range
                     ),
                 ]);
 
@@ -436,8 +614,8 @@ export class DashboardService {
 
                 return {
                     summary: {
-                        period_start: normalized.startDate || null,
-                        period_end: normalized.endDate || null,
+                        period_start: range.periodStart,
+                        period_end: range.periodEnd,
                         total_sales: aggregated.total_sales,
                         total_orders: aggregated.total_orders,
                         total_discount: aggregated.total_discount,

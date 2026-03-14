@@ -100,6 +100,37 @@ export const updateProductsUnitSchema = z.object({
     }).passthrough()
 });
 
+export const toppingIdParamSchema = z.object({
+    params: z.object({ id: uuid })
+});
+
+export const toppingNameParamSchema = z.object({
+    params: z.object({ name: z.string().min(1).max(100) })
+});
+
+export const createToppingSchema = z.object({
+    body: z.object({
+        display_name: z.string().min(1).max(100),
+        price: money,
+        price_delivery: money.optional(),
+        img: z.string().optional().nullable(),
+        category_ids: z.array(uuid).min(1).max(25),
+        is_active: z.coerce.boolean().optional()
+    }).passthrough()
+});
+
+export const updateToppingSchema = z.object({
+    params: z.object({ id: uuid }),
+    body: z.object({
+        display_name: z.string().min(1).max(100).optional(),
+        price: money.optional(),
+        price_delivery: money.optional(),
+        img: z.string().optional().nullable(),
+        category_ids: z.array(uuid).min(1).max(25).optional(),
+        is_active: z.coerce.boolean().optional()
+    }).passthrough()
+});
+
 // Tables
 export const tableIdParamSchema = z.object({
     params: z.object({ id: uuid })
@@ -348,15 +379,25 @@ export const salesOrderDetailIdParamSchema = z.object({
 export const createSalesOrderDetailSchema = z.object({
     body: z.object({
         orders_item_id: uuid,
-        detail_name: z.string().min(1).max(255),
+        topping_id: uuid.optional(),
+        detail_name: z.string().trim().min(1).max(255).optional(),
         extra_price: money.optional()
+    }).superRefine((value, ctx) => {
+        if (!value.topping_id && !value.detail_name) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "detail_name or topping_id is required",
+                path: ["detail_name"],
+            });
+        }
     }).passthrough()
 });
 
 export const updateSalesOrderDetailSchema = z.object({
     params: z.object({ id: uuid }),
     body: z.object({
-        detail_name: z.string().min(1).max(255).optional(),
+        topping_id: uuid.nullable().optional(),
+        detail_name: z.string().trim().min(1).max(255).optional(),
         extra_price: money.optional()
     }).passthrough()
 });

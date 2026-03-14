@@ -1,5 +1,6 @@
-import { Column, Entity, PrimaryGeneratedColumn, OneToMany, Index, ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn } from "typeorm"
+import { Column, Entity, PrimaryGeneratedColumn, OneToMany, Index, ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn, ManyToMany } from "typeorm"
 import { Products } from "./Products"
+import { Topping } from "./Topping"
 import { Branch } from "../Branch"
 
 @Entity()
@@ -31,4 +32,7 @@ export class Category {
 
     @OneToMany(() => Products, (products) => products.category)
     products!: Products[]
+
+    @ManyToMany(() => Topping, (topping) => topping.categories)
+    toppings!: Topping[]
 }

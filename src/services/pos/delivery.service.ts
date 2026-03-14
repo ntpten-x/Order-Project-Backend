@@ -7,9 +7,12 @@ import { RealtimeEvents } from "../../utils/realtimeEvents";
 import { CreatedSort } from "../../utils/sortCreated";
 import { AppError } from "../../utils/AppError";
 import { cacheKey, invalidateCache, queryCache, withCache } from "../../utils/cache";
+import { OrderSummarySnapshotService } from "./orderSummarySnapshot.service";
+import { bumpOrderReadModelVersions, invalidateOrderReadCaches } from "./ordersReadCache.utils";
 
 export class DeliveryService {
     private socketService = SocketService.getInstance();
+    private orderSummarySnapshotService = new OrderSummarySnapshotService();
     private readonly CACHE_PREFIX = "delivery";
     private readonly CACHE_TTL = Number(process.env.POS_MASTER_CACHE_TTL_MS || 30_000);
 
@@ -51,6 +54,11 @@ export class DeliveryService {
 
     private invalidateDeliveryCache(branchId?: string, id?: string): void {
         invalidateCache(this.getInvalidationPatterns(branchId, id));
+    }
+
+    private async invalidateOrderReadModels(branchId?: string): Promise<void> {
+        await bumpOrderReadModelVersions(branchId);
+        invalidateOrderReadCaches(branchId);
     }
 
     async findAll(
@@ -166,6 +174,8 @@ export class DeliveryService {
 
         const effectiveBranchId = deliveryToUpdate.branch_id || branchId || delivery.branch_id;
         const updatedDelivery = await this.deliveryModel.update(id, delivery, effectiveBranchId);
+        await this.orderSummarySnapshotService.syncDeliveryMetadata(id);
+        await this.invalidateOrderReadModels(effectiveBranchId);
         this.invalidateDeliveryCache(effectiveBranchId, id);
         if (effectiveBranchId) {
             this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.delivery.update, updatedDelivery);

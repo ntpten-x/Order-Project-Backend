@@ -6,11 +6,18 @@ const takeawayToken = z
     .max(128)
     .regex(/^[A-Za-z0-9_-]+$/, "Invalid takeaway token format");
 
+const publicOrderDetailSchema = z
+    .object({
+        topping_id: z.string().uuid(),
+    })
+    .strict();
+
 const orderItemSchema = z
     .object({
         product_id: z.string().uuid(),
         quantity: z.coerce.number().int().min(1).max(50),
         notes: z.string().trim().max(500).optional(),
+        details: z.array(publicOrderDetailSchema).max(30).optional(),
     })
     .strict();
 

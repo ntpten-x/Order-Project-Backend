@@ -3,7 +3,14 @@ import { NextFunction, Request, RequestHandler, Response } from "express";
 import pinoHttp from "pino-http";
 import { logger } from "../utils/logger";
 
-const defaultSkipPaths = ["/health", "/metrics", "/csrf-token", "/system/health"];
+const defaultSkipPaths = [
+    "/health",
+    "/metrics",
+    "/csrf-token",
+    "/system/health",
+    "/pos/orders/summary",
+    "/pos/orders/stats",
+];
 
 function parsePathList(value: string | undefined): string[] {
     if (!value) return [];
@@ -25,6 +32,14 @@ const configuredSkipPaths = parsePathList(process.env.HTTP_LOG_SKIP_PATHS);
 const httpLogSkipPaths = (configuredSkipPaths.length > 0 ? configuredSkipPaths : defaultSkipPaths).map((pathValue) =>
     normalizePath(pathValue)
 );
+const defaultNoisyPaths = ["/pos/orders/summary", "/pos/orders/stats"];
+const configuredNoisyPaths = parsePathList(process.env.HTTP_LOG_NOISY_PATHS);
+const noisyLogPaths = (configuredNoisyPaths.length > 0 ? configuredNoisyPaths : defaultNoisyPaths).map((pathValue) =>
+    normalizePath(pathValue)
+);
+const noisySuccessSampleRateRaw = Number(process.env.HTTP_LOG_NOISY_SUCCESS_SAMPLE_RATE || 0.02);
+const noisySuccessSampleRate = Math.min(Math.max(noisySuccessSampleRateRaw, 0), 1);
+const noisySuccessSlowMs = Math.max(0, Number(process.env.HTTP_LOG_NOISY_SLOW_MS || 250));
 
 function shouldSkipLogging(pathValue: string): boolean {
     const normalizedPath = normalizePath(pathValue);
@@ -32,6 +47,15 @@ function shouldSkipLogging(pathValue: string): boolean {
         if (skipPath === normalizedPath) return true;
         if (skipPath === "/") return normalizedPath === "/";
         return normalizedPath.startsWith(`${skipPath}/`);
+    });
+}
+
+function isNoisyLogPath(pathValue: string): boolean {
+    const normalizedPath = normalizePath(pathValue);
+    return noisyLogPaths.some((noisyPath) => {
+        if (noisyPath === normalizedPath) return true;
+        if (noisyPath === "/") return normalizedPath === "/";
+        return normalizedPath.startsWith(`${noisyPath}/`);
     });
 }
 
@@ -61,13 +85,13 @@ export const httpLogger: RequestHandler = (req: Request, res: Response, next: Ne
         let isLogged = false;
 
         const writeLog = (event: "finish" | "close") => {
-            if (isLogged || shouldSkipLogging(req.path)) {
+            const routePath = req.route?.path ? `${req.baseUrl}${req.route.path}` : req.path;
+            if (isLogged || shouldSkipLogging(routePath)) {
                 return;
             }
 
             isLogged = true;
             const durationMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
-            const routePath = req.route?.path ? `${req.baseUrl}${req.route.path}` : req.path;
             const user = (req as any).user;
             const branchId = (req as any).branchId || user?.branch_id;
             const payload = {
@@ -83,6 +107,13 @@ export const httpLogger: RequestHandler = (req: Request, res: Response, next: Ne
                 branchId,
                 event,
             };
+            const isSuccess = res.statusCode >= 200 && res.statusCode < 400;
+            const shouldSampleNoisySuccess =
+                isSuccess &&
+                isNoisyLogPath(routePath) &&
+                durationMs < noisySuccessSlowMs &&
+                noisySuccessSampleRate < 1 &&
+                Math.random() > noisySuccessSampleRate;
 
             if (event === "close" && !res.writableEnded) {
                 (requestWithLogger.log ?? logger).warn(payload, "request aborted");
@@ -96,6 +127,10 @@ export const httpLogger: RequestHandler = (req: Request, res: Response, next: Ne
 
             if (res.statusCode >= 400) {
                 (requestWithLogger.log ?? logger).warn(payload, "request completed with client error");
+                return;
+            }
+
+            if (shouldSampleNoisySuccess) {
                 return;
             }
 

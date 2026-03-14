@@ -10,7 +10,6 @@ import { paginationQuerySchema } from "../../utils/schemas/common.schema";
 import {
     createIngredientSchema,
     ingredientIdParamSchema,
-    ingredientNameParamSchema,
     updateIngredientSchema
 } from "../../utils/schemas/stock.schema";
 
@@ -27,7 +26,6 @@ router.use(requireBranch)
 // Public-ish routes (All authenticated roles)
 router.get("/", authorizePermission("stock.ingredients.page", "view"), validate(paginationQuerySchema), ingredientsController.findAll)
 router.get("/:id", authorizePermission("stock.ingredients.page", "view"), validate(ingredientIdParamSchema), ingredientsController.findOne)
-router.get("/name/:ingredient_name", authorizePermission("stock.ingredients.page", "view"), validate(ingredientNameParamSchema), ingredientsController.findOneByName)
 
 // Admin/Manager routes for management
 router.post("/", authorizePermission("stock.ingredients.page", "create"), validate(createIngredientSchema), ingredientsController.create)

@@ -19,19 +19,24 @@ export class OrdersDetailController {
     private ordersDetailService = new OrdersDetailService(this.ordersDetailModel);
 
     updatePurchase = catchAsync(async (req: Request, res: Response) => {
-        const { orders_item_id, actual_quantity, purchased_by_id, is_purchased } = req.body;
+        const { orders_item_id, actual_quantity, is_purchased } = req.body;
         const branch_id = getBranchId(req as any);
+        const purchased_by_id = (req as any).user?.id;
 
         if (!orders_item_id || !purchased_by_id) {
-            throw AppError.badRequest("ไม่พบข้อมูลสินค้าหรือผู้สั่งซื้อ");
+            throw AppError.badRequest("ไม่พบข้อมูลรายการซื้อหรือผู้ตรวจรับ");
         }
 
-        const oldDetail = await this.ordersDetailService.getDetailByItemId(orders_item_id);
-        const result = await this.ordersDetailService.updatePurchaseDetail(orders_item_id, {
-            actual_quantity,
-            purchased_by_id,
-            is_purchased: is_purchased ?? true
-        }, branch_id);
+        const oldDetail = await this.ordersDetailService.getDetailByItemId(orders_item_id, branch_id);
+        const result = await this.ordersDetailService.updatePurchaseDetail(
+            orders_item_id,
+            {
+                actual_quantity,
+                purchased_by_id,
+                is_purchased: is_purchased ?? true,
+            },
+            branch_id
+        );
 
         const userInfo = getUserInfoFromRequest(req as any);
         await auditLogger.log({

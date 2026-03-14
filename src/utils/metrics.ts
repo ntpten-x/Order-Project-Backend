@@ -9,6 +9,7 @@ try {
 
 const requestedMetrics = process.env.METRICS_ENABLED === "true";
 const metricsEnabled = requestedMetrics && !!client;
+const globalMetricsStateKey = "__orderProjectMetricsState__";
 
 let registry: any = null;
 let httpRequestDuration: any = null;
@@ -20,60 +21,72 @@ let permissionCheckDuration: any = null;
 let privilegeEventTotal: any = null;
 
 if (metricsEnabled) {
-    registry = new client.Registry();
-    client.collectDefaultMetrics({ register: registry });
+    const globalState = ((globalThis as any)[globalMetricsStateKey] ??= {});
 
-    httpRequestDuration = new client.Histogram({
-        name: "http_request_duration_ms",
-        help: "HTTP request duration in milliseconds",
-        labelNames: ["method", "path", "status"],
-        buckets: [5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000],
-    });
+    if (!globalState.registry) {
+        globalState.registry = new client.Registry();
+        client.collectDefaultMetrics({ register: globalState.registry });
 
-    httpRequestTotal = new client.Counter({
-        name: "http_requests_total",
-        help: "Total number of HTTP requests",
-        labelNames: ["method", "path", "status"],
-    });
+        globalState.httpRequestDuration = new client.Histogram({
+            name: "http_request_duration_ms",
+            help: "HTTP request duration in milliseconds",
+            labelNames: ["method", "path", "status"],
+            buckets: [5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000],
+            registers: [globalState.registry],
+        });
 
-    errorTotal = new client.Counter({
-        name: "http_errors_total",
-        help: "Total number of errors",
-        labelNames: ["type"],
-    });
+        globalState.httpRequestTotal = new client.Counter({
+            name: "http_requests_total",
+            help: "Total number of HTTP requests",
+            labelNames: ["method", "path", "status"],
+            registers: [globalState.registry],
+        });
 
-    cacheRequestTotal = new client.Counter({
-        name: "app_cache_requests_total",
-        help: "Total cache requests grouped by operation and result",
-        labelNames: ["cache", "operation", "result", "source"],
-    });
+        globalState.errorTotal = new client.Counter({
+            name: "http_errors_total",
+            help: "Total number of errors",
+            labelNames: ["type"],
+            registers: [globalState.registry],
+        });
 
-    permissionDecisionTotal = new client.Counter({
-        name: "permission_decisions_total",
-        help: "Total permission check decisions by resource/action/scope",
-        labelNames: ["resource", "action", "decision", "scope"],
-    });
+        globalState.cacheRequestTotal = new client.Counter({
+            name: "app_cache_requests_total",
+            help: "Total cache requests grouped by operation and result",
+            labelNames: ["cache", "operation", "result", "source"],
+            registers: [globalState.registry],
+        });
 
-    permissionCheckDuration = new client.Histogram({
-        name: "permission_check_duration_ms",
-        help: "Permission check duration in milliseconds",
-        labelNames: ["resource", "action", "decision"],
-        buckets: [1, 2, 5, 10, 25, 50, 100, 250, 500],
-    });
+        globalState.permissionDecisionTotal = new client.Counter({
+            name: "permission_decisions_total",
+            help: "Total permission check decisions by resource/action/scope",
+            labelNames: ["resource", "action", "decision", "scope"],
+            registers: [globalState.registry],
+        });
 
-    privilegeEventTotal = new client.Counter({
-        name: "privilege_events_total",
-        help: "Privilege-sensitive events such as offboarding cleanup",
-        labelNames: ["event", "result"],
-    });
+        globalState.permissionCheckDuration = new client.Histogram({
+            name: "permission_check_duration_ms",
+            help: "Permission check duration in milliseconds",
+            labelNames: ["resource", "action", "decision"],
+            buckets: [1, 2, 5, 10, 25, 50, 100, 250, 500],
+            registers: [globalState.registry],
+        });
 
-    registry.registerMetric(httpRequestDuration);
-    registry.registerMetric(httpRequestTotal);
-    registry.registerMetric(errorTotal);
-    registry.registerMetric(cacheRequestTotal);
-    registry.registerMetric(permissionDecisionTotal);
-    registry.registerMetric(permissionCheckDuration);
-    registry.registerMetric(privilegeEventTotal);
+        globalState.privilegeEventTotal = new client.Counter({
+            name: "privilege_events_total",
+            help: "Privilege-sensitive events such as offboarding cleanup",
+            labelNames: ["event", "result"],
+            registers: [globalState.registry],
+        });
+    }
+
+    registry = globalState.registry;
+    httpRequestDuration = globalState.httpRequestDuration;
+    httpRequestTotal = globalState.httpRequestTotal;
+    errorTotal = globalState.errorTotal;
+    cacheRequestTotal = globalState.cacheRequestTotal;
+    permissionDecisionTotal = globalState.permissionDecisionTotal;
+    permissionCheckDuration = globalState.permissionCheckDuration;
+    privilegeEventTotal = globalState.privilegeEventTotal;
 }
 
 export const metrics = {

@@ -10,7 +10,6 @@ import { paginationQuerySchema } from "../../utils/schemas/common.schema";
 import {
     createIngredientUnitSchema,
     ingredientUnitIdParamSchema,
-    ingredientUnitNameParamSchema,
     updateIngredientUnitSchema
 } from "../../utils/schemas/stock.schema";
 
@@ -26,7 +25,6 @@ router.use(requireBranch)
 
 router.get("/", authorizePermission("stock.ingredients_unit.page", "view"), validate(paginationQuerySchema), ingredientsUnitController.findAll)
 router.get("/:id", authorizePermission("stock.ingredients_unit.page", "view"), validate(ingredientUnitIdParamSchema), ingredientsUnitController.findOne)
-router.get("/unit_name/:unit_name", authorizePermission("stock.ingredients_unit.page", "view"), validate(ingredientUnitNameParamSchema), ingredientsUnitController.findOneByUnitName)
 router.post("/", authorizePermission("stock.ingredients_unit.page", "create"), validate(createIngredientUnitSchema), ingredientsUnitController.create)
 router.put("/:id", authorizePermission("stock.ingredients_unit.page", "update"), validate(updateIngredientUnitSchema), ingredientsUnitController.update)
 router.delete("/:id", authorizePermission("stock.ingredients_unit.page", "delete"), validate(ingredientUnitIdParamSchema), ingredientsUnitController.delete)

@@ -1,14 +1,16 @@
 import { OrdersModels, ChannelStats } from "../../models/pos/orders.model";
 import { SocketService } from "../socket.service";
-import { withCache, cacheKey, queryCache, invalidateCache } from "../../utils/cache";
+import { withCache, cacheKey, queryCache, invalidateCache, getCache } from "../../utils/cache";
 import { SalesOrder } from "../../entity/pos/SalesOrder";
 import { Tables, TableStatus } from "../../entity/pos/Tables";
 import { Delivery } from "../../entity/pos/Delivery";
 import { Discounts } from "../../entity/pos/Discounts";
+import { Payments } from "../../entity/pos/Payments";
 import { SalesOrderItem } from "../../entity/pos/SalesOrderItem";
 import { SalesOrderDetail } from "../../entity/pos/SalesOrderDetail";
 import { OrderStatus, OrderType, ServingStatus } from "../../entity/pos/OrderEnums";
 import { Products } from "../../entity/pos/Products";
+import { Topping } from "../../entity/pos/Topping";
 import { EntityManager, In } from "typeorm";
 import { randomUUID } from "crypto";
 import { recalculateOrderTotal } from "./orderTotals.service";
@@ -24,7 +26,9 @@ import { PermissionScope } from "../../middleware/permission.middleware";
 import { CreatedSort } from "../../utils/sortCreated";
 import { groupServingBoardRows, ServingBoardGroup, ServingBoardRow } from "../../utils/servingBoard";
 import { getTableCacheInvalidationPatterns } from "./tableCache.utils";
-import { getDashboardCacheInvalidationPatterns } from "./dashboardCache.utils";
+import { getReadModelVersionToken } from "./readModelVersion.utils";
+import { bumpOrderReadModelVersions, invalidateOrderReadCaches } from "./ordersReadCache.utils";
+import { OrderSummarySnapshotService } from "./orderSummarySnapshot.service";
 
 type AccessContext = {
     scope?: PermissionScope;
@@ -45,12 +49,27 @@ type MutatedOrderContext = {
 export class OrdersService {
     private socketService = SocketService.getInstance();
     private shiftsService = new ShiftsService();
+    private orderSummarySnapshotService = new OrderSummarySnapshotService();
     private readonly LIST_CACHE_PREFIX = "orders:list";
     private readonly LIST_CACHE_TTL = Number(process.env.ORDERS_LIST_CACHE_TTL_MS || 5000);
     private readonly SUMMARY_CACHE_PREFIX = "orders:summary";
     private readonly SUMMARY_CACHE_TTL = Number(process.env.ORDERS_SUMMARY_CACHE_TTL_MS || 10000);
     private readonly STATS_CACHE_PREFIX = "orders:stats";
     private readonly STATS_CACHE_TTL = Number(process.env.ORDERS_STATS_CACHE_TTL_MS || 10000);
+    private readonly summaryPayloadCache = getCache<any>("orders-summary-payload", {
+        maxSize: 500,
+        defaultTtl: Number(process.env.ORDERS_SUMMARY_PAYLOAD_CACHE_TTL_MS || 15_000),
+    });
+    private readonly statsPayloadCache = getCache<any>("orders-stats-payload", {
+        maxSize: 200,
+        defaultTtl: Number(process.env.ORDERS_STATS_PAYLOAD_CACHE_TTL_MS || 15_000),
+    });
+    private readonly READ_MODEL_WARMUP_ENABLED = process.env.POS_READ_MODEL_WARMUP_ENABLED !== "false";
+    private readonly READ_MODEL_WARMUP_LIMIT = Math.min(
+        Math.max(Number(process.env.POS_READ_MODEL_WARMUP_LIMIT || 20), 1),
+        50
+    );
+    private readonly pendingReadModelWarmups = new Map<string, Promise<void>>();
 
     constructor(private ordersModel: OrdersModels) { }
 
@@ -82,15 +101,89 @@ export class OrdersService {
         return ["scope", scope];
     }
 
-    private invalidateReadCaches(branchId?: string): void {
+    private async buildVersionedCacheKey(
+        prefix: string,
+        branchId: string | undefined,
+        access: AccessContext | undefined,
+        ...parts: Array<string | number | boolean | undefined>
+    ): Promise<string> {
         const scope = this.getCacheScopeParts(branchId);
-        const patterns = [
-            cacheKey(this.LIST_CACHE_PREFIX, ...scope),
-            cacheKey(this.SUMMARY_CACHE_PREFIX, ...scope),
-            cacheKey(this.STATS_CACHE_PREFIX, ...scope),
-            ...getDashboardCacheInvalidationPatterns(branchId),
-        ];
-        invalidateCache(patterns);
+        const accessScope = this.getAccessCacheScopeParts(access);
+        const versionToken = await getReadModelVersionToken(
+            "orders",
+            scope[0] === "branch" ? scope[1] : undefined
+        );
+        return cacheKey(prefix, ...scope, ...accessScope, versionToken, ...parts);
+    }
+
+    private invalidateReadCaches(branchId?: string): void {
+        invalidateOrderReadCaches(branchId);
+    }
+
+    private async bumpReadModelVersions(branchId?: string): Promise<void> {
+        await bumpOrderReadModelVersions(branchId);
+    }
+
+    async warmReadModels(branchId?: string): Promise<void> {
+        if (!this.READ_MODEL_WARMUP_ENABLED) {
+            return;
+        }
+
+        const warmupKey = branchId || "global";
+        const existingWarmup = this.pendingReadModelWarmups.get(warmupKey);
+        if (existingWarmup) {
+            return existingWarmup;
+        }
+
+        const warmupPromise = (async () => {
+            const warmStatuses = [
+                undefined,
+                [OrderStatus.Pending],
+                [OrderStatus.WaitingForPayment],
+                [OrderStatus.Pending, OrderStatus.WaitingForPayment],
+            ] as Array<string[] | undefined>;
+
+            const tasks: Array<Promise<unknown>> = [
+                this.getStats(branchId, undefined, { bypassCache: false }),
+            ];
+
+            for (const statuses of warmStatuses) {
+                tasks.push(
+                    this.findAllSummary(
+                        1,
+                        this.READ_MODEL_WARMUP_LIMIT,
+                        statuses,
+                        undefined,
+                        undefined,
+                        branchId,
+                        undefined,
+                        { bypassCache: false },
+                        "old"
+                    )
+                );
+            }
+
+            await Promise.allSettled(tasks);
+        })().finally(() => {
+            this.pendingReadModelWarmups.delete(warmupKey);
+        });
+
+        this.pendingReadModelWarmups.set(warmupKey, warmupPromise);
+        return warmupPromise;
+    }
+
+    private scheduleReadModelWarmup(branchId?: string): void {
+        if (!this.READ_MODEL_WARMUP_ENABLED) {
+            return;
+        }
+
+        const timer = setTimeout(() => {
+            void this.warmReadModels(branchId);
+        }, 25);
+
+        if (typeof timer.unref === "function") {
+            timer.unref();
+        }
     }
 
     private invalidateTableCache(branchId?: string, tableId?: string): void {
@@ -303,17 +396,123 @@ export class OrdersService {
         return this.ordersModel.findOne(orderId, branchId);
     }
 
+    private async getOrderRealtimePayload(order: SalesOrder | null, orderId: string): Promise<Record<string, unknown> | null> {
+        if (!order) {
+            return null;
+        }
+
+        const summarySnapshot = await this.orderSummarySnapshotService.getPayload(orderId);
+        return {
+            ...order,
+            summary_snapshot: summarySnapshot,
+        };
+    }
+
+    private getToppingDisplayPrice(topping: Topping, orderType?: OrderType): number {
+        if (orderType === OrderType.Delivery) {
+            return Number(topping.price_delivery ?? topping.price ?? 0);
+        }
+
+        return Number(topping.price ?? 0);
+    }
+
+    private async loadAvailableToppingsMap(
+        toppingIds: string[],
+        manager: EntityManager,
+        branchId?: string
+    ): Promise<Map<string, Topping>> {
+        const normalizedIds = Array.from(new Set(toppingIds.map((id) => String(id || "").trim()).filter(Boolean)));
+        if (normalizedIds.length === 0) {
+            return new Map();
+        }
+
+        const toppingRepo = manager.getRepository(Topping);
+        const query = toppingRepo
+            .createQueryBuilder("topping")
+            .leftJoinAndSelect("topping.categories", "category")
+            .where("topping.id IN (:...ids)", { ids: normalizedIds })
+            .andWhere("topping.is_active = true");
+
+        if (branchId) {
+            query.andWhere("topping.branch_id = :branchId", { branchId });
+        }
+
+        const toppings = await query.getMany();
+        if (toppings.length !== normalizedIds.length) {
+            throw AppError.badRequest("One or more selected toppings are unavailable");
+        }
+
+        return new Map(toppings.map((topping) => [topping.id, topping]));
+    }
+
+    private buildPreparedDetails(
+        detailsData: any[],
+        product: Products,
+        toppingMap: Map<string, Topping>,
+        orderType?: OrderType
+    ): SalesOrderDetail[] {
+        const details: SalesOrderDetail[] = [];
+
+        for (const rawDetail of detailsData) {
+            const toppingId = typeof rawDetail?.topping_id === "string" ? rawDetail.topping_id.trim() : "";
+
+            if (toppingId) {
+                const topping = toppingMap.get(toppingId);
+                if (!topping) {
+                    throw AppError.badRequest("One or more selected toppings are unavailable");
+                }
+
+                const categoryIds = (topping.categories || []).map((category) => category.id);
+                if (product.category_id && categoryIds.length > 0 && !categoryIds.includes(product.category_id)) {
+                    throw AppError.badRequest(`Topping "${topping.display_name}" is not available for this product`);
+                }
+
+                const detail = new SalesOrderDetail();
+                detail.topping_id = topping.id;
+                detail.detail_name = topping.display_name;
+                detail.extra_price = this.getToppingDisplayPrice(topping, orderType);
+                details.push(detail);
+                continue;
+            }
+
+            const detailName = String(rawDetail?.detail_name ?? "").trim();
+            const extraPrice = Number(rawDetail?.extra_price || 0);
+
+            if (!detailName) {
+                if (!extraPrice) {
+                    continue;
+                }
+                throw AppError.badRequest("Detail name is required");
+            }
+
+            if (!Number.isFinite(extraPrice) || extraPrice < 0) {
+                throw AppError.badRequest("Invalid extra price");
+            }
+
+            const detail = new SalesOrderDetail();
+            detail.topping_id = null;
+            detail.detail_name = detailName;
+            detail.extra_price = extraPrice;
+            details.push(detail);
+        }
+
+        return details;
+    }
+
     private async finalizeOrderMutation(context: MutatedOrderContext, event: string): Promise<SalesOrder | null> {
         const order = await this.refreshOrderAfterCommit(context.orderId, context.branchId);
         const effectiveBranchId = order?.branch_id || context.branchId;
 
+        await this.bumpReadModelVersions(effectiveBranchId);
         this.invalidateReadCaches(effectiveBranchId);
+        this.scheduleReadModelWarmup(effectiveBranchId);
 
         if (effectiveBranchId) {
             if (event === RealtimeEvents.orders.delete) {
                 this.socketService.emitToBranch(effectiveBranchId, event, { id: context.orderId });
             } else if (order) {
-                this.socketService.emitToBranch(effectiveBranchId, event, order);
+                const realtimePayload = await this.getOrderRealtimePayload(order, context.orderId);
+                this.socketService.emitToBranch(effectiveBranchId, event, realtimePayload ?? order);
             }
         }
 
@@ -357,6 +556,20 @@ export class OrdersService {
 
         // 3. Create Map for O(1) Lookup
         const productMap = new Map(products.map(p => [p.id, p]));
+        const toppingIds = Array.from(
+            new Set(
+                items.flatMap((item) =>
+                    Array.isArray(item?.details)
+                        ? item.details
+                              .map((detail: any) =>
+                                  typeof detail?.topping_id === "string" ? detail.topping_id.trim() : ""
+                              )
+                              .filter(Boolean)
+                        : []
+                )
+            )
+        );
+        const toppingMap = await this.loadAvailableToppingsMap(toppingIds, manager, branchId);
 
         const prepared: Array<{ item: SalesOrderItem; details: SalesOrderDetail[] }> = [];
 
@@ -383,7 +596,8 @@ export class OrdersService {
             }
 
             const detailsData = Array.isArray(itemData.details) ? itemData.details : [];
-            const detailsTotal = detailsData.reduce((sum: number, d: any) => sum + (Number(d?.extra_price) || 0), 0);
+            const details = this.buildPreparedDetails(detailsData, product, toppingMap, orderType);
+            const detailsTotal = details.reduce((sum: number, detail) => sum + (Number(detail.extra_price) || 0), 0);
 
             const unitPrice =
                 orderType === OrderType.Delivery
@@ -404,13 +618,6 @@ export class OrdersService {
             item.status = itemData.status
                 ? this.ensureValidStatus(String(itemData.status))
                 : OrderStatus.Pending;
-
-            const details: SalesOrderDetail[] = detailsData.map((d: any) => {
-                const detail = new SalesOrderDetail();
-                detail.detail_name = d?.detail_name ?? "";
-                detail.extra_price = Number(d?.extra_price || 0);
-                return detail;
-            });
 
             prepared.push({ item, details });
         }
@@ -475,14 +682,16 @@ export class OrdersService {
         access?: AccessContext,
         sortCreated: CreatedSort = "old"
     ): Promise<{ data: SalesOrder[], total: number, page: number, limit: number }> {
+        if (query?.trim() || page > 1) {
+            return this.ordersModel.findAll(page, limit, statuses, type, query, branchId, access, sortCreated);
+        }
+
         const statusKey = statuses?.length ? statuses.join(",") : "all";
         const typeKey = type || "all";
-        const scope = this.getCacheScopeParts(branchId);
-        const accessScope = this.getAccessCacheScopeParts(access);
-        const key = cacheKey(
+        const key = await this.buildVersionedCacheKey(
             this.LIST_CACHE_PREFIX,
-            ...scope,
-            ...accessScope,
+            branchId,
+            access,
             "list",
             page,
             limit,
@@ -490,10 +699,6 @@ export class OrdersService {
             typeKey,
             sortCreated
         );
-
-        if (query?.trim() || page > 1) {
-            return this.ordersModel.findAll(page, limit, statuses, type, query, branchId, access, sortCreated);
-        }
 
         return withCache(
             key,
@@ -518,14 +723,16 @@ export class OrdersService {
         options?: { bypassCache?: boolean },
         sortCreated: CreatedSort = "old"
     ): Promise<{ data: any[], total: number, page: number, limit: number }> {
+        if (options?.bypassCache || query?.trim()) {
+            return this.ordersModel.findAllSummary(page, limit, statuses, type, query, branchId, access, sortCreated);
+        }
+
         const statusKey = statuses?.length ? statuses.join(",") : "all";
         const typeKey = type || "all";
-        const scope = this.getCacheScopeParts(branchId);
-        const accessScope = this.getAccessCacheScopeParts(access);
-        const key = cacheKey(
+        const key = await this.buildVersionedCacheKey(
             this.SUMMARY_CACHE_PREFIX,
-            ...scope,
-            ...accessScope,
+            branchId,
+            access,
             "list",
             page,
             limit,
@@ -534,15 +741,11 @@ export class OrdersService {
             sortCreated
         );
 
-        if (options?.bypassCache || query?.trim()) {
-            return this.ordersModel.findAllSummary(page, limit, statuses, type, query, branchId, access, sortCreated);
-        }
-
         return withCache(
             key,
             () => this.ordersModel.findAllSummary(page, limit, statuses, type, query, branchId, access, sortCreated),
             this.SUMMARY_CACHE_TTL,
-            queryCache as any,
+            this.summaryPayloadCache as any,
             {
                 onHit: (source) => this.observeCache("orders.summary.list", "hit", source),
                 onMiss: () => this.observeCache("orders.summary.list", "miss"),
@@ -562,15 +765,13 @@ export class OrdersService {
             return this.ordersModel.getStats(activeStatuses, branchId, access);
         }
 
-        const scope = this.getCacheScopeParts(branchId);
-        const accessScope = this.getAccessCacheScopeParts(access);
-        const key = cacheKey(this.STATS_CACHE_PREFIX, ...scope, ...accessScope, "active");
+        const key = await this.buildVersionedCacheKey(this.STATS_CACHE_PREFIX, branchId, access, "active");
 
         return withCache(
             key,
             () => this.ordersModel.getStats(activeStatuses, branchId, access),
             this.STATS_CACHE_TTL,
-            queryCache as any,
+            this.statsPayloadCache as any,
             {
                 onHit: (source) => this.observeCache("orders.stats.active", "hit", source),
                 onMiss: () => this.observeCache("orders.stats.active", "miss"),
@@ -759,6 +960,7 @@ export class OrdersService {
             }
 
             const savedOrder = await this.saveOrderWithRetry(manager, orderData, !orderData.order_no);
+            await this.orderSummarySnapshotService.syncOrder(savedOrder.id, manager);
 
             if (lockedTable) {
                 lockedTable.status = TableStatus.Unavailable;
@@ -838,6 +1040,7 @@ export class OrdersService {
 
             await recalculateOrderTotal(savedOrder.id, manager);
             await this.syncOrderStatusFromItems(savedOrder.id, effectiveBranchId, manager);
+            await this.orderSummarySnapshotService.syncOrder(savedOrder.id, manager);
             return savedOrder;
         });
 
@@ -893,6 +1096,7 @@ export class OrdersService {
 
             await recalculateOrderTotal(id, manager);
             await this.syncOrderStatusFromItems(id, effectiveBranchId, manager);
+            await this.orderSummarySnapshotService.syncOrder(id, manager);
 
             const refreshedOrder = await this.ordersModel.findOne(id, effectiveBranchId, undefined, manager);
             if (!refreshedOrder) {
@@ -956,6 +1160,20 @@ export class OrdersService {
                 }
             }
 
+            const itemIds = (
+                await manager.getRepository(SalesOrderItem).find({
+                    select: { id: true },
+                    where: { order_id: id },
+                })
+            ).map((item) => item.id);
+
+            await manager.getRepository(Payments).delete({ order_id: id });
+            if (itemIds.length > 0) {
+                await manager.getRepository(SalesOrderDetail).delete({
+                    orders_item_id: In(itemIds),
+                });
+            }
+            await manager.getRepository(SalesOrderItem).delete({ order_id: id });
             await this.ordersModel.delete(id, manager, effectiveBranchId);
             return {
                 orderId: id,
@@ -980,6 +1198,7 @@ export class OrdersService {
 
             await recalculateOrderTotal(item.order_id, manager);
             await this.syncOrderStatusFromItems(item.order_id, effectiveBranchId, manager);
+            await this.orderSummarySnapshotService.syncOrder(item.order_id, manager);
 
             return {
                 orderId: item.order_id,
@@ -1023,18 +1242,22 @@ export class OrdersService {
 
                 await recalculateOrderTotal(orderId, manager);
                 await this.syncOrderStatusFromItems(orderId, branchId, manager);
+                await this.orderSummarySnapshotService.syncOrder(orderId, manager);
 
                 const updatedOrder = await this.ordersModel.findOne(orderId, branchId, undefined, manager);
                 return updatedOrder!;
             } catch (error) {
                 throw error;
             }
-        }).then((updatedOrder) => {
+        }).then(async (updatedOrder) => {
             if (updatedOrder) {
                 const effectiveBranchId = updatedOrder.branch_id || branchId;
+                await this.bumpReadModelVersions(effectiveBranchId);
                 this.invalidateReadCaches(effectiveBranchId);
+                this.scheduleReadModelWarmup(effectiveBranchId);
                 if (effectiveBranchId) {
-                    this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.update, updatedOrder);
+                    const payload = await this.getOrderRealtimePayload(updatedOrder, updatedOrder.id);
+                    this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.update, payload ?? updatedOrder);
                 }
             }
             return updatedOrder!;
@@ -1054,17 +1277,38 @@ export class OrdersService {
                 const detailRepo = manager.getRepository(SalesOrderDetail);
 
                 if (data.details !== undefined) {
+                    if (!item.product) {
+                        throw AppError.notFound("Product");
+                    }
+
+                    const toppingIds = Array.from(
+                        new Set(
+                            (Array.isArray(data.details) ? data.details : [])
+                                .map((detail: any) =>
+                                    typeof detail?.topping_id === "string" ? detail.topping_id.trim() : ""
+                                )
+                                .filter(Boolean)
+                        )
+                    );
+                    const toppingMap = await this.loadAvailableToppingsMap(
+                        toppingIds,
+                        manager,
+                        item.order?.branch_id || branchId
+                    );
+                    const nextDetails = this.buildPreparedDetails(
+                        Array.isArray(data.details) ? data.details : [],
+                        item.product,
+                        toppingMap,
+                        item.order?.order_type
+                    );
+
                     // 1. Delete existing details
                     await detailRepo.delete({ orders_item_id: itemId });
 
                     // 2. Add new details
-                    if (Array.isArray(data.details) && data.details.length > 0) {
-                        for (const d of data.details) {
-                            if (!d.detail_name && !d.extra_price) continue;
-                            const detail = new SalesOrderDetail();
+                    if (nextDetails.length > 0) {
+                        for (const detail of nextDetails) {
                             detail.orders_item_id = itemId;
-                            detail.detail_name = d.detail_name || "";
-                            detail.extra_price = Number(d.extra_price || 0);
                             await detailRepo.save(detail);
                         }
                     }
@@ -1097,6 +1341,7 @@ export class OrdersService {
 
                 await recalculateOrderTotal(updatedItemWithDetails.order_id, manager);
                 await this.syncOrderStatusFromItems(updatedItemWithDetails.order_id, branchId, manager);
+                await this.orderSummarySnapshotService.syncOrder(updatedItemWithDetails.order_id, manager);
 
                 const updatedOrder = await this.ordersModel.findOne(
                     updatedItemWithDetails.order_id,
@@ -1108,12 +1353,15 @@ export class OrdersService {
             } catch (error) {
                 throw error;
             }
-        }).then((updatedOrder) => {
+        }).then(async (updatedOrder) => {
             if (updatedOrder) {
                 const effectiveBranchId = updatedOrder.branch_id || branchId;
+                await this.bumpReadModelVersions(effectiveBranchId);
                 this.invalidateReadCaches(effectiveBranchId);
+                this.scheduleReadModelWarmup(effectiveBranchId);
                 if (effectiveBranchId) {
-                    this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.update, updatedOrder);
+                    const payload = await this.getOrderRealtimePayload(updatedOrder, updatedOrder.id);
+                    this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.update, payload ?? updatedOrder);
                 }
             }
             return updatedOrder!;
@@ -1134,18 +1382,22 @@ export class OrdersService {
 
                 await recalculateOrderTotal(orderId, manager);
                 await this.syncOrderStatusFromItems(orderId, branchId, manager);
+                await this.orderSummarySnapshotService.syncOrder(orderId, manager);
 
                 const updatedOrder = await this.ordersModel.findOne(orderId, branchId, undefined, manager);
                 return updatedOrder!;
             } catch (error) {
                 throw error;
             }
-        }).then((updatedOrder) => {
+        }).then(async (updatedOrder) => {
             if (updatedOrder) {
                 const effectiveBranchId = updatedOrder.branch_id || branchId;
+                await this.bumpReadModelVersions(effectiveBranchId);
                 this.invalidateReadCaches(effectiveBranchId);
+                this.scheduleReadModelWarmup(effectiveBranchId);
                 if (effectiveBranchId) {
-                    this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.update, updatedOrder);
+                    const payload = await this.getOrderRealtimePayload(updatedOrder, updatedOrder.id);
+                    this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.orders.update, payload ?? updatedOrder);
                 }
             }
             return updatedOrder!;

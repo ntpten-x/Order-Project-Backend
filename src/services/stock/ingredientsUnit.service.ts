@@ -1,24 +1,69 @@
+import { getDbContext, getRepository } from "../../database/dbContext";
+import { Ingredients } from "../../entity/stock/Ingredients";
 import { IngredientsUnit } from "../../entity/stock/IngredientsUnit";
 import { IngredientsUnitModel } from "../../models/stock/ingredientsUnit.model";
-import { SocketService } from "../socket.service";
+import { AppError } from "../../utils/AppError";
+import { cacheKey, invalidateCache, metadataCache, withCache } from "../../utils/cache";
 import { RealtimeEvents } from "../../utils/realtimeEvents";
 import { CreatedSort } from "../../utils/sortCreated";
+import { SocketService } from "../socket.service";
 
 export class IngredientsUnitService {
     private socketService = SocketService.getInstance();
+    private readonly CACHE_PREFIX = "ingredients_unit";
+    private readonly CACHE_TTL = 2 * 60 * 1000;
 
-    constructor(private ingredientsUnitModel: IngredientsUnitModel) { }
+    constructor(private ingredientsUnitModel: IngredientsUnitModel) {}
+
+    private getCacheScopeParts(branchId?: string): Array<string> {
+        const ctx = getDbContext();
+        const effectiveBranchId = branchId ?? ctx?.branchId;
+        if (effectiveBranchId) return ["branch", effectiveBranchId];
+        if (ctx?.isAdmin) return ["admin"];
+        return ["public"];
+    }
+
+    private invalidateIngredientsUnitCache(branchId?: string, id?: string): void {
+        const ctx = getDbContext();
+        const effectiveBranchId = branchId ?? ctx?.branchId;
+
+        if (!effectiveBranchId) {
+            invalidateCache([`${this.CACHE_PREFIX}:`]);
+            return;
+        }
+
+        const patterns = [
+            cacheKey(this.CACHE_PREFIX, "branch", effectiveBranchId, "list"),
+            cacheKey(this.CACHE_PREFIX, "branch", effectiveBranchId, "list_page"),
+            cacheKey(this.CACHE_PREFIX, "branch", effectiveBranchId, "single"),
+            cacheKey(this.CACHE_PREFIX, "branch", effectiveBranchId, "display_name"),
+        ];
+
+        if (id) {
+            patterns.push(cacheKey(this.CACHE_PREFIX, "branch", effectiveBranchId, "single", id));
+        }
+
+        invalidateCache(patterns);
+    }
+
+    private normalizeDisplayName(displayName?: string | null): string {
+        return String(displayName || "").trim();
+    }
 
     async findAll(
         filters?: { is_active?: boolean },
         branchId?: string,
         sortCreated: CreatedSort = "old"
     ): Promise<IngredientsUnit[]> {
-        try {
-            return this.ingredientsUnitModel.findAll(filters, branchId, sortCreated)
-        } catch (error) {
-            throw error
-        }
+        const scope = this.getCacheScopeParts(branchId);
+        const key = cacheKey(this.CACHE_PREFIX, ...scope, "list", sortCreated, JSON.stringify(filters || {}));
+
+        return withCache(
+            key,
+            () => this.ingredientsUnitModel.findAll(filters, branchId, sortCreated),
+            this.CACHE_TTL,
+            metadataCache as any
+        );
     }
 
     async findAllPaginated(
@@ -28,95 +73,150 @@ export class IngredientsUnitService {
         branchId?: string,
         sortCreated: CreatedSort = "old"
     ): Promise<{ data: IngredientsUnit[]; total: number; page: number; limit: number; last_page: number }> {
-        try {
-            return this.ingredientsUnitModel.findAllPaginated(page, limit, filters, branchId, sortCreated);
-        } catch (error) {
-            throw error;
-        }
+        const scope = this.getCacheScopeParts(branchId);
+        const key = cacheKey(
+            this.CACHE_PREFIX,
+            ...scope,
+            "list_page",
+            page,
+            limit,
+            sortCreated,
+            JSON.stringify(filters || {})
+        );
+
+        return withCache(
+            key,
+            () => this.ingredientsUnitModel.findAllPaginated(page, limit, filters, branchId, sortCreated),
+            this.CACHE_TTL,
+            metadataCache as any
+        );
     }
 
     async findOne(id: string, branchId?: string): Promise<IngredientsUnit | null> {
-        try {
-            return this.ingredientsUnitModel.findOne(id, branchId)
-        } catch (error) {
-            throw error
-        }
+        const scope = this.getCacheScopeParts(branchId);
+        const key = cacheKey(this.CACHE_PREFIX, ...scope, "single", id);
+
+        return withCache(
+            key,
+            () => this.ingredientsUnitModel.findOne(id, branchId),
+            this.CACHE_TTL,
+            metadataCache as any
+        );
     }
 
-    async findOneByUnitName(unit_name: string, branchId?: string): Promise<IngredientsUnit | null> {
-        try {
-            return this.ingredientsUnitModel.findOneByUnitName(unit_name, branchId)
-        } catch (error) {
-            throw error
-        }
+    async findOneByDisplayName(displayName: string, branchId?: string): Promise<IngredientsUnit | null> {
+        const normalizedDisplayName = this.normalizeDisplayName(displayName).toLowerCase();
+        const scope = this.getCacheScopeParts(branchId);
+        const key = cacheKey(this.CACHE_PREFIX, ...scope, "display_name", normalizedDisplayName);
+
+        return withCache(
+            key,
+            () => this.ingredientsUnitModel.findOneByDisplayName(normalizedDisplayName, branchId),
+            this.CACHE_TTL,
+            metadataCache as any
+        );
     }
 
     async create(ingredientsUnit: IngredientsUnit, branchId?: string): Promise<IngredientsUnit> {
-        try {
-            const effectiveBranchId = branchId || ingredientsUnit.branch_id;
-            if (effectiveBranchId) {
-                ingredientsUnit.branch_id = effectiveBranchId;
-            }
-
-            // Check for duplicate name within the same branch
-            if (ingredientsUnit.unit_name && effectiveBranchId) {
-                const existing = await this.ingredientsUnitModel.findOneByUnitName(ingredientsUnit.unit_name, effectiveBranchId);
-                if (existing) {
-                    throw new Error("ชื่อหน่วยนับนี้มีอยู่ในระบบแล้ว");
-                }
-            }
-            
-            // @ts-ignore - model returns {id} essentially
-            const savedIngredientsUnit = await this.ingredientsUnitModel.create(ingredientsUnit)
-            const createdIngredientsUnit = await this.ingredientsUnitModel.findOne(savedIngredientsUnit.id, effectiveBranchId)
-            if (createdIngredientsUnit) {
-                if (effectiveBranchId) {
-                    this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.ingredientsUnit.create, createdIngredientsUnit)
-                }
-                return createdIngredientsUnit
-            }
-            return savedIngredientsUnit
-        } catch (error) {
-            throw error
+        const effectiveBranchId = branchId || ingredientsUnit.branch_id;
+        if (!effectiveBranchId) {
+            throw AppError.badRequest("ไม่พบสาขาที่ต้องการใช้งาน");
         }
+
+        const displayName = this.normalizeDisplayName(ingredientsUnit.display_name);
+        if (!displayName) {
+            throw AppError.badRequest("กรุณาระบุชื่อหน่วยนับที่ใช้แสดง");
+        }
+
+        const duplicateByDisplayName = await this.ingredientsUnitModel.findOneByDisplayName(displayName, effectiveBranchId);
+        if (duplicateByDisplayName) {
+            throw AppError.conflict(`ชื่อหน่วยนับ "${displayName}" ถูกใช้งานแล้ว`);
+        }
+
+        const savedIngredientsUnit = await this.ingredientsUnitModel.create({
+            ...ingredientsUnit,
+            branch_id: effectiveBranchId,
+            display_name: displayName,
+        } as IngredientsUnit);
+
+        const createdIngredientsUnit = await this.ingredientsUnitModel.findOne(savedIngredientsUnit.id, effectiveBranchId);
+        if (!createdIngredientsUnit) {
+            throw AppError.internal("สร้างหน่วยนับวัตถุดิบไม่สำเร็จ");
+        }
+
+        this.invalidateIngredientsUnitCache(effectiveBranchId, createdIngredientsUnit.id);
+        this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.ingredientsUnit.create, createdIngredientsUnit);
+        return createdIngredientsUnit;
     }
 
     async update(id: string, ingredientsUnit: IngredientsUnit, branchId?: string): Promise<IngredientsUnit> {
-        try {
-            const existing = await this.ingredientsUnitModel.findOne(id, branchId);
-            if (!existing) throw new Error("Ingredients unit not found");
-
-            const effectiveBranchId = branchId || existing.branch_id || ingredientsUnit.branch_id;
-            if (effectiveBranchId) {
-                ingredientsUnit.branch_id = effectiveBranchId;
-            }
-
-            await this.ingredientsUnitModel.update(id, ingredientsUnit, effectiveBranchId)
-            const updatedIngredientsUnit = await this.ingredientsUnitModel.findOne(id, effectiveBranchId)
-            if (updatedIngredientsUnit) {
-                if (effectiveBranchId) {
-                    this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.ingredientsUnit.update, updatedIngredientsUnit)
-                }
-                return updatedIngredientsUnit
-            }
-            throw new Error("พบข้อผิดพลาดในการอัปเดตหน่วยนับวัตถุดิบ")
-        } catch (error) {
-            throw error
+        const existing = await this.ingredientsUnitModel.findOne(id, branchId);
+        if (!existing) {
+            throw new AppError("ไม่พบหน่วยนับวัตถุดิบ", 404);
         }
+
+        const effectiveBranchId = branchId || existing.branch_id || ingredientsUnit.branch_id;
+        if (!effectiveBranchId) {
+            throw AppError.badRequest("ไม่พบสาขาที่ต้องการใช้งาน");
+        }
+
+        const nextDisplayName = this.normalizeDisplayName(ingredientsUnit.display_name ?? existing.display_name);
+        if (!nextDisplayName) {
+            throw AppError.badRequest("กรุณาระบุชื่อหน่วยนับที่ใช้แสดง");
+        }
+
+        const duplicateByDisplayName = await this.ingredientsUnitModel.findOneByDisplayName(nextDisplayName, effectiveBranchId);
+        if (duplicateByDisplayName && duplicateByDisplayName.id !== id) {
+            throw AppError.conflict(`ชื่อหน่วยนับ "${nextDisplayName}" ถูกใช้งานแล้ว`);
+        }
+
+        await this.ingredientsUnitModel.update(
+            id,
+            {
+                ...existing,
+                ...ingredientsUnit,
+                branch_id: effectiveBranchId,
+                display_name: nextDisplayName,
+            } as IngredientsUnit,
+            effectiveBranchId
+        );
+
+        const updatedIngredientsUnit = await this.ingredientsUnitModel.findOne(id, effectiveBranchId);
+        if (!updatedIngredientsUnit) {
+            throw AppError.internal("บันทึกการแก้ไขหน่วยนับวัตถุดิบไม่สำเร็จ");
+        }
+
+        this.invalidateIngredientsUnitCache(effectiveBranchId, id);
+        this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.ingredientsUnit.update, updatedIngredientsUnit);
+        return updatedIngredientsUnit;
     }
 
     async delete(id: string, branchId?: string): Promise<void> {
-        try {
-            const existing = await this.ingredientsUnitModel.findOne(id, branchId);
-            if (!existing) throw new Error("Ingredients unit not found");
-
-            const effectiveBranchId = branchId || existing.branch_id;
-            await this.ingredientsUnitModel.delete(id, effectiveBranchId)
-            if (effectiveBranchId) {
-                this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.ingredientsUnit.delete, { id })
-            }
-        } catch (error) {
-            throw error
+        const existing = await this.ingredientsUnitModel.findOne(id, branchId);
+        if (!existing) {
+            throw new AppError("ไม่พบหน่วยนับวัตถุดิบ", 404);
         }
+
+        const effectiveBranchId = branchId || existing.branch_id;
+        if (!effectiveBranchId) {
+            throw AppError.badRequest("ไม่พบสาขาที่ต้องการใช้งาน");
+        }
+
+        const linkedIngredientsCount = await getRepository(Ingredients).count({
+            where: {
+                unit_id: id,
+                branch_id: effectiveBranchId,
+            } as any,
+        });
+
+        if (linkedIngredientsCount > 0) {
+            throw AppError.conflict(
+                `ลบหน่วยนับไม่ได้ เนื่องจากยังมีวัตถุดิบ ${linkedIngredientsCount} รายการอ้างอิงอยู่`
+            );
+        }
+
+        await this.ingredientsUnitModel.delete(id, effectiveBranchId);
+        this.invalidateIngredientsUnitCache(effectiveBranchId, id);
+        this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.ingredientsUnit.delete, { id });
     }
 }

@@ -5,12 +5,16 @@ import { TablesService } from "../../services/pos/tables.service";
 const {
     emitToBranchMock,
     invalidateCacheMock,
+    invalidateLocalCacheMock,
     getDbContextMock,
+    getDbManagerMock,
     getRepositoryMock,
 } = vi.hoisted(() => ({
     emitToBranchMock: vi.fn(),
     invalidateCacheMock: vi.fn(),
+    invalidateLocalCacheMock: vi.fn(),
     getDbContextMock: vi.fn(),
+    getDbManagerMock: vi.fn(),
     getRepositoryMock: vi.fn(),
 }));
 
@@ -24,6 +28,7 @@ vi.mock("../../services/socket.service", () => ({
 
 vi.mock("../../database/dbContext", () => ({
     getDbContext: getDbContextMock,
+    getDbManager: getDbManagerMock,
     getRepository: getRepositoryMock,
 }));
 
@@ -31,6 +36,7 @@ vi.mock("../../utils/cache", () => ({
     cacheKey: (...parts: Array<string | number | boolean | undefined>) =>
         parts.map((part) => (part === undefined ? "" : String(part))).join(":"),
     invalidateCache: invalidateCacheMock,
+    invalidateLocalCache: invalidateLocalCacheMock,
     queryCache: {},
     withCache: async <T,>(_: string, fetcher: () => Promise<T>) => fetcher(),
 }));
@@ -39,6 +45,10 @@ describe("tables and delivery services", () => {
     beforeEach(() => {
         vi.clearAllMocks();
         getDbContextMock.mockReturnValue({ branchId: "branch-1", isAdmin: false });
+        getDbManagerMock.mockReturnValue({
+            query: vi.fn().mockResolvedValue([]),
+            getRepository: vi.fn(),
+        });
     });
 
     it("normalizes table names and avoids duplicate checks for casing-only updates", async () => {

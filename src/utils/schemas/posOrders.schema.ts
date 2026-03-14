@@ -16,15 +16,18 @@ export const orderItemIdParamSchema = z.object({
     })
 });
 
-export const servingGroupIdParamSchema = z.object({
-    params: z.object({
-        id: uuid
-    })
-});
-
 export const orderItemDetailSchema = z.object({
-    detail_name: z.string().min(1),
+    topping_id: uuid.optional(),
+    detail_name: z.string().trim().min(1).optional(),
     extra_price: z.coerce.number().min(0).optional()
+}).superRefine((value, ctx) => {
+    if (!value.topping_id && !value.detail_name) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "detail_name or topping_id is required",
+            path: ["detail_name"],
+        });
+    }
 }).passthrough();
 
 export const orderItemSchema = z.object({

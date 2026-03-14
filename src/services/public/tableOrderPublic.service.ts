@@ -4,6 +4,7 @@ import { Products } from "../../entity/pos/Products";
 import { SalesOrder } from "../../entity/pos/SalesOrder";
 import { SalesOrderItem } from "../../entity/pos/SalesOrderItem";
 import { Tables } from "../../entity/pos/Tables";
+import { Topping } from "../../entity/pos/Topping";
 import { getRepository, runInTransaction, runWithDbContext } from "../../database/dbContext";
 import { AppError } from "../../utils/AppError";
 import { OrdersModels } from "../../models/pos/orders.model";
@@ -18,6 +19,9 @@ type PublicOrderItemInput = {
     product_id: string;
     quantity: number;
     notes?: string;
+    details?: Array<{
+        topping_id: string;
+    }>;
 };
 
 type SubmitOrderInput = {
@@ -72,7 +76,15 @@ export class PublicTableOrderService {
     }
 
     private async ensurePublicOrderingAvailable(branchId: string): Promise<void> {
-        const activeShift = await this.shiftsService.getCurrentShift(branchId);
+        const activeShift = await runWithDbContext(
+            {
+                branchId,
+                userId: "public-table-order",
+                role: "public",
+                isAdmin: false,
+            },
+            () => this.shiftsService.getCurrentShift(branchId),
+        );
         if (!activeShift) {
             throw new AppError("Public ordering is unavailable while the shift is closed", 403);
         }
@@ -109,19 +121,6 @@ export class PublicTableOrderService {
             .andWhere("order.status IN (:...statuses)", { statuses })
             .orderBy("order.create_date", "DESC")
             .getOne();
-    }
-
-    private assertNoCustomerModifiers(items: unknown[]): void {
-        const hasDetails = items.some(
-            (item) =>
-                item &&
-                typeof item === "object" &&
-                Object.prototype.hasOwnProperty.call(item as Record<string, unknown>, "details"),
-        );
-
-        if (hasDetails) {
-            throw new AppError("QR ordering supports notes only. Modifiers are not allowed.", 400);
-        }
     }
 
     private async assertProductsAvailableForPublicOrder(
@@ -169,6 +168,7 @@ export class PublicTableOrderService {
                     id: detail.id,
                     detail_name: detail.detail_name,
                     extra_price: Number(detail.extra_price || 0),
+                    topping_id: detail.topping_id ?? null,
                 }))
                 : [],
         };
@@ -258,6 +258,40 @@ export class PublicTableOrderService {
         return Array.from(categoryMap.values()).filter((category) => category.items.length > 0);
     }
 
+    private async loadToppings(branchId: string) {
+        const toppings = await getRepository(Topping)
+            .createQueryBuilder("topping")
+            .leftJoinAndSelect("topping.categories", "category")
+            .where("topping.branch_id = :branchId", { branchId })
+            .andWhere("topping.is_active = true")
+            .andWhere("(category.id IS NULL OR category.is_active = true)")
+            .orderBy("topping.display_name", "ASC")
+            .addOrderBy("category.display_name", "ASC")
+            .getMany();
+
+        return toppings.map((topping) => ({
+            id: topping.id,
+            display_name: topping.display_name,
+            price: Number(topping.price || 0),
+            price_delivery: Number(topping.price_delivery ?? topping.price ?? 0),
+            img: topping.img || null,
+            create_date: topping.create_date,
+            update_date: topping.update_date,
+            is_active: Boolean(topping.is_active),
+            categories: Array.isArray(topping.categories)
+                ? topping.categories
+                    .filter((category) => category.is_active)
+                    .map((category) => ({
+                        id: category.id,
+                        display_name: category.display_name,
+                        create_date: category.create_date,
+                        update_date: category.update_date,
+                        is_active: Boolean(category.is_active),
+                    }))
+                : [],
+        }));
+    }
+
     private toOrderItemsInput(items: PublicOrderItemInput[]) {
         return items.map((item) => ({
             product_id: item.product_id,
@@ -265,7 +299,11 @@ export class PublicTableOrderService {
             discount_amount: 0,
             notes: typeof item.notes === "string" ? item.notes.trim() : "",
             status: OrderStatus.Pending,
-            details: [],
+            details: Array.isArray(item.details)
+                ? item.details.map((detail) => ({
+                    topping_id: String(detail.topping_id || "").trim(),
+                }))
+                : [],
         }));
     }
 
@@ -288,7 +326,6 @@ export class PublicTableOrderService {
 
     async getBootstrapByToken(token: string) {
         const table = await this.resolveTableByToken(token);
-        await this.ensurePublicOrderingAvailable(table.branch_id!);
 
         return runWithDbContext(
             {
@@ -298,8 +335,9 @@ export class PublicTableOrderService {
                 isAdmin: false,
             },
             async () => {
-                const [menu, activeOrder] = await Promise.all([
+                const [menu, toppings, activeOrder] = await Promise.all([
                     this.loadMenu(table.branch_id!),
+                    this.loadToppings(table.branch_id!),
                     this.findLatestOrderForTable(table.id, table.branch_id!, ACTIVE_VIEW_STATUSES),
                 ]);
 
@@ -309,6 +347,7 @@ export class PublicTableOrderService {
                         table_name: table.table_name,
                     },
                     menu,
+                    toppings,
                     active_order: this.mapOrder(activeOrder),
                     policy: {
                         can_customer_cancel: false,
@@ -322,7 +361,6 @@ export class PublicTableOrderService {
 
     async getActiveOrderByToken(token: string) {
         const table = await this.resolveTableByToken(token);
-        await this.ensurePublicOrderingAvailable(table.branch_id!);
 
         return runWithDbContext(
             {
@@ -352,6 +390,20 @@ export class PublicTableOrderService {
     async submitByToken(token: string, payload: SubmitOrderInput) {
         const table = await this.resolveTableByToken(token);
         const branchId = table.branch_id!;
+        const latestOrderBeforeShiftCheck = await runWithDbContext(
+            {
+                branchId,
+                userId: "public-table-order",
+                role: "public",
+                isAdmin: true,
+            },
+            () => this.findLatestOrderHeaderForTable(table.id, branchId, ACTIVE_VIEW_STATUSES),
+        );
+
+        if (latestOrderBeforeShiftCheck && !this.canAddItemsToOrder(String(latestOrderBeforeShiftCheck.status || ""))) {
+            throw new AppError("ไม่สามารถสั่งรายการเพิ่มได้ เนื่องจากบิลโต๊ะนี้ถูกล็อกแล้ว", 409);
+        }
+
         await this.ensurePublicOrderingAvailable(branchId);
         const rawItems = Array.isArray((payload as { items?: unknown[] })?.items)
             ? ((payload as { items: unknown[] }).items ?? [])
@@ -360,8 +412,6 @@ export class PublicTableOrderService {
         if (rawItems.length === 0) {
             throw new AppError("Please add at least one item", 400);
         }
-
-        this.assertNoCustomerModifiers(rawItems);
 
         const normalizedItems = this.toOrderItemsInput(payload.items || []);
 
@@ -465,7 +515,6 @@ export class PublicTableOrderService {
 
     async resolveOrderByToken(token: string, orderId: string) {
         const table = await this.resolveTableByToken(token);
-        await this.ensurePublicOrderingAvailable(table.branch_id!);
 
         return runWithDbContext(
             {

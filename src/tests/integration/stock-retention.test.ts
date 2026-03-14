@@ -75,18 +75,18 @@ describeIntegration("stock retention integration", () => {
 
                     await db.query(
                         `
-                        INSERT INTO stock_ingredients_unit (id, unit_name, display_name, branch_id, is_active, create_date)
-                        VALUES ($1, $2, $3, $4, true, NOW())
+                        INSERT INTO stock_ingredients_unit (id, display_name, branch_id, is_active, create_date)
+                        VALUES ($1, $2, $3, true, NOW())
                     `,
-                        [createdUnitId, `e2e_unit_${suffix}`, `E2E Unit ${suffix}`, branchId]
+                        [createdUnitId, `E2E Unit ${suffix}`, branchId]
                     );
 
                     await db.query(
                         `
-                        INSERT INTO stock_ingredients (id, ingredient_name, display_name, branch_id, description, is_active, img_url, unit_id, create_date)
-                        VALUES ($1, $2, $3, $4, $5, true, NULL, $6, NOW())
+                        INSERT INTO stock_ingredients (id, display_name, branch_id, description, is_active, img_url, unit_id, create_date)
+                        VALUES ($1, $2, $3, $4, true, NULL, $5, NOW())
                     `,
-                        [createdIngredientId, `e2e_ing_${suffix}`, `E2E Ingredient ${suffix}`, branchId, "e2e ingredient", createdUnitId]
+                        [createdIngredientId, `E2E Ingredient ${suffix}`, branchId, "e2e ingredient", createdUnitId]
                     );
                     ingredientId = createdIngredientId;
                 }

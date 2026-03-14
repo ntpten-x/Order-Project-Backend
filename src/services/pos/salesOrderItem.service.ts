@@ -9,6 +9,8 @@ import { recalculateOrderTotal } from "./orderTotals.service";
 import { normalizeOrderStatus, isCancelledStatus } from "../../utils/orderStatus";
 import { randomUUID } from "crypto";
 import { AppError } from "../../utils/AppError";
+import { bumpOrderReadModelVersions, invalidateOrderReadCaches } from "./ordersReadCache.utils";
+import { OrderSummarySnapshotService } from "./orderSummarySnapshot.service";
 
 type AccessContext = {
     scope?: "none" | "own" | "branch" | "all";
@@ -17,8 +19,25 @@ type AccessContext = {
 
 export class SalesOrderItemService {
     private socketService = SocketService.getInstance();
+    private orderSummarySnapshotService = new OrderSummarySnapshotService();
 
     constructor(private salesOrderItemModel: SalesOrderItemModels) { }
+
+    private async invalidateOrderReadModels(branchId?: string): Promise<void> {
+        await bumpOrderReadModelVersions(branchId);
+        invalidateOrderReadCaches(branchId);
+    }
+
+    private async emitOrderUpdate(orderId: string, branchId?: string, status?: OrderStatus | null): Promise<void> {
+        if (!branchId) return;
+
+        const summarySnapshot = await this.orderSummarySnapshotService.getPayload(orderId);
+        this.socketService.emitToBranch(branchId, RealtimeEvents.orders.update, {
+            id: orderId,
+            status: status ?? summarySnapshot?.status ?? undefined,
+            summary_snapshot: summarySnapshot,
+        });
+    }
 
     private canSyncFromItemStatuses(status: OrderStatus): boolean {
         return (
@@ -145,13 +164,14 @@ export class SalesOrderItemService {
             await recalculateOrderTotal(createdItem.order_id);
             const syncedOrder = await this.syncOrderStatusFromItems(createdItem.order_id, branchId);
             const effectiveBranchId = syncedOrder?.branch_id || branchId;
+            await this.orderSummarySnapshotService.syncOrder(createdItem.order_id);
+            await this.invalidateOrderReadModels(effectiveBranchId);
 
             const completeItem = await this.salesOrderItemModel.findOne(createdItem.id, branchId, access)
             if (completeItem) {
                 if (effectiveBranchId) {
-                    // salesOrderItem events are already handled as order-affecting events on the frontend.
-                    // Avoid emitting a duplicate orders:update for every item mutation.
                     this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.salesOrderItem.create, completeItem)
+                    await this.emitOrderUpdate(createdItem.order_id, effectiveBranchId, syncedOrder?.status);
                 }
                 return completeItem
             }
@@ -176,8 +196,11 @@ export class SalesOrderItemService {
             await recalculateOrderTotal(itemToUpdate.order_id);
             const syncedOrder = await this.syncOrderStatusFromItems(itemToUpdate.order_id, branchId);
             const effectiveBranchId = syncedOrder?.branch_id || branchId;
+            await this.orderSummarySnapshotService.syncOrder(itemToUpdate.order_id);
+            await this.invalidateOrderReadModels(effectiveBranchId);
             if (effectiveBranchId) {
                 this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.salesOrderItem.update, updatedItem)
+                await this.emitOrderUpdate(itemToUpdate.order_id, effectiveBranchId, syncedOrder?.status);
             }
             return updatedItem
         } catch (error) {
@@ -193,8 +216,11 @@ export class SalesOrderItemService {
                 await recalculateOrderTotal(item.order_id);
                 const syncedOrder = await this.syncOrderStatusFromItems(item.order_id, branchId);
                 const effectiveBranchId = syncedOrder?.branch_id || branchId;
+                await this.orderSummarySnapshotService.syncOrder(item.order_id);
+                await this.invalidateOrderReadModels(effectiveBranchId);
                 if (effectiveBranchId) {
                     this.socketService.emitToBranch(effectiveBranchId, RealtimeEvents.salesOrderItem.delete, { id })
+                    await this.emitOrderUpdate(item.order_id, effectiveBranchId, syncedOrder?.status);
                 }
             } else if (branchId) {
                 this.socketService.emitToBranch(branchId, RealtimeEvents.salesOrderItem.delete, { id })

@@ -63,6 +63,7 @@ const CORE_PERMISSION_RESOURCES: Array<{
     { resourceKey: "menu.pos.category", resourceName: "POS Menu - Category", routePattern: "/pos/category", resourceType: "menu", sortOrder: 2029 },
     { resourceKey: "menu.pos.products", resourceName: "POS Menu - Products", routePattern: "/pos/products", resourceType: "menu", sortOrder: 2030 },
     { resourceKey: "menu.pos.productsUnit", resourceName: "POS Menu - Product Units", routePattern: "/pos/productsUnit", resourceType: "menu", sortOrder: 2031 },
+    { resourceKey: "menu.pos.topping", resourceName: "POS Menu - Toppings", routePattern: "/pos/topping", resourceType: "menu", sortOrder: 20315 },
     { resourceKey: "menu.pos.discounts", resourceName: "POS Menu - Discounts", routePattern: "/pos/discounts", resourceType: "menu", sortOrder: 2032 },
     { resourceKey: "menu.pos.payment", resourceName: "POS Menu - Payment", routePattern: "/pos/paymentMethod", resourceType: "menu", sortOrder: 2033 },
     { resourceKey: "menu.pos.settings", resourceName: "POS Menu - Settings", routePattern: "/pos/settings", resourceType: "menu", sortOrder: 2034 },
@@ -86,6 +87,7 @@ const CORE_PERMISSION_RESOURCES: Array<{
     { resourceKey: "products.page", resourceName: "Products", routePattern: "/pos/products", resourceType: "page", sortOrder: 21 },
     { resourceKey: "products_unit.page", resourceName: "Product Units", routePattern: "/pos/productsUnit", resourceType: "page", sortOrder: 22 },
     { resourceKey: "category.page", resourceName: "Category", routePattern: "/pos/category", resourceType: "page", sortOrder: 23 },
+    { resourceKey: "topping.page", resourceName: "Toppings", routePattern: "/pos/topping", resourceType: "page", sortOrder: 24 },
     { resourceKey: "payments.page", resourceName: "Payments", routePattern: "/pos/payments", resourceType: "page", sortOrder: 25 },
     { resourceKey: "delivery.page", resourceName: "Delivery", routePattern: "/pos/delivery", resourceType: "page", sortOrder: 26 },
     { resourceKey: "discounts.page", resourceName: "Discounts", routePattern: "/pos/discounts", resourceType: "page", sortOrder: 27 },
@@ -113,6 +115,7 @@ const EMPLOYEE_READ_ALLOW = new Set<string>([
     "orders.page",
     "products.page",
     "products_unit.page",
+    "topping.page",
     "shifts.page",
     "payments.page",
     "category.page",
@@ -121,12 +124,18 @@ const EMPLOYEE_READ_ALLOW = new Set<string>([
     "payment_method.page",
     "tables.page",
     "shop_profile.page",
+    "stock.orders.page",
+    "stock.ingredients.page",
+    "stock.ingredients_unit.page",
     "menu.main.home",
+    "menu.main.stock",
+    "menu.main.orders",
     "menu.module.pos",
+    "menu.module.stock",
 ]);
 
-const EMPLOYEE_MENU_PREFIX_ALLOW = ["menu.pos."];
-const EMPLOYEE_WRITE_ALLOW = new Set<string>(["orders.page", "payments.page", "shifts.page"]);
+const EMPLOYEE_MENU_PREFIX_ALLOW = ["menu.pos.", "menu.stock."];
+const EMPLOYEE_WRITE_ALLOW = new Set<string>(["orders.page", "payments.page", "shifts.page", "stock.orders.page"]);
 const ORDER_EDIT_FEATURE = "orders.edit.feature";
 const ORDER_CANCEL_FEATURE = "orders.cancel.feature";
 
@@ -352,14 +361,14 @@ async function ensureRolePermissionDefaults(queryRunner: QueryRunner): Promise<v
                 await queryRunner.query(
                     `
                         INSERT INTO role_permissions (role_id, resource_id, action_id, effect, scope)
-                        SELECT $1, $2, $3, $4, $5
-                        WHERE NOT EXISTS (
-                            SELECT 1
-                            FROM role_permissions
-                            WHERE role_id = $1
-                              AND resource_id = $2
-                              AND action_id = $3
-                        )
+                        VALUES ($1, $2, $3, $4, $5)
+                        ON CONFLICT (role_id, resource_id, action_id)
+                        DO UPDATE SET
+                            effect = EXCLUDED.effect,
+                            scope = EXCLUDED.scope
+                        WHERE role_permissions.effect = 'deny'
+                          AND role_permissions.scope = 'none'
+                          AND EXCLUDED.effect = 'allow'
                     `,
                     [role.id, resource.id, action.id, policy.effect, policy.scope]
                 );

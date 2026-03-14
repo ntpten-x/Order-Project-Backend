@@ -9,7 +9,7 @@ const P95_MAX_MS = Number(process.env.PERF_SUMMARY_P95_MS || 800);
 const TTFB_P95_MAX_MS = Number(process.env.PERF_SUMMARY_TTFB_P95_MS || 500);
 const MAX_ERROR_RATE = Number(process.env.PERF_SUMMARY_MAX_ERROR_RATE || 0.02);
 const ENDPOINT = process.env.PERF_SUMMARY_ENDPOINT || "/pos/orders/summary?page=1&limit=50";
-const STARTUP_TIMEOUT_MS = Number(process.env.PERF_SUMMARY_STARTUP_TIMEOUT_MS || 60000);
+const STARTUP_TIMEOUT_MS = Number(process.env.PERF_SUMMARY_STARTUP_TIMEOUT_MS || 120000);
 const LOGIN_PATH = process.env.PERF_SUMMARY_LOGIN_PATH || "/auth/login";
 const LOGIN_USERNAME = process.env.E2E_USERNAME || "e2e_pos_admin";
 const LOGIN_PASSWORD = process.env.E2E_PASSWORD || "E2E_Pos_123!";
@@ -270,12 +270,12 @@ async function main() {
   console.log(`[perf-summary] starting backend on ${baseUrl}`);
   const backend =
     process.platform === "win32"
-      ? spawn("cmd.exe", ["/d", "/s", "/c", "npx ts-node app.ts"], {
+      ? spawn("cmd.exe", ["/d", "/s", "/c", "npx ts-node --transpile-only app.ts"], {
           env,
           stdio: "inherit",
           shell: false,
         })
-      : spawn("npx", ["ts-node", "app.ts"], {
+      : spawn("npx", ["ts-node", "--transpile-only", "app.ts"], {
           env,
           stdio: "inherit",
           shell: false,

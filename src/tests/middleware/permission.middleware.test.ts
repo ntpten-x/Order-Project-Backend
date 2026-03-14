@@ -19,7 +19,11 @@ vi.mock("../../utils/metrics", () => ({
     },
 }));
 
-import { authorizePermission, authorizePermissionOrSelf } from "../../middleware/permission.middleware";
+import {
+    authorizeOrderCancellation,
+    authorizePermission,
+    authorizePermissionOrSelf,
+} from "../../middleware/permission.middleware";
 import { clearPermissionDecisionMemoryCache } from "../../utils/permissionCache";
 
 function makeRes() {
@@ -162,5 +166,45 @@ describe("permission middleware", () => {
             actionKey: "delete",
             scope: "all",
         });
+    });
+
+    it("skips cancel-feature lookup for non-cancel order updates", async () => {
+        const req: any = {
+            user: { id: "u1", roles_id: "r1" },
+            body: { status: "Pending" },
+        };
+        const res = makeRes();
+        const next = vi.fn();
+
+        await authorizeOrderCancellation()(req, res as any, next);
+
+        expect(next).toHaveBeenCalledOnce();
+        expect(queryMock).not.toHaveBeenCalled();
+    });
+
+    it("requires orders.cancel.feature for cancellation updates", async () => {
+        queryMock.mockResolvedValue([{ effect: "deny", scope: "none" }]);
+        const req: any = {
+            user: { id: "u1", roles_id: "r1" },
+            body: { status: "Cancelled" },
+        };
+        const res = makeRes();
+        const next = vi.fn();
+
+        await authorizeOrderCancellation()(req, res as any, next);
+
+        expect(next).not.toHaveBeenCalled();
+        expect(queryMock).toHaveBeenCalledOnce();
+        expect(res.status).toHaveBeenCalledWith(403);
+        expect(res.json).toHaveBeenCalledWith(
+            expect.objectContaining({
+                error: expect.objectContaining({
+                    details: expect.objectContaining({
+                        resource: "orders.cancel.feature",
+                        action: "access",
+                    }),
+                }),
+            })
+        );
     });
 });

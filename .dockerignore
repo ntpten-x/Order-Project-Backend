@@ -2,6 +2,8 @@
 .git
 .gitignore
 .github
+.agent
+.agents
 
 # Dependencies and build cache
 node_modules
@@ -21,6 +23,8 @@ coverage
 .tsbuildinfo.fast
 logs
 *.log
+tmp_*
+tmp-*
 
 # Development/test-only assets
 load-tests
@@ -28,6 +32,7 @@ soak-artifacts
 query-plans
 monitoring
 src/tests
+deploy
 
 # Docs and local notes
 *.md
