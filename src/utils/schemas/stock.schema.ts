@@ -7,11 +7,35 @@ export const ingredientIdParamSchema = z.object({
     params: z.object({ id: uuid })
 });
 
+export const stockCategoryIdParamSchema = z.object({
+    params: z.object({ id: uuid })
+});
+
+export const stockCategoryNameParamSchema = z.object({
+    params: z.object({ name: z.string().min(1).max(100) })
+});
+
+export const createStockCategorySchema = z.object({
+    body: z.object({
+        display_name: z.string().min(1).max(100),
+        is_active: z.coerce.boolean().optional()
+    }).passthrough()
+});
+
+export const updateStockCategorySchema = z.object({
+    params: z.object({ id: uuid }),
+    body: z.object({
+        display_name: z.string().min(1).max(100).optional(),
+        is_active: z.coerce.boolean().optional()
+    }).passthrough()
+});
+
 export const createIngredientSchema = z.object({
     body: z.object({
         display_name: z.string().min(1).max(100),
         description: z.string().optional(),
         unit_id: uuid,
+        category_id: uuid.optional().nullable(),
         img_url: z.string().optional().nullable(),
         is_active: z.coerce.boolean().optional()
     }).passthrough()
@@ -23,6 +47,7 @@ export const updateIngredientSchema = z.object({
         display_name: z.string().min(1).max(100).optional(),
         description: z.string().optional(),
         unit_id: uuid.optional(),
+        category_id: uuid.optional().nullable(),
         img_url: z.string().optional().nullable(),
         is_active: z.coerce.boolean().optional()
     }).passthrough()

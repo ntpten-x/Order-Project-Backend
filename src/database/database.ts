@@ -6,6 +6,7 @@ import { Roles } from "../entity/Roles"
 import { Branch } from "../entity/Branch"
 import { IngredientsUnit } from "../entity/stock/IngredientsUnit"
 import { Ingredients } from "../entity/stock/Ingredients"
+import { StockCategory } from "../entity/stock/Category"
 // Stock entities (with alias to avoid conflict)
 // Stock entities
 import { PurchaseOrder } from "../entity/stock/PurchaseOrder"
@@ -115,7 +116,7 @@ export const AppDataSource = new DataSource({
     username: process.env.DATABASE_USER,
     password: process.env.DATABASE_PASSWORD,
     database: process.env.DATABASE_NAME,
-    entities: [Users, Roles, Branch, IngredientsUnit, Ingredients, PurchaseOrder, StockOrdersItem, StockOrdersDetail, SalesOrder, SalesOrderItem, SalesOrderDetail, Category, Products, ProductsUnit, Topping, ToppingGroup, Tables, Delivery, Discounts, Payments, PaymentMethod, Shifts, ShopProfile, ShopPaymentAccount, PrintSettings, OrderSummarySnapshot, SalesSummaryView, TopSellingItemsView, AuditLog, PermissionResource, PermissionAction, RolePermission, UserPermission, PermissionAudit, PermissionOverrideApproval],
+    entities: [Users, Roles, Branch, IngredientsUnit, Ingredients, StockCategory, PurchaseOrder, StockOrdersItem, StockOrdersDetail, SalesOrder, SalesOrderItem, SalesOrderDetail, Category, Products, ProductsUnit, Topping, ToppingGroup, Tables, Delivery, Discounts, Payments, PaymentMethod, Shifts, ShopProfile, ShopPaymentAccount, PrintSettings, OrderSummarySnapshot, SalesSummaryView, TopSellingItemsView, AuditLog, PermissionResource, PermissionAction, RolePermission, UserPermission, PermissionAudit, PermissionOverrideApproval],
     synchronize: synchronize as boolean,
     logging: typeormLogging,
     ssl: sslOptions,

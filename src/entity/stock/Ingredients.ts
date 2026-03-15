@@ -1,6 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, Index } from "typeorm"
 import { IngredientsUnit } from "./IngredientsUnit"
 import { Branch } from "../Branch"
+import { StockCategory } from "./Category"
 
 @Entity("stock_ingredients")
 @Index(["display_name", "branch_id"], { unique: true })
@@ -30,6 +31,10 @@ export class Ingredients {
     img_url!: string | null
 
     @Index()
+    @Column({ name: "category_id", type: "uuid", nullable: true })
+    category_id!: string | null
+
+    @Index()
     @Column({ type: "uuid" })
     unit_id!: string
 
@@ -39,5 +44,9 @@ export class Ingredients {
     @ManyToOne(() => IngredientsUnit, (ingredientsUnit) => ingredientsUnit.ingredients)
     @JoinColumn({ name: "unit_id" })
     unit!: IngredientsUnit
+
+    @ManyToOne(() => StockCategory, (category) => category.ingredients, { nullable: true })
+    @JoinColumn({ name: "category_id" })
+    category!: StockCategory | null
 
 }

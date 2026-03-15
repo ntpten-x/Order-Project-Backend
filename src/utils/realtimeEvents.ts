@@ -110,6 +110,11 @@ export const RealtimeEvents = {
         update: "ingredientsUnit:update",
         delete: "ingredientsUnit:delete",
     },
+    stockCategories: {
+        create: "stock:category:create",
+        update: "stock:category:update",
+        delete: "stock:category:delete",
+    },
     stock: {
         update: "stock:update",
     },

@@ -1,4 +1,5 @@
 import { getDbContext, getRepository } from "../../database/dbContext";
+import { StockCategory } from "../../entity/stock/Category";
 import { Ingredients } from "../../entity/stock/Ingredients";
 import { IngredientsUnit } from "../../entity/stock/IngredientsUnit";
 import { StockOrdersItem } from "../../entity/stock/OrdersItem";
@@ -56,7 +57,7 @@ export class IngredientsService {
     }
 
     async findAll(
-        filters?: { is_active?: boolean },
+        filters?: { is_active?: boolean; category_id?: string },
         branchId?: string,
         sortCreated: CreatedSort = "old"
     ): Promise<Ingredients[]> {
@@ -74,7 +75,7 @@ export class IngredientsService {
     async findAllPaginated(
         page: number,
         limit: number,
-        filters?: { is_active?: boolean; q?: string },
+        filters?: { is_active?: boolean; q?: string; category_id?: string },
         branchId?: string,
         sortCreated: CreatedSort = "old"
     ): Promise<{ data: Ingredients[]; total: number; page: number; limit: number; last_page: number }> {
@@ -131,6 +132,7 @@ export class IngredientsService {
         const displayName = this.normalizeDisplayName(ingredients.display_name);
         const description = this.normalizeDescription(ingredients.description);
         const unitId = String(ingredients.unit_id || "").trim();
+        const categoryId = ingredients.category_id ? String(ingredients.category_id).trim() : null;
 
         if (!displayName) {
             throw AppError.badRequest("กรุณาระบุชื่อวัตถุดิบที่ใช้แสดง");
@@ -147,6 +149,19 @@ export class IngredientsService {
             } as any,
         });
 
+        if (categoryId) {
+            const category = await getRepository(StockCategory).findOne({
+                where: {
+                    id: categoryId,
+                    branch_id: effectiveBranchId,
+                } as any,
+            });
+
+            if (!category) {
+                throw AppError.badRequest("ไม่พบหมวดหมู่วัตถุดิบในสาขาปัจจุบัน");
+            }
+        }
+
         if (!unit) {
             throw AppError.badRequest("ไม่พบหน่วยนับวัตถุดิบในสาขาปัจจุบัน");
         }
@@ -161,6 +176,7 @@ export class IngredientsService {
             branch_id: effectiveBranchId,
             display_name: displayName,
             description,
+            category_id: categoryId,
             unit_id: unitId,
         } as Ingredients);
 
@@ -188,6 +204,12 @@ export class IngredientsService {
         const nextDisplayName = this.normalizeDisplayName(ingredients.display_name ?? existing.display_name);
         const nextDescription = this.normalizeDescription(ingredients.description ?? existing.description);
         const nextUnitId = String(ingredients.unit_id || existing.unit_id || "").trim();
+        const nextCategoryId =
+            ingredients.category_id === null
+                ? null
+                : ingredients.category_id !== undefined
+                    ? String(ingredients.category_id).trim()
+                    : existing.category_id;
 
         if (!nextDisplayName) {
             throw AppError.badRequest("กรุณาระบุชื่อวัตถุดิบที่ใช้แสดง");
@@ -203,6 +225,19 @@ export class IngredientsService {
                 branch_id: effectiveBranchId,
             } as any,
         });
+
+        if (nextCategoryId) {
+            const category = await getRepository(StockCategory).findOne({
+                where: {
+                    id: nextCategoryId,
+                    branch_id: effectiveBranchId,
+                } as any,
+            });
+
+            if (!category) {
+                throw AppError.badRequest("ไม่พบหมวดหมู่วัตถุดิบในสาขาปัจจุบัน");
+            }
+        }
 
         if (!unit) {
             throw AppError.badRequest("ไม่พบหน่วยนับวัตถุดิบในสาขาปัจจุบัน");
@@ -221,6 +256,7 @@ export class IngredientsService {
                 branch_id: effectiveBranchId,
                 display_name: nextDisplayName,
                 description: nextDescription,
+                category_id: nextCategoryId,
                 unit_id: nextUnitId,
             } as Ingredients,
             effectiveBranchId

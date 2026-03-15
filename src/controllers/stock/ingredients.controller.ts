@@ -28,6 +28,13 @@ export class IngredientsController {
         const statusRaw = (req.query.status as string | undefined) || undefined;
         const statusActive = statusRaw === "active" ? true : statusRaw === "inactive" ? false : undefined;
         const q = (req.query.q as string | undefined) || undefined;
+        const categoryIdRaw = (req.query.category_id as string | undefined) || undefined;
+        const categoryId =
+            categoryIdRaw === "uncategorized"
+                ? "uncategorized"
+                : categoryIdRaw?.trim()
+                    ? categoryIdRaw.trim()
+                    : undefined;
         const sortCreated = parseCreatedSort(req.query.sort_created);
         const branchId = getBranchId(req as any);
 
@@ -39,6 +46,7 @@ export class IngredientsController {
                     ? { is_active: (statusActive ?? active) as boolean }
                     : {}),
                 ...(q ? { q } : {}),
+                ...(categoryId ? { category_id: categoryId } : {}),
             },
             branchId,
             sortCreated

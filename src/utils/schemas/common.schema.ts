@@ -11,6 +11,6 @@ export const paginationQuerySchema = z.object({
         q: z.string().optional(),
         status: z.string().optional(),
         type: z.string().optional(),
-        category_id: uuid.optional()
+        category_id: z.union([uuid, z.literal("uncategorized")]).optional()
     }).passthrough()
 });
