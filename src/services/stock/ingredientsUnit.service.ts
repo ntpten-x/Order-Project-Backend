@@ -37,10 +37,20 @@ export class IngredientsUnitService {
             cacheKey(this.CACHE_PREFIX, "branch", effectiveBranchId, "list_page"),
             cacheKey(this.CACHE_PREFIX, "branch", effectiveBranchId, "single"),
             cacheKey(this.CACHE_PREFIX, "branch", effectiveBranchId, "display_name"),
+            cacheKey(this.CACHE_PREFIX, "admin", "list"),
+            cacheKey(this.CACHE_PREFIX, "admin", "list_page"),
+            cacheKey(this.CACHE_PREFIX, "admin", "single"),
+            cacheKey(this.CACHE_PREFIX, "admin", "display_name"),
+            cacheKey(this.CACHE_PREFIX, "public", "list"),
+            cacheKey(this.CACHE_PREFIX, "public", "list_page"),
+            cacheKey(this.CACHE_PREFIX, "public", "single"),
+            cacheKey(this.CACHE_PREFIX, "public", "display_name"),
         ];
 
         if (id) {
             patterns.push(cacheKey(this.CACHE_PREFIX, "branch", effectiveBranchId, "single", id));
+            patterns.push(cacheKey(this.CACHE_PREFIX, "admin", "single", id));
+            patterns.push(cacheKey(this.CACHE_PREFIX, "public", "single", id));
         }
 
         invalidateCache(patterns);
@@ -99,19 +109,6 @@ export class IngredientsUnitService {
         return withCache(
             key,
             () => this.ingredientsUnitModel.findOne(id, branchId),
-            this.CACHE_TTL,
-            metadataCache as any
-        );
-    }
-
-    async findOneByDisplayName(displayName: string, branchId?: string): Promise<IngredientsUnit | null> {
-        const normalizedDisplayName = this.normalizeDisplayName(displayName).toLowerCase();
-        const scope = this.getCacheScopeParts(branchId);
-        const key = cacheKey(this.CACHE_PREFIX, ...scope, "display_name", normalizedDisplayName);
-
-        return withCache(
-            key,
-            () => this.ingredientsUnitModel.findOneByDisplayName(normalizedDisplayName, branchId),
             this.CACHE_TTL,
             metadataCache as any
         );

@@ -546,6 +546,7 @@ export class OrdersModels {
                     "items",
                     "items.product",
                     "items.product.category",
+                    "items.product.topping_groups",
                     "items.details",
                     "items.details.topping",
                     "payments",
@@ -650,6 +651,7 @@ export class OrdersModels {
                     "created_by",
                     "items",
                     "items.product",
+                    "items.product.topping_groups",
                     "items.details",
                     "payments"
                 ]
@@ -720,6 +722,7 @@ export class OrdersModels {
 
         const query = repo.createQueryBuilder("item")
             .leftJoinAndSelect("item.product", "product")
+            .leftJoinAndSelect("product.topping_groups", "topping_group")
             .leftJoinAndSelect("item.details", "details")
             .leftJoinAndSelect("details.topping", "detailTopping")
             .leftJoinAndSelect("item.order", "order")

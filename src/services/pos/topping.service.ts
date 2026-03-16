@@ -2,6 +2,7 @@ import { ToppingModels } from "../../models/pos/topping.model";
 import { SocketService } from "../socket.service";
 import { Topping } from "../../entity/pos/Topping";
 import { Category } from "../../entity/pos/Category";
+import { ToppingGroup } from "../../entity/pos/ToppingGroup";
 import { getDbContext, getRepository } from "../../database/dbContext";
 import { RealtimeEvents } from "../../utils/realtimeEvents";
 import { CreatedSort } from "../../utils/sortCreated";
@@ -129,6 +130,34 @@ export class ToppingService {
         );
     }
 
+    private async resolveToppingGroups(groupIds: string[] | undefined, branchId?: string): Promise<ToppingGroup[]> {
+        const normalizedIds = Array.from(
+            new Set((groupIds || []).map((id) => id?.trim()).filter((id): id is string => Boolean(id)))
+        );
+
+        if (normalizedIds.length === 0) {
+            return [];
+        }
+
+        const toppingGroupRepository = getRepository(ToppingGroup);
+        const query = toppingGroupRepository
+            .createQueryBuilder("topping_group")
+            .where("topping_group.id IN (:...ids)", { ids: normalizedIds });
+
+        if (branchId) {
+            query.andWhere("topping_group.branch_id = :branchId", { branchId });
+        }
+
+        const toppingGroups = await query.getMany();
+        if (toppingGroups.length !== normalizedIds.length) {
+            throw AppError.badRequest("One or more topping groups are invalid for this branch");
+        }
+
+        return toppingGroups.sort(
+            (a, b) => normalizedIds.indexOf(a.id) - normalizedIds.indexOf(b.id)
+        );
+    }
+
     async findAll(branchId?: string, sortCreated: CreatedSort = "old"): Promise<Topping[]> {
         const scope = this.getCacheScopeParts(branchId);
         const key = cacheKey(this.CACHE_PREFIX, ...scope, "list-all", sortCreated);
@@ -194,8 +223,8 @@ export class ToppingService {
         );
     }
 
-    async create(topping: Partial<Topping> & { category_ids?: string[] }, branchId?: string): Promise<Topping> {
-        const normalizedTopping = this.normalizeMutableFields(topping) as Partial<Topping> & { category_ids?: string[] };
+    async create(topping: Partial<Topping> & { category_ids?: string[]; topping_group_ids?: string[] }, branchId?: string): Promise<Topping> {
+        const normalizedTopping = this.normalizeMutableFields(topping) as Partial<Topping> & { category_ids?: string[]; topping_group_ids?: string[] };
         const effectiveBranchId = branchId || normalizedTopping.branch_id;
         const displayName = normalizedTopping.display_name?.trim();
 
@@ -215,11 +244,13 @@ export class ToppingService {
         }
 
         const categories = await this.resolveCategories(normalizedTopping.category_ids, effectiveBranchId);
-        const payload = { ...(normalizedTopping as Partial<Topping> & { category_ids?: string[] }) };
+        const payload = { ...(normalizedTopping as Partial<Topping> & { category_ids?: string[]; topping_group_ids?: string[] }) };
         delete (payload as { category_ids?: string[] }).category_ids;
+        delete (payload as { topping_group_ids?: string[] }).topping_group_ids;
         const createdTopping = await this.toppingModel.create({
             ...payload,
             categories,
+            topping_groups: await this.resolveToppingGroups(normalizedTopping.topping_group_ids, effectiveBranchId),
         });
         this.invalidateToppingCache(effectiveBranchId, createdTopping.id);
         if (effectiveBranchId) {
@@ -228,14 +259,14 @@ export class ToppingService {
         return createdTopping;
     }
 
-    async update(id: string, topping: Partial<Topping> & { category_ids?: string[] }, branchId?: string): Promise<Topping> {
+    async update(id: string, topping: Partial<Topping> & { category_ids?: string[]; topping_group_ids?: string[] }, branchId?: string): Promise<Topping> {
         const effectiveBranchId = branchId || topping.branch_id;
         const existingTopping = await this.toppingModel.findOne(id, effectiveBranchId);
         if (!existingTopping) {
             throw AppError.notFound("Topping");
         }
         const scopedBranchId = effectiveBranchId || existingTopping.branch_id;
-        const normalizedTopping = this.normalizeMutableFields(topping, existingTopping) as Partial<Topping> & { category_ids?: string[] };
+        const normalizedTopping = this.normalizeMutableFields(topping, existingTopping) as Partial<Topping> & { category_ids?: string[]; topping_group_ids?: string[] };
 
         const normalizedIncomingName = normalizedTopping.display_name?.trim().toLowerCase();
         const normalizedCurrentName = existingTopping.display_name?.trim().toLowerCase();
@@ -251,11 +282,15 @@ export class ToppingService {
             normalizedTopping.branch_id = scopedBranchId;
         }
 
-        const payload = { ...(normalizedTopping as Partial<Topping> & { category_ids?: string[] }) };
+        const payload = { ...(normalizedTopping as Partial<Topping> & { category_ids?: string[]; topping_group_ids?: string[] }) };
         delete (payload as { category_ids?: string[] }).category_ids;
+        delete (payload as { topping_group_ids?: string[] }).topping_group_ids;
         const nextPayload: Partial<Topping> = { ...payload };
         if (normalizedTopping.category_ids !== undefined) {
             nextPayload.categories = await this.resolveCategories(normalizedTopping.category_ids, scopedBranchId);
+        }
+        if (normalizedTopping.topping_group_ids !== undefined) {
+            nextPayload.topping_groups = await this.resolveToppingGroups(normalizedTopping.topping_group_ids, scopedBranchId);
         }
 
         const updatedTopping = await this.toppingModel.update(id, nextPayload, scopedBranchId);

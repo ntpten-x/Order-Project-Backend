@@ -174,6 +174,7 @@ export class PublicTakeawayOrderService {
             .createQueryBuilder("product")
             .leftJoinAndSelect("product.category", "category")
             .leftJoinAndSelect("product.unit", "unit")
+            .leftJoinAndSelect("product.topping_groups", "topping_group")
             .where("product.branch_id = :branchId", { branchId })
             .andWhere("product.is_active = true")
             .andWhere("category.is_active = true")
@@ -195,6 +196,7 @@ export class PublicTakeawayOrderService {
                         price: number;
                         img_url: string | null;
                         unit_display_name: string | null;
+                        topping_group_ids: string[];
                     }>,
                 },
             ]),
@@ -218,6 +220,7 @@ export class PublicTakeawayOrderService {
                 price: Number(product.price || 0),
                 img_url: product.img_url || null,
                 unit_display_name: product.unit?.display_name || null,
+                topping_group_ids: (product.topping_groups || []).map((toppingGroup) => toppingGroup.id),
             });
         }
 
@@ -228,6 +231,7 @@ export class PublicTakeawayOrderService {
         const toppings = await getRepository(Topping)
             .createQueryBuilder("topping")
             .leftJoinAndSelect("topping.categories", "category")
+            .leftJoinAndSelect("topping.topping_groups", "topping_group")
             .where("topping.branch_id = :branchId", { branchId })
             .andWhere("topping.is_active = true")
             .andWhere("(category.id IS NULL OR category.is_active = true)")
@@ -253,6 +257,17 @@ export class PublicTakeawayOrderService {
                         create_date: category.create_date,
                         update_date: category.update_date,
                         is_active: Boolean(category.is_active),
+                    }))
+                : [],
+            topping_groups: Array.isArray(topping.topping_groups)
+                ? topping.topping_groups
+                    .filter((toppingGroup) => toppingGroup.is_active)
+                    .map((toppingGroup) => ({
+                        id: toppingGroup.id,
+                        display_name: toppingGroup.display_name,
+                        create_date: toppingGroup.create_date,
+                        update_date: toppingGroup.update_date,
+                        is_active: Boolean(toppingGroup.is_active),
                     }))
                 : [],
         }));

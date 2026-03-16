@@ -108,13 +108,15 @@ export class UsersService {
                 }
             }
 
-            await this.usersModel.update(id, users);
+            const savedUser = await this.usersModel.update(id, users);
             if (disabledForOffboarding || roleChanged) {
                 await this.invalidateDecisionCacheSafely(id);
             }
-            const updatedUser = await this.usersModel.findOne(id);
-            this.socketService.emitToRole("Admin", RealtimeEvents.users.update, updatedUser);
-            return updatedUser!;
+            const lookupUsername = users.username ?? findUser.username;
+            const updatedUser = await this.usersModel.findOneByUsername(lookupUsername);
+            const resultUser = updatedUser ?? savedUser;
+            this.socketService.emitToRole("Admin", RealtimeEvents.users.update, resultUser);
+            return resultUser!;
         } catch (error) {
             if (typeof users.is_use === "boolean" && users.is_use === false) {
                 metrics.countPrivilegeEvent({

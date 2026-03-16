@@ -4,10 +4,18 @@ import { addBooleanFilter } from "../../utils/dbHelpers";
 import { CreatedSort, createdSortToOrder } from "../../utils/sortCreated";
 
 export class IngredientsModel {
+    private toPersistencePayload(ingredients: Partial<Ingredients>): Partial<Ingredients> {
+        const payload = { ...ingredients } as Record<string, unknown>;
+        delete payload.branch;
+        delete payload.unit;
+        delete payload.category;
+        return payload as Partial<Ingredients>;
+    }
+
     async findAllPaginated(
         page: number,
         limit: number,
-        filters?: { is_active?: boolean; q?: string },
+        filters?: { is_active?: boolean; q?: string; category_id?: string },
         branchId?: string,
         sortCreated: CreatedSort = "old"
     ): Promise<{ data: Ingredients[]; total: number; page: number; limit: number; last_page: number }> {
@@ -17,6 +25,7 @@ export class IngredientsModel {
         let query = ingredientsRepository
             .createQueryBuilder("ingredients")
             .leftJoinAndSelect("ingredients.unit", "unit")
+            .leftJoinAndSelect("ingredients.category", "category")
             .orderBy("ingredients.create_date", createdSortToOrder(sortCreated));
 
         if (branchId) {
@@ -25,6 +34,14 @@ export class IngredientsModel {
 
         query = addBooleanFilter(query, filters?.is_active, "is_active", "ingredients");
 
+        if (filters?.category_id) {
+            if (filters.category_id === "uncategorized") {
+                query.andWhere("ingredients.category_id IS NULL");
+            } else {
+                query.andWhere("ingredients.category_id = :categoryId", { categoryId: filters.category_id });
+            }
+        }
+
         if (filters?.q?.trim()) {
             const q = `%${filters.q.trim().toLowerCase()}%`;
             query.andWhere(
@@ -32,6 +49,7 @@ export class IngredientsModel {
                     "LOWER(ingredients.display_name) LIKE :q",
                     "LOWER(COALESCE(ingredients.description, '')) LIKE :q",
                     "LOWER(COALESCE(unit.display_name, '')) LIKE :q",
+                    "LOWER(COALESCE(category.display_name, '')) LIKE :q",
                 ].join(" OR "),
                 { q }
             );
@@ -49,7 +67,7 @@ export class IngredientsModel {
     }
 
     async findAll(
-        filters?: { is_active?: boolean },
+        filters?: { is_active?: boolean; category_id?: string },
         branchId?: string,
         sortCreated: CreatedSort = "old"
     ): Promise<Ingredients[]> {
@@ -57,6 +75,7 @@ export class IngredientsModel {
         let query = ingredientsRepository
             .createQueryBuilder("ingredients")
             .leftJoinAndSelect("ingredients.unit", "unit")
+            .leftJoinAndSelect("ingredients.category", "category")
             .orderBy("ingredients.create_date", createdSortToOrder(sortCreated));
 
         if (branchId) {
@@ -64,6 +83,13 @@ export class IngredientsModel {
         }
 
         query = addBooleanFilter(query, filters?.is_active, "is_active", "ingredients");
+        if (filters?.category_id) {
+            if (filters.category_id === "uncategorized") {
+                query.andWhere("ingredients.category_id IS NULL");
+            } else {
+                query.andWhere("ingredients.category_id = :categoryId", { categoryId: filters.category_id });
+            }
+        }
         query.addOrderBy("ingredients.is_active", "DESC").addOrderBy("ingredients.id", "ASC");
 
         return query.getMany();
@@ -74,6 +100,7 @@ export class IngredientsModel {
         const query = ingredientsRepository
             .createQueryBuilder("ingredients")
             .leftJoinAndSelect("ingredients.unit", "unit")
+            .leftJoinAndSelect("ingredients.category", "category")
             .where("ingredients.id = :id", { id });
 
         if (branchId) {
@@ -88,6 +115,7 @@ export class IngredientsModel {
         const query = ingredientsRepository
             .createQueryBuilder("ingredients")
             .leftJoinAndSelect("ingredients.unit", "unit")
+            .leftJoinAndSelect("ingredients.category", "category")
             .where("LOWER(TRIM(ingredients.display_name)) = :display_name", {
                 display_name: display_name.trim().toLowerCase(),
             });
@@ -100,12 +128,12 @@ export class IngredientsModel {
     }
 
     async create(ingredients: Ingredients): Promise<Ingredients> {
-        return getRepository(Ingredients).save(ingredients);
+        return getRepository(Ingredients).save(this.toPersistencePayload(ingredients) as Ingredients);
     }
 
     async update(id: string, ingredients: Ingredients, branchId?: string): Promise<Ingredients> {
         return getRepository(Ingredients).save({
-            ...ingredients,
+            ...this.toPersistencePayload(ingredients),
             id,
             ...(branchId ? { branch_id: branchId } : {}),
         } as Ingredients);

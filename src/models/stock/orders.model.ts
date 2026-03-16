@@ -59,7 +59,8 @@ export class StockOrdersModel {
     private async assertIngredientsInBranch(
         manager: any,
         ingredientIds: string[],
-        branchId?: string
+        branchId?: string,
+        allowedInactiveIds: Set<string> = new Set()
     ): Promise<void> {
         const uniqueIds = Array.from(new Set(ingredientIds.filter(Boolean)));
         if (uniqueIds.length === 0) {
@@ -76,9 +77,18 @@ export class StockOrdersModel {
             query.andWhere("ingredient.branch_id = :branchId", { branchId });
         }
 
-        const rows = await query.getRawMany() as Array<{ id: string }>;
+        const rows = await query
+            .addSelect("ingredient.is_active", "is_active")
+            .getRawMany() as Array<{ id: string; is_active: boolean }>;
         if (rows.length !== uniqueIds.length) {
             throw new Error("Some ingredients are unavailable for this branch");
+        }
+
+        const hasDisallowedInactiveIngredient = rows.some(
+            (row) => !Boolean(row.is_active) && !allowedInactiveIds.has(row.id)
+        );
+        if (hasDisallowedInactiveIngredient) {
+            throw new Error("Some ingredients are inactive for this branch");
         }
     }
 
@@ -274,16 +284,18 @@ export class StockOrdersModel {
                 throw new Error("Only pending orders can be updated");
             }
 
-            await this.assertIngredientsInBranch(
-                transactionalEntityManager,
-                normalizedItems.map((item) => item.ingredient_id),
-                branchId || order.branch_id
-            );
-
             // 1. Fetch existing items
             const existingItems = await transactionalEntityManager.find(StockOrdersItem, {
                 where: { orders_id: orderId }
             });
+            const existingIngredientIds = new Set(existingItems.map((item) => item.ingredient_id));
+
+            await this.assertIngredientsInBranch(
+                transactionalEntityManager,
+                normalizedItems.map((item) => item.ingredient_id),
+                branchId || order.branch_id,
+                existingIngredientIds
+            );
 
             // 2. Identify items to delete (in DB but not in newItems)
             const newItemIds = normalizedItems.map(i => i.ingredient_id);

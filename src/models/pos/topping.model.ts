@@ -45,10 +45,12 @@ export class ToppingModels {
         const items = await toppingRepository
             .createQueryBuilder("topping")
             .leftJoinAndSelect("topping.categories", "category")
+            .leftJoinAndSelect("topping.topping_groups", "topping_group")
             .where("topping.id IN (:...ids)", { ids })
             .andWhere(branchId ? "topping.branch_id = :branchId" : "1=1", branchId ? { branchId } : {})
             .orderBy("topping.create_date", createdSortToOrder(sortCreated))
             .addOrderBy("category.display_name", "ASC")
+            .addOrderBy("topping_group.display_name", "ASC")
             .getMany();
 
         const orderMap = new Map(ids.map((id, index) => [id, index]));
@@ -97,6 +99,7 @@ export class ToppingModels {
         const query = toppingRepository
             .createQueryBuilder("topping")
             .leftJoinAndSelect("topping.categories", "category")
+            .leftJoinAndSelect("topping.topping_groups", "topping_group")
             .where("topping.id = :id", { id });
 
         if (branchId) {
@@ -112,6 +115,7 @@ export class ToppingModels {
         const query = toppingRepository
             .createQueryBuilder("topping")
             .leftJoinAndSelect("topping.categories", "category")
+            .leftJoinAndSelect("topping.topping_groups", "topping_group")
             .where("LOWER(TRIM(topping.display_name)) = :name", { name: normalizedName });
 
         if (branchId) {

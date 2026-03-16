@@ -1,7 +1,19 @@
-import { Column, Entity, PrimaryGeneratedColumn, ManyToOne, JoinColumn, Index, CreateDateColumn, UpdateDateColumn } from "typeorm"
+import {
+    Column,
+    CreateDateColumn,
+    Entity,
+    Index,
+    JoinColumn,
+    JoinTable,
+    ManyToMany,
+    ManyToOne,
+    PrimaryGeneratedColumn,
+    UpdateDateColumn,
+} from "typeorm"
 import { Category } from "./Category"
 import { ProductsUnit } from "./ProductsUnit"
 import { Branch } from "../Branch"
+import { ToppingGroup } from "./ToppingGroup"
 
 @Entity()
 @Index(["branch_id"])
@@ -60,4 +72,12 @@ export class Products {
     @ManyToOne(() => ProductsUnit, (productsUnit) => productsUnit.products)
     @JoinColumn({ name: "unit_id" })
     unit!: ProductsUnit
+
+    @ManyToMany(() => ToppingGroup, (toppingGroup) => toppingGroup.products)
+    @JoinTable({
+        name: "product_topping_groups",
+        joinColumn: { name: "product_id", referencedColumnName: "id" },
+        inverseJoinColumn: { name: "topping_group_id", referencedColumnName: "id" },
+    })
+    topping_groups!: ToppingGroup[]
 }

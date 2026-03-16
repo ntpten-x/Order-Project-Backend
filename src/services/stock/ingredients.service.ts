@@ -1,4 +1,5 @@
 import { getDbContext, getRepository } from "../../database/dbContext";
+import { StockCategory } from "../../entity/stock/Category";
 import { Ingredients } from "../../entity/stock/Ingredients";
 import { IngredientsUnit } from "../../entity/stock/IngredientsUnit";
 import { StockOrdersItem } from "../../entity/stock/OrdersItem";
@@ -37,11 +38,18 @@ export class IngredientsService {
             cacheKey(this.CACHE_PREFIX, "branch", effectiveBranchId, "list"),
             cacheKey(this.CACHE_PREFIX, "branch", effectiveBranchId, "list_page"),
             cacheKey(this.CACHE_PREFIX, "branch", effectiveBranchId, "single"),
-            cacheKey(this.CACHE_PREFIX, "branch", effectiveBranchId, "display_name"),
+            cacheKey(this.CACHE_PREFIX, "admin", "list"),
+            cacheKey(this.CACHE_PREFIX, "admin", "list_page"),
+            cacheKey(this.CACHE_PREFIX, "admin", "single"),
+            cacheKey(this.CACHE_PREFIX, "public", "list"),
+            cacheKey(this.CACHE_PREFIX, "public", "list_page"),
+            cacheKey(this.CACHE_PREFIX, "public", "single"),
         ];
 
         if (id) {
             patterns.push(cacheKey(this.CACHE_PREFIX, "branch", effectiveBranchId, "single", id));
+            patterns.push(cacheKey(this.CACHE_PREFIX, "admin", "single", id));
+            patterns.push(cacheKey(this.CACHE_PREFIX, "public", "single", id));
         }
 
         invalidateCache(patterns);
@@ -55,8 +63,12 @@ export class IngredientsService {
         return String(description || "").trim();
     }
 
+    private normalizeDisplayNameForCompare(displayName?: string | null): string {
+        return this.normalizeDisplayName(displayName).toLowerCase();
+    }
+
     async findAll(
-        filters?: { is_active?: boolean },
+        filters?: { is_active?: boolean; category_id?: string },
         branchId?: string,
         sortCreated: CreatedSort = "old"
     ): Promise<Ingredients[]> {
@@ -74,7 +86,7 @@ export class IngredientsService {
     async findAllPaginated(
         page: number,
         limit: number,
-        filters?: { is_active?: boolean; q?: string },
+        filters?: { is_active?: boolean; q?: string; category_id?: string },
         branchId?: string,
         sortCreated: CreatedSort = "old"
     ): Promise<{ data: Ingredients[]; total: number; page: number; limit: number; last_page: number }> {
@@ -109,19 +121,6 @@ export class IngredientsService {
         );
     }
 
-    async findOneByDisplayName(displayName: string, branchId?: string): Promise<Ingredients | null> {
-        const normalizedDisplayName = this.normalizeDisplayName(displayName).toLowerCase();
-        const scope = this.getCacheScopeParts(branchId);
-        const key = cacheKey(this.CACHE_PREFIX, ...scope, "display_name", normalizedDisplayName);
-
-        return withCache(
-            key,
-            () => this.ingredientsModel.findOneByDisplayName(normalizedDisplayName, branchId),
-            this.CACHE_TTL,
-            metadataCache as any
-        );
-    }
-
     async create(ingredients: Ingredients, branchId?: string): Promise<Ingredients> {
         const effectiveBranchId = branchId || ingredients.branch_id;
         if (!effectiveBranchId) {
@@ -131,6 +130,7 @@ export class IngredientsService {
         const displayName = this.normalizeDisplayName(ingredients.display_name);
         const description = this.normalizeDescription(ingredients.description);
         const unitId = String(ingredients.unit_id || "").trim();
+        const categoryId = ingredients.category_id ? String(ingredients.category_id).trim() : null;
 
         if (!displayName) {
             throw AppError.badRequest("กรุณาระบุชื่อวัตถุดิบที่ใช้แสดง");
@@ -151,6 +151,27 @@ export class IngredientsService {
             throw AppError.badRequest("ไม่พบหน่วยนับวัตถุดิบในสาขาปัจจุบัน");
         }
 
+        if (!unit.is_active) {
+            throw AppError.badRequest("ไม่สามารถเลือกหน่วยนับที่ปิดใช้งานได้");
+        }
+
+        if (categoryId) {
+            const category = await getRepository(StockCategory).findOne({
+                where: {
+                    id: categoryId,
+                    branch_id: effectiveBranchId,
+                } as any,
+            });
+
+            if (!category) {
+                throw AppError.badRequest("ไม่พบหมวดหมู่วัตถุดิบในสาขาปัจจุบัน");
+            }
+
+            if (!category.is_active) {
+                throw AppError.badRequest("ไม่สามารถเลือกหมวดหมู่ที่ปิดใช้งานได้");
+            }
+        }
+
         const duplicateByDisplayName = await this.ingredientsModel.findOneByDisplayName(displayName, effectiveBranchId);
         if (duplicateByDisplayName) {
             throw AppError.conflict(`ชื่อวัตถุดิบ "${displayName}" ถูกใช้งานแล้ว`);
@@ -161,6 +182,7 @@ export class IngredientsService {
             branch_id: effectiveBranchId,
             display_name: displayName,
             description,
+            category_id: categoryId,
             unit_id: unitId,
         } as Ingredients);
 
@@ -188,6 +210,12 @@ export class IngredientsService {
         const nextDisplayName = this.normalizeDisplayName(ingredients.display_name ?? existing.display_name);
         const nextDescription = this.normalizeDescription(ingredients.description ?? existing.description);
         const nextUnitId = String(ingredients.unit_id || existing.unit_id || "").trim();
+        const nextCategoryId =
+            ingredients.category_id === null
+                ? null
+                : ingredients.category_id !== undefined
+                    ? String(ingredients.category_id).trim()
+                    : existing.category_id;
 
         if (!nextDisplayName) {
             throw AppError.badRequest("กรุณาระบุชื่อวัตถุดิบที่ใช้แสดง");
@@ -208,9 +236,34 @@ export class IngredientsService {
             throw AppError.badRequest("ไม่พบหน่วยนับวัตถุดิบในสาขาปัจจุบัน");
         }
 
-        const duplicateByDisplayName = await this.ingredientsModel.findOneByDisplayName(nextDisplayName, effectiveBranchId);
-        if (duplicateByDisplayName && duplicateByDisplayName.id !== id) {
-            throw AppError.conflict(`ชื่อวัตถุดิบ "${nextDisplayName}" ถูกใช้งานแล้ว`);
+        if (!unit.is_active && nextUnitId !== existing.unit_id) {
+            throw AppError.badRequest("ไม่สามารถเลือกหน่วยนับที่ปิดใช้งานได้");
+        }
+
+        if (nextCategoryId) {
+            const category = await getRepository(StockCategory).findOne({
+                where: {
+                    id: nextCategoryId,
+                    branch_id: effectiveBranchId,
+                } as any,
+            });
+
+            if (!category) {
+                throw AppError.badRequest("ไม่พบหมวดหมู่วัตถุดิบในสาขาปัจจุบัน");
+            }
+
+            if (!category.is_active && nextCategoryId !== existing.category_id) {
+                throw AppError.badRequest("ไม่สามารถเลือกหมวดหมู่ที่ปิดใช้งานได้");
+            }
+        }
+
+        const currentDisplayName = this.normalizeDisplayNameForCompare(existing.display_name);
+        const nextDisplayNameForCompare = this.normalizeDisplayNameForCompare(nextDisplayName);
+        if (currentDisplayName !== nextDisplayNameForCompare) {
+            const duplicateByDisplayName = await this.ingredientsModel.findOneByDisplayName(nextDisplayName, effectiveBranchId);
+            if (duplicateByDisplayName && duplicateByDisplayName.id !== id) {
+                throw AppError.conflict(`ชื่อวัตถุดิบ "${nextDisplayName}" ถูกใช้งานแล้ว`);
+            }
         }
 
         await this.ingredientsModel.update(
@@ -221,6 +274,7 @@ export class IngredientsService {
                 branch_id: effectiveBranchId,
                 display_name: nextDisplayName,
                 description: nextDescription,
+                category_id: nextCategoryId,
                 unit_id: nextUnitId,
             } as Ingredients,
             effectiveBranchId

@@ -33,6 +33,11 @@ export const RealtimeEvents = {
         update: "topping:update",
         delete: "topping:delete",
     },
+    toppingGroups: {
+        create: "topping-group:create",
+        update: "topping-group:update",
+        delete: "topping-group:delete",
+    },
     categories: {
         create: "category:create",
         update: "category:update",
@@ -104,6 +109,11 @@ export const RealtimeEvents = {
         create: "ingredientsUnit:create",
         update: "ingredientsUnit:update",
         delete: "ingredientsUnit:delete",
+    },
+    stockCategories: {
+        create: "stock:category:create",
+        update: "stock:category:update",
+        delete: "stock:category:delete",
     },
     stock: {
         update: "stock:update",

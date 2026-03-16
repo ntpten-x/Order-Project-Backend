@@ -61,4 +61,38 @@ describe("users service offboarding", () => {
         expect(invalidatePermissionDecisionCacheByUserMock).toHaveBeenCalledWith("u1");
         expect(emitToRoleMock).toHaveBeenCalledWith("Admin", expect.any(String), result);
     });
+
+    it("returns the updated user even when branch-scoped lookup by id would hide the record", async () => {
+        const usersModel = {
+            findOne: vi.fn().mockResolvedValue({
+                id: "u2",
+                username: "bob",
+                roles_id: "role-employee",
+                is_use: true,
+            }),
+            findOneByUsername: vi.fn().mockResolvedValue({
+                id: "u2",
+                username: "bob",
+                branch_id: "branch-2",
+            }),
+            update: vi.fn().mockResolvedValue({
+                id: "u2",
+                username: "bob",
+                branch_id: "branch-2",
+            }),
+            revokeUserPermissionOverrides: vi.fn(),
+        };
+
+        const service = new UsersService(usersModel as any);
+        const result = await service.update("u2", { branch_id: "branch-2" } as any, "admin-1");
+
+        expect(usersModel.update).toHaveBeenCalledWith("u2", expect.objectContaining({ branch_id: "branch-2" }));
+        expect(usersModel.findOneByUsername).toHaveBeenCalledWith("bob");
+        expect(result).toEqual(
+            expect.objectContaining({
+                id: "u2",
+                branch_id: "branch-2",
+            })
+        );
+    });
 });

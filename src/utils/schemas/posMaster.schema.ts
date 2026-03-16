@@ -55,6 +55,7 @@ export const createProductSchema = z.object({
         price_delivery: money.optional(),
         cost: money.optional(),
         category_id: uuid,
+        topping_group_ids: z.array(uuid).max(25).optional(),
         unit_id: uuid,
         img_url: z.string().optional().nullable(),
         is_active: z.coerce.boolean().optional()
@@ -70,6 +71,7 @@ export const updateProductSchema = z.object({
         price_delivery: money.optional(),
         cost: money.optional(),
         category_id: uuid.optional(),
+        topping_group_ids: z.array(uuid).max(25).optional(),
         unit_id: uuid.optional(),
         img_url: z.string().optional().nullable(),
         is_active: z.coerce.boolean().optional()
@@ -83,6 +85,29 @@ export const productsUnitIdParamSchema = z.object({
 
 export const productsUnitNameParamSchema = z.object({
     params: z.object({ name: z.string().min(1).max(100) })
+});
+
+export const toppingGroupIdParamSchema = z.object({
+    params: z.object({ id: uuid })
+});
+
+export const toppingGroupNameParamSchema = z.object({
+    params: z.object({ name: z.string().min(1).max(100) })
+});
+
+export const createToppingGroupSchema = z.object({
+    body: z.object({
+        display_name: z.string().min(1).max(100),
+        is_active: z.coerce.boolean().optional()
+    }).passthrough()
+});
+
+export const updateToppingGroupSchema = z.object({
+    params: z.object({ id: uuid }),
+    body: z.object({
+        display_name: z.string().min(1).max(100).optional(),
+        is_active: z.coerce.boolean().optional()
+    }).passthrough()
 });
 
 export const createProductsUnitSchema = z.object({
@@ -115,6 +140,7 @@ export const createToppingSchema = z.object({
         price_delivery: money.optional(),
         img: z.string().optional().nullable(),
         category_ids: z.array(uuid).min(1).max(25),
+        topping_group_ids: z.array(uuid).max(25).optional(),
         is_active: z.coerce.boolean().optional()
     }).passthrough()
 });
@@ -127,6 +153,7 @@ export const updateToppingSchema = z.object({
         price_delivery: money.optional(),
         img: z.string().optional().nullable(),
         category_ids: z.array(uuid).min(1).max(25).optional(),
+        topping_group_ids: z.array(uuid).max(25).optional(),
         is_active: z.coerce.boolean().optional()
     }).passthrough()
 });

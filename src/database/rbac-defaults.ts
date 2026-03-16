@@ -73,6 +73,7 @@ const CORE_PERMISSION_RESOURCES: Array<{
     { resourceKey: "menu.stock.history", resourceName: "Stock Menu - History", routePattern: "/stock/history", resourceType: "menu", sortOrder: 2043 },
     { resourceKey: "menu.stock.ingredients", resourceName: "Stock Menu - Ingredients", routePattern: "/stock/ingredients", resourceType: "menu", sortOrder: 2044 },
     { resourceKey: "menu.stock.ingredientsUnit", resourceName: "Stock Menu - Ingredient Units", routePattern: "/stock/ingredientsUnit", resourceType: "menu", sortOrder: 2045 },
+    { resourceKey: "menu.stock.category", resourceName: "Stock Menu - Categories", routePattern: "/stock/category", resourceType: "menu", sortOrder: 2046 },
     { resourceKey: "menu.users.home", resourceName: "Users Menu - Home", routePattern: "/", resourceType: "menu", sortOrder: 2050 },
     { resourceKey: "menu.branch.home", resourceName: "Branch Menu - Home", routePattern: "/", resourceType: "menu", sortOrder: 2051 },
     { resourceKey: "permissions.page", resourceName: "Permissions", routePattern: "/users/permissions", resourceType: "page", sortOrder: 10 },
@@ -101,6 +102,7 @@ const CORE_PERMISSION_RESOURCES: Array<{
     { resourceKey: "stock.ingredients.page", resourceName: "Stock Ingredients", routePattern: "/stock/ingredients", resourceType: "page", sortOrder: 40 },
     { resourceKey: "stock.ingredients_unit.page", resourceName: "Stock Units", routePattern: "/stock/ingredientsUnit", resourceType: "page", sortOrder: 41 },
     { resourceKey: "stock.orders.page", resourceName: "Stock Orders", routePattern: "/stock/items", resourceType: "page", sortOrder: 42 },
+    { resourceKey: "stock.category.page", resourceName: "Stock Categories", routePattern: "/stock/category", resourceType: "page", sortOrder: 43 },
 ];
 
 const MANAGER_RESTRICTED_RESOURCES = new Set<string>([
@@ -127,6 +129,7 @@ const EMPLOYEE_READ_ALLOW = new Set<string>([
     "stock.orders.page",
     "stock.ingredients.page",
     "stock.ingredients_unit.page",
+    "stock.category.page",
     "menu.main.home",
     "menu.main.stock",
     "menu.main.orders",
