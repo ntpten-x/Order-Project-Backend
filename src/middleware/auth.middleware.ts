@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { AppDataSource } from "../database/database";
+import { Branch } from "../entity/Branch";
 import { Users } from "../entity/Users";
 import { securityLogger, getClientIp } from "../utils/securityLogger";
 import { runWithDbContext } from "../database/dbContext";
@@ -357,10 +358,14 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
         //   Admins without assigned branch run without branch context.
         const cookieBranchIdRaw = typeof req.cookies?.active_branch_id === "string" ? req.cookies.active_branch_id : "";
         const cookieBranchId = cookieBranchIdRaw.trim();
-        const effectiveBranchId =
-            isAdmin
-                ? (cookieBranchId && UUID_RE.test(cookieBranchId) ? cookieBranchId : userSnapshot.branchId ?? user.branch_id)
-                : (userSnapshot.branchId ?? user.branch_id);
+        let effectiveBranchId = userSnapshot.branchId ?? user.branch_id;
+        if (isAdmin && cookieBranchId && UUID_RE.test(cookieBranchId)) {
+            const selectedBranch = await AppDataSource.getRepository(Branch).findOneBy({
+                id: cookieBranchId,
+                is_active: true,
+            });
+            effectiveBranchId = selectedBranch?.id ?? effectiveBranchId;
+        }
 
         // Run the rest of the request inside a DB context so Postgres RLS (if enabled)
         // can enforce branch isolation even if a future query forgets branch_id filters.

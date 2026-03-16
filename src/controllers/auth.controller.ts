@@ -407,6 +407,9 @@ export class AuthController {
         if (!branch) {
             return ApiResponses.notFound(res, "Branch");
         }
+        if (!branch.is_active) {
+            return ApiResponses.badRequest(res, "Branch is inactive");
+        }
 
         res.cookie("active_branch_id", branchId, cookieOptions);
         return ApiResponses.ok(res, { active_branch_id: branchId });
