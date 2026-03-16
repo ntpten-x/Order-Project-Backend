@@ -112,7 +112,7 @@ export class UsersModels {
                 .leftJoinAndSelect("users.branch", "branch")
                 .where("users.id = :id", { id });
 
-            if (ctx?.branchId) {
+            if (ctx?.branchId && !ctx?.isAdmin) {
                 if (ctx?.isAdmin && ctx?.userId) {
                     query.andWhere(
                         new Brackets((qb) => {
@@ -180,8 +180,9 @@ export class UsersModels {
         try {
             const ctx = getDbContext();
 
-            // If an active branch context exists, only allow updates within that branch.
-            if (ctx?.branchId) {
+            // Branch-scoped actors must stay in their current branch.
+            // Admins may reassign a user to another branch from the edit form.
+            if (ctx?.branchId && !ctx?.isAdmin) {
                 const existing = await this.findOne(id);
                 if (!existing) {
                     throw new Error("ไม่พบผู้ใช้");
@@ -200,7 +201,7 @@ export class UsersModels {
             const ctx = getDbContext();
             const usersRepo = getRepository(Users);
 
-            if (ctx?.branchId) {
+            if (ctx?.branchId && !ctx?.isAdmin) {
                 const result = await usersRepo.delete({ id, branch_id: ctx.branchId } as any);
                 if (!result.affected) {
                     throw new Error("ไม่พบผู้ใช้");

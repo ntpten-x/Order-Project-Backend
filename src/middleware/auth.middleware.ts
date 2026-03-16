@@ -29,6 +29,11 @@ type AuthSessionRecord = {
     roleDisplayName?: string;
     rolesId?: string;
     branchId?: string | null;
+    branchName?: string | null;
+    branchCode?: string | null;
+    branchAddress?: string | null;
+    branchPhone?: string | null;
+    branchIsActive?: boolean | null;
     isUse?: boolean;
     isActive?: boolean;
     createdAt?: number;
@@ -43,6 +48,11 @@ type AuthUserSnapshot = {
     roleName: string;
     roleDisplayName: string;
     branchId: string | null;
+    branchName?: string | null;
+    branchCode?: string | null;
+    branchAddress?: string | null;
+    branchPhone?: string | null;
+    branchIsActive?: boolean | null;
     isUse: boolean;
     isActive: boolean;
 };
@@ -71,6 +81,14 @@ function toUsersFromSnapshot(snapshot: AuthUserSnapshot): Users {
             roles_name: snapshot.roleName,
             display_name: snapshot.roleDisplayName,
         } as any,
+        branch: snapshot.branchId ? {
+            id: snapshot.branchId,
+            branch_name: snapshot.branchName ?? "",
+            branch_code: snapshot.branchCode ?? "",
+            address: snapshot.branchAddress ?? undefined,
+            phone: snapshot.branchPhone ?? undefined,
+            is_active: snapshot.branchIsActive ?? true,
+        } as any : undefined,
     } as Users;
 }
 
@@ -97,6 +115,7 @@ async function loadAuthUserSnapshot(userId: string): Promise<AuthUserSnapshot | 
     const row = await AppDataSource.getRepository(Users)
         .createQueryBuilder("u")
         .leftJoin("u.roles", "r")
+        .leftJoin("u.branch", "b")
         .select("u.id", "id")
         .addSelect("u.username", "username")
         .addSelect("u.name", "name")
@@ -106,6 +125,11 @@ async function loadAuthUserSnapshot(userId: string): Promise<AuthUserSnapshot | 
         .addSelect("u.is_active", "isActive")
         .addSelect("r.roles_name", "roleName")
         .addSelect("r.display_name", "roleDisplayName")
+        .addSelect("b.branch_name", "branchName")
+        .addSelect("b.branch_code", "branchCode")
+        .addSelect("b.address", "branchAddress")
+        .addSelect("b.phone", "branchPhone")
+        .addSelect("b.is_active", "branchIsActive")
         .where("u.id = :userId", { userId })
         .getRawOne<{
             id: string;
@@ -117,6 +141,11 @@ async function loadAuthUserSnapshot(userId: string): Promise<AuthUserSnapshot | 
             isActive: boolean | string | number;
             roleName: string;
             roleDisplayName: string;
+            branchName?: string | null;
+            branchCode?: string | null;
+            branchAddress?: string | null;
+            branchPhone?: string | null;
+            branchIsActive?: boolean | string | number | null;
         }>();
 
     if (!row) return null;
@@ -131,6 +160,11 @@ async function loadAuthUserSnapshot(userId: string): Promise<AuthUserSnapshot | 
         roleName: normalizedRole,
         roleDisplayName: row.roleDisplayName || normalizedRole,
         branchId: row.branchId ?? null,
+        branchName: row.branchName ?? null,
+        branchCode: row.branchCode ?? null,
+        branchAddress: row.branchAddress ?? null,
+        branchPhone: row.branchPhone ?? null,
+        branchIsActive: row.branchIsActive !== undefined && row.branchIsActive !== null ? toBoolean(row.branchIsActive) : null,
         isUse: toBoolean(row.isUse),
         isActive: toBoolean(row.isActive),
     };
@@ -275,6 +309,11 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
                         roleDisplayName: freshSnapshot.roleDisplayName,
                         rolesId: freshSnapshot.rolesId,
                         branchId: freshSnapshot.branchId ?? null,
+                        branchName: freshSnapshot.branchName ?? null,
+                        branchCode: freshSnapshot.branchCode ?? null,
+                        branchAddress: freshSnapshot.branchAddress ?? null,
+                        branchPhone: freshSnapshot.branchPhone ?? null,
+                        branchIsActive: freshSnapshot.branchIsActive ?? null,
                         isUse: freshSnapshot.isUse,
                         isActive: freshSnapshot.isActive,
                         lastValidatedAt: Date.now(),
@@ -293,6 +332,11 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
                         roleName: normalizedSessionRole!,
                         roleDisplayName: session.roleDisplayName || normalizedSessionRole!,
                         branchId: session.branchId ?? null,
+                        branchName: session.branchName ?? null,
+                        branchCode: session.branchCode ?? null,
+                        branchAddress: session.branchAddress ?? null,
+                        branchPhone: session.branchPhone ?? null,
+                        branchIsActive: session.branchIsActive ?? null,
                         isUse: session.isUse!,
                         isActive: session.isActive!,
                     };
