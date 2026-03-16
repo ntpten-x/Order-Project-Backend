@@ -15,6 +15,14 @@ export class StockCategoryService {
 
     constructor(private stockCategoryModel: StockCategoryModel) {}
 
+    private normalizeDisplayName(value: unknown): string {
+        return String(value || "").trim();
+    }
+
+    private normalizeDisplayNameForCompare(value: unknown): string {
+        return this.normalizeDisplayName(value).toLowerCase();
+    }
+
     private getCacheScopeParts(branchId?: string): Array<string> {
         const ctx = getDbContext();
         const effectiveBranchId = branchId ?? ctx?.branchId;
@@ -37,22 +45,43 @@ export class StockCategoryService {
             cacheKey(this.CACHE_PREFIX, "branch", effectiveBranchId, "list_page"),
             cacheKey(this.CACHE_PREFIX, "branch", effectiveBranchId, "single"),
             cacheKey(this.CACHE_PREFIX, "branch", effectiveBranchId, "name"),
+            cacheKey(this.CACHE_PREFIX, "admin", "list"),
+            cacheKey(this.CACHE_PREFIX, "admin", "list_page"),
+            cacheKey(this.CACHE_PREFIX, "admin", "single"),
+            cacheKey(this.CACHE_PREFIX, "admin", "name"),
+            cacheKey(this.CACHE_PREFIX, "public", "list"),
+            cacheKey(this.CACHE_PREFIX, "public", "list_page"),
+            cacheKey(this.CACHE_PREFIX, "public", "single"),
+            cacheKey(this.CACHE_PREFIX, "public", "name"),
         ];
 
         if (id) {
             patterns.push(cacheKey(this.CACHE_PREFIX, "branch", effectiveBranchId, "single", id));
+            patterns.push(cacheKey(this.CACHE_PREFIX, "admin", "single", id));
+            patterns.push(cacheKey(this.CACHE_PREFIX, "public", "single", id));
         }
 
         invalidateCache(patterns);
     }
 
-    async findAll(branchId?: string, sortCreated: CreatedSort = "old"): Promise<StockCategory[]> {
+    async findAll(
+        branchId?: string,
+        sortCreated: CreatedSort = "old",
+        filters?: { q?: string; status?: "active" | "inactive" }
+    ): Promise<StockCategory[]> {
         const scope = this.getCacheScopeParts(branchId);
-        const key = cacheKey(this.CACHE_PREFIX, ...scope, "list", sortCreated);
+        const key = cacheKey(
+            this.CACHE_PREFIX,
+            ...scope,
+            "list",
+            sortCreated,
+            (filters?.q || "").trim().toLowerCase(),
+            filters?.status || "all"
+        );
 
         return withCache(
             key,
-            () => this.stockCategoryModel.findAll(branchId, sortCreated),
+            () => this.stockCategoryModel.findAll(branchId, sortCreated, filters),
             this.CACHE_TTL,
             metadataCache as any
         );
@@ -116,7 +145,7 @@ export class StockCategoryService {
             throw AppError.badRequest("ไม่พบสาขาที่ต้องการใช้งาน");
         }
 
-        const displayName = String(category.display_name || "").trim();
+        const displayName = this.normalizeDisplayName(category.display_name);
         if (!displayName) {
             throw AppError.badRequest("กรุณาระบุชื่อหมวดหมู่");
         }
@@ -148,14 +177,18 @@ export class StockCategoryService {
             throw AppError.badRequest("ไม่พบสาขาที่ต้องการใช้งาน");
         }
 
-        const nextDisplayName = String(category.display_name ?? existing.display_name ?? "").trim();
+        const nextDisplayName = this.normalizeDisplayName(category.display_name ?? existing.display_name);
         if (!nextDisplayName) {
             throw AppError.badRequest("กรุณาระบุชื่อหมวดหมู่");
         }
 
-        const duplicate = await this.stockCategoryModel.findOneByName(nextDisplayName, effectiveBranchId);
-        if (duplicate && duplicate.id !== id) {
-            throw AppError.conflict(`ชื่อหมวดหมู่ "${nextDisplayName}" ถูกใช้งานแล้ว`);
+        const currentDisplayName = this.normalizeDisplayNameForCompare(existing.display_name);
+        const nextDisplayNameForCompare = this.normalizeDisplayNameForCompare(nextDisplayName);
+        if (currentDisplayName !== nextDisplayNameForCompare) {
+            const duplicate = await this.stockCategoryModel.findOneByName(nextDisplayName, effectiveBranchId);
+            if (duplicate && duplicate.id !== id) {
+                throw AppError.conflict(`ชื่อหมวดหมู่ "${nextDisplayName}" ถูกใช้งานแล้ว`);
+            }
         }
 
         const updated = await this.stockCategoryModel.update(

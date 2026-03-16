@@ -38,11 +38,18 @@ export class IngredientsService {
             cacheKey(this.CACHE_PREFIX, "branch", effectiveBranchId, "list"),
             cacheKey(this.CACHE_PREFIX, "branch", effectiveBranchId, "list_page"),
             cacheKey(this.CACHE_PREFIX, "branch", effectiveBranchId, "single"),
-            cacheKey(this.CACHE_PREFIX, "branch", effectiveBranchId, "display_name"),
+            cacheKey(this.CACHE_PREFIX, "admin", "list"),
+            cacheKey(this.CACHE_PREFIX, "admin", "list_page"),
+            cacheKey(this.CACHE_PREFIX, "admin", "single"),
+            cacheKey(this.CACHE_PREFIX, "public", "list"),
+            cacheKey(this.CACHE_PREFIX, "public", "list_page"),
+            cacheKey(this.CACHE_PREFIX, "public", "single"),
         ];
 
         if (id) {
             patterns.push(cacheKey(this.CACHE_PREFIX, "branch", effectiveBranchId, "single", id));
+            patterns.push(cacheKey(this.CACHE_PREFIX, "admin", "single", id));
+            patterns.push(cacheKey(this.CACHE_PREFIX, "public", "single", id));
         }
 
         invalidateCache(patterns);
@@ -54,6 +61,10 @@ export class IngredientsService {
 
     private normalizeDescription(description?: string | null): string {
         return String(description || "").trim();
+    }
+
+    private normalizeDisplayNameForCompare(displayName?: string | null): string {
+        return this.normalizeDisplayName(displayName).toLowerCase();
     }
 
     async findAll(
@@ -110,19 +121,6 @@ export class IngredientsService {
         );
     }
 
-    async findOneByDisplayName(displayName: string, branchId?: string): Promise<Ingredients | null> {
-        const normalizedDisplayName = this.normalizeDisplayName(displayName).toLowerCase();
-        const scope = this.getCacheScopeParts(branchId);
-        const key = cacheKey(this.CACHE_PREFIX, ...scope, "display_name", normalizedDisplayName);
-
-        return withCache(
-            key,
-            () => this.ingredientsModel.findOneByDisplayName(normalizedDisplayName, branchId),
-            this.CACHE_TTL,
-            metadataCache as any
-        );
-    }
-
     async create(ingredients: Ingredients, branchId?: string): Promise<Ingredients> {
         const effectiveBranchId = branchId || ingredients.branch_id;
         if (!effectiveBranchId) {
@@ -149,6 +147,14 @@ export class IngredientsService {
             } as any,
         });
 
+        if (!unit) {
+            throw AppError.badRequest("ไม่พบหน่วยนับวัตถุดิบในสาขาปัจจุบัน");
+        }
+
+        if (!unit.is_active) {
+            throw AppError.badRequest("ไม่สามารถเลือกหน่วยนับที่ปิดใช้งานได้");
+        }
+
         if (categoryId) {
             const category = await getRepository(StockCategory).findOne({
                 where: {
@@ -160,10 +166,10 @@ export class IngredientsService {
             if (!category) {
                 throw AppError.badRequest("ไม่พบหมวดหมู่วัตถุดิบในสาขาปัจจุบัน");
             }
-        }
 
-        if (!unit) {
-            throw AppError.badRequest("ไม่พบหน่วยนับวัตถุดิบในสาขาปัจจุบัน");
+            if (!category.is_active) {
+                throw AppError.badRequest("ไม่สามารถเลือกหมวดหมู่ที่ปิดใช้งานได้");
+            }
         }
 
         const duplicateByDisplayName = await this.ingredientsModel.findOneByDisplayName(displayName, effectiveBranchId);
@@ -226,6 +232,14 @@ export class IngredientsService {
             } as any,
         });
 
+        if (!unit) {
+            throw AppError.badRequest("ไม่พบหน่วยนับวัตถุดิบในสาขาปัจจุบัน");
+        }
+
+        if (!unit.is_active && nextUnitId !== existing.unit_id) {
+            throw AppError.badRequest("ไม่สามารถเลือกหน่วยนับที่ปิดใช้งานได้");
+        }
+
         if (nextCategoryId) {
             const category = await getRepository(StockCategory).findOne({
                 where: {
@@ -237,15 +251,19 @@ export class IngredientsService {
             if (!category) {
                 throw AppError.badRequest("ไม่พบหมวดหมู่วัตถุดิบในสาขาปัจจุบัน");
             }
+
+            if (!category.is_active && nextCategoryId !== existing.category_id) {
+                throw AppError.badRequest("ไม่สามารถเลือกหมวดหมู่ที่ปิดใช้งานได้");
+            }
         }
 
-        if (!unit) {
-            throw AppError.badRequest("ไม่พบหน่วยนับวัตถุดิบในสาขาปัจจุบัน");
-        }
-
-        const duplicateByDisplayName = await this.ingredientsModel.findOneByDisplayName(nextDisplayName, effectiveBranchId);
-        if (duplicateByDisplayName && duplicateByDisplayName.id !== id) {
-            throw AppError.conflict(`ชื่อวัตถุดิบ "${nextDisplayName}" ถูกใช้งานแล้ว`);
+        const currentDisplayName = this.normalizeDisplayNameForCompare(existing.display_name);
+        const nextDisplayNameForCompare = this.normalizeDisplayNameForCompare(nextDisplayName);
+        if (currentDisplayName !== nextDisplayNameForCompare) {
+            const duplicateByDisplayName = await this.ingredientsModel.findOneByDisplayName(nextDisplayName, effectiveBranchId);
+            if (duplicateByDisplayName && duplicateByDisplayName.id !== id) {
+                throw AppError.conflict(`ชื่อวัตถุดิบ "${nextDisplayName}" ถูกใช้งานแล้ว`);
+            }
         }
 
         await this.ingredientsModel.update(

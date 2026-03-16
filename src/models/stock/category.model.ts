@@ -1,22 +1,14 @@
 import { getRepository } from "../../database/dbContext";
 import { StockCategory } from "../../entity/stock/Category";
+import { SelectQueryBuilder } from "typeorm";
 import { CreatedSort, createdSortToOrder } from "../../utils/sortCreated";
 
 export class StockCategoryModel {
-    async findAllPaginated(
-        page: number,
-        limit: number,
+    private applyFilters(
+        query: SelectQueryBuilder<StockCategory>,
         filters?: { q?: string; status?: "active" | "inactive" },
-        branchId?: string,
-        sortCreated: CreatedSort = "old"
-    ): Promise<{ data: StockCategory[]; total: number; page: number; limit: number; last_page: number }> {
-        const safePage = Math.max(page, 1);
-        const safeLimit = Math.min(Math.max(limit, 1), 200);
-        const repository = getRepository(StockCategory);
-        const query = repository
-            .createQueryBuilder("category")
-            .orderBy("category.create_date", createdSortToOrder(sortCreated));
-
+        branchId?: string
+    ) {
         if (branchId) {
             query.andWhere("category.branch_id = :branchId", { branchId });
         }
@@ -32,6 +24,25 @@ export class StockCategoryModel {
             query.andWhere("LOWER(category.display_name) LIKE :q", { q });
         }
 
+        return query;
+    }
+
+    async findAllPaginated(
+        page: number,
+        limit: number,
+        filters?: { q?: string; status?: "active" | "inactive" },
+        branchId?: string,
+        sortCreated: CreatedSort = "old"
+    ): Promise<{ data: StockCategory[]; total: number; page: number; limit: number; last_page: number }> {
+        const safePage = Math.max(page, 1);
+        const safeLimit = Math.min(Math.max(limit, 1), 200);
+        const repository = getRepository(StockCategory);
+        const query = repository
+            .createQueryBuilder("category")
+            .orderBy("category.create_date", createdSortToOrder(sortCreated));
+
+        this.applyFilters(query, filters, branchId);
+
         query
             .addOrderBy("category.is_active", "DESC")
             .addOrderBy("category.id", "ASC")
@@ -43,7 +54,11 @@ export class StockCategoryModel {
         return { data, total, page: safePage, limit: safeLimit, last_page };
     }
 
-    async findAll(branchId?: string, sortCreated: CreatedSort = "old"): Promise<StockCategory[]> {
+    async findAll(
+        branchId?: string,
+        sortCreated: CreatedSort = "old",
+        filters?: { q?: string; status?: "active" | "inactive" }
+    ): Promise<StockCategory[]> {
         const repository = getRepository(StockCategory);
         const query = repository
             .createQueryBuilder("category")
@@ -51,9 +66,7 @@ export class StockCategoryModel {
             .addOrderBy("category.is_active", "DESC")
             .addOrderBy("category.id", "ASC");
 
-        if (branchId) {
-            query.andWhere("category.branch_id = :branchId", { branchId });
-        }
+        this.applyFilters(query, filters, branchId);
 
         return query.getMany();
     }

@@ -19,7 +19,6 @@ import ingredientsUnitStockRouter from "./src/routes/stock/ingredientsUnit.route
 import ingredientsStockRouter from "./src/routes/stock/ingredients.route";
 import categoryStockRouter from "./src/routes/stock/category.route";
 import ordersStockRouter from "./src/routes/stock/orders.route";
-import ordersDetailStockRouter from "./src/routes/stock/ordersDetail.route";
 import categoryPosRouter from "./src/routes/pos/category.route";
 import productsUnitPosRouter from "./src/routes/pos/productsUnit.route";
 import toppingPosRouter from "./src/routes/pos/topping.route";
@@ -433,7 +432,6 @@ app.use("/stock/ingredientsUnit", ingredientsUnitStockRouter);
 app.use("/stock/ingredients", ingredientsStockRouter);
 app.use("/stock/category", categoryStockRouter);
 app.use("/stock/orders", ordersStockRouter);
-app.use("/stock/ordersDetail", ordersDetailStockRouter);
 app.use("/pos/category", categoryPosRouter);
 app.use("/pos/productsUnit", productsUnitPosRouter);
 app.use("/pos/topping", toppingPosRouter);

@@ -4,6 +4,14 @@ import { addBooleanFilter } from "../../utils/dbHelpers";
 import { CreatedSort, createdSortToOrder } from "../../utils/sortCreated";
 
 export class IngredientsModel {
+    private toPersistencePayload(ingredients: Partial<Ingredients>): Partial<Ingredients> {
+        const payload = { ...ingredients } as Record<string, unknown>;
+        delete payload.branch;
+        delete payload.unit;
+        delete payload.category;
+        return payload as Partial<Ingredients>;
+    }
+
     async findAllPaginated(
         page: number,
         limit: number,
@@ -120,12 +128,12 @@ export class IngredientsModel {
     }
 
     async create(ingredients: Ingredients): Promise<Ingredients> {
-        return getRepository(Ingredients).save(ingredients);
+        return getRepository(Ingredients).save(this.toPersistencePayload(ingredients) as Ingredients);
     }
 
     async update(id: string, ingredients: Ingredients, branchId?: string): Promise<Ingredients> {
         return getRepository(Ingredients).save({
-            ...ingredients,
+            ...this.toPersistencePayload(ingredients),
             id,
             ...(branchId ? { branch_id: branchId } : {}),
         } as Ingredients);

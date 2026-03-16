@@ -161,9 +161,18 @@ export class OrdersService {
             return;
         }
 
-        const patterns = [cacheKey(this.CACHE_PREFIX, "branch", effectiveBranchId, "list")];
+        const patterns = [
+            cacheKey(this.CACHE_PREFIX, "branch", effectiveBranchId, "list"),
+            cacheKey(this.CACHE_PREFIX, "branch", effectiveBranchId, "single"),
+            cacheKey(this.CACHE_PREFIX, "admin", "list"),
+            cacheKey(this.CACHE_PREFIX, "admin", "single"),
+            cacheKey(this.CACHE_PREFIX, "public", "list"),
+            cacheKey(this.CACHE_PREFIX, "public", "single"),
+        ];
         if (id) {
             patterns.push(cacheKey(this.CACHE_PREFIX, "branch", effectiveBranchId, "single", id));
+            patterns.push(cacheKey(this.CACHE_PREFIX, "admin", "single", id));
+            patterns.push(cacheKey(this.CACHE_PREFIX, "public", "single", id));
         }
         invalidateCache(patterns);
     }

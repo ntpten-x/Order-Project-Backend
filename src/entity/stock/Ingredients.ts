@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, Index } from "typeorm"
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, Index, CreateDateColumn, UpdateDateColumn } from "typeorm"
 import { IngredientsUnit } from "./IngredientsUnit"
 import { Branch } from "../Branch"
 import { StockCategory } from "./Category"
@@ -38,8 +38,11 @@ export class Ingredients {
     @Column({ type: "uuid" })
     unit_id!: string
 
-    @Column({ type: "timestamptz", default: () => "CURRENT_TIMESTAMP" })
+    @CreateDateColumn({ type: "timestamptz" })
     create_date!: Date
+
+    @UpdateDateColumn({ type: "timestamptz" })
+    update_date!: Date
 
     @ManyToOne(() => IngredientsUnit, (ingredientsUnit) => ingredientsUnit.ingredients)
     @JoinColumn({ name: "unit_id" })

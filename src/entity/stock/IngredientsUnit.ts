@@ -1,4 +1,14 @@
-import { Entity, PrimaryGeneratedColumn, Column, OneToMany, Index, ManyToOne, JoinColumn } from "typeorm"
+import {
+    Entity,
+    PrimaryGeneratedColumn,
+    Column,
+    OneToMany,
+    Index,
+    ManyToOne,
+    JoinColumn,
+    CreateDateColumn,
+    UpdateDateColumn,
+} from "typeorm"
 import { Ingredients } from "./Ingredients"
 import { Branch } from "../Branch"
 
@@ -23,8 +33,11 @@ export class IngredientsUnit {
     @Column({ type: "boolean", default: true })
     is_active!: boolean
 
-    @Column({ type: "timestamptz", default: () => "CURRENT_TIMESTAMP" })
+    @CreateDateColumn({ type: "timestamptz" })
     create_date!: Date
+
+    @UpdateDateColumn({ type: "timestamptz" })
+    update_date!: Date
 
     @OneToMany(() => Ingredients, (ingredients) => ingredients.unit)
     ingredients!: Ingredients[]

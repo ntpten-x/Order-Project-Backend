@@ -13,6 +13,7 @@ export class StockCategoryController {
 
     findAll = catchAsync(async (req: Request, res: Response) => {
         const branchId = getBranchId(req as any);
+        const hasPaging = req.query.page !== undefined || req.query.limit !== undefined;
         const page = Math.max(parseInt(req.query.page as string) || 1, 1);
         const limitRaw = parseInt(req.query.limit as string) || 50;
         const limit = Math.min(Math.max(limitRaw, 1), 200);
@@ -20,6 +21,15 @@ export class StockCategoryController {
         const statusRaw = (req.query.status as string | undefined) || undefined;
         const status = statusRaw === "active" || statusRaw === "inactive" ? statusRaw : undefined;
         const sortCreated = parseCreatedSort(req.query.sort_created);
+
+        if (!hasPaging) {
+            const categories = await this.stockCategoryService.findAll(
+                branchId,
+                sortCreated,
+                { ...(q ? { q } : {}), ...(status ? { status } : {}) }
+            );
+            return ApiResponses.ok(res, categories);
+        }
 
         const categories = await this.stockCategoryService.findAllPaginated(
             page,
