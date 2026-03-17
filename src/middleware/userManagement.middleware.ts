@@ -106,6 +106,11 @@ export const enforceUserManagementPolicy = async (req: AuthRequest, res: Respons
         return ApiResponses.notFound(res, "User");
     }
 
+    const ctx = getDbContext();
+    if (ctx?.branchId && !ctx?.isAdmin && targetUser.branch_id !== ctx.branchId) {
+        return ApiResponses.notFound(res, "User");
+    }
+
     // Allow manager to update self, but not elevate/change system fields.
     if (targetUser.id === req.user?.id) {
         if (method === "PUT" || method === "PATCH") {
@@ -126,7 +131,6 @@ export const enforceUserManagementPolicy = async (req: AuthRequest, res: Respons
     }
 
     if (method === "PUT" || method === "PATCH") {
-        const ctx = getDbContext();
         if (!ctx?.branchId) {
             return ApiResponses.forbidden(res, "Access denied: No branch assigned");
         }

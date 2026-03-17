@@ -38,14 +38,21 @@ describe("users service offboarding", () => {
                     id: "u1",
                     username: "alice",
                     is_use: true,
+                    password: "hashed-password",
                 })
                 .mockResolvedValueOnce({
                     id: "u1",
                     username: "alice",
                     is_use: false,
+                    password: "hashed-password-next",
                 }),
             findOneByUsername: vi.fn(),
-            update: vi.fn().mockResolvedValue(undefined),
+            update: vi.fn().mockResolvedValue({
+                id: "u1",
+                username: "alice",
+                is_use: false,
+                password: "hashed-password-next",
+            }),
             revokeUserPermissionOverrides: vi.fn().mockResolvedValue(3),
         };
 
@@ -59,7 +66,18 @@ describe("users service offboarding", () => {
             result: "success",
         });
         expect(invalidatePermissionDecisionCacheByUserMock).toHaveBeenCalledWith("u1");
-        expect(emitToRoleMock).toHaveBeenCalledWith("Admin", expect.any(String), result);
+        expect(emitToRoleMock).toHaveBeenCalledWith(
+            "Admin",
+            expect.any(String),
+            expect.not.objectContaining({ password: expect.anything() })
+        );
+        expect(result).toEqual(
+            expect.objectContaining({
+                id: "u1",
+                username: "alice",
+                is_use: false,
+            })
+        );
     });
 
     it("returns the updated user even when branch-scoped lookup by id would hide the record", async () => {
@@ -74,11 +92,13 @@ describe("users service offboarding", () => {
                 id: "u2",
                 username: "bob",
                 branch_id: "branch-2",
+                password: "hashed-password",
             }),
             update: vi.fn().mockResolvedValue({
                 id: "u2",
                 username: "bob",
                 branch_id: "branch-2",
+                password: "hashed-password",
             }),
             revokeUserPermissionOverrides: vi.fn(),
         };
@@ -93,6 +113,11 @@ describe("users service offboarding", () => {
                 id: "u2",
                 branch_id: "branch-2",
             })
+        );
+        expect(emitToRoleMock).toHaveBeenCalledWith(
+            "Admin",
+            expect.any(String),
+            expect.not.objectContaining({ password: expect.anything() })
         );
     });
 });

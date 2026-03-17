@@ -114,6 +114,7 @@ export type SystemHealthReportOptions = {
 };
 
 const CSRF_EXCLUDED_PATHS = ["/auth/login", "/auth/logout", "/health", "/csrf-token", "/metrics"];
+const CSRF_EXCLUDED_PATTERNS = [...CSRF_EXCLUDED_PATHS, "/public/*"];
 const DEFAULT_ALLOWED_PROXY_PATHS = [
     "/auth/*",
     "/permissions/*",
@@ -541,8 +542,9 @@ export class SystemHealthService {
                 checkedAt,
                 details: {
                     enabled: true,
-                    excludedPaths: CSRF_EXCLUDED_PATHS,
+                    excludedPaths: CSRF_EXCLUDED_PATTERNS,
                     mode: "cookie-auth state-changing methods",
+                    bearerHeaderOnlyRequestsExcluded: true,
                 },
             },
             {

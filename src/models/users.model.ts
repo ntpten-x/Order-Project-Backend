@@ -80,7 +80,7 @@ export class UsersModels {
             const query = this.buildFindAllQuery(filters, access, sortCreated);
             return await query.getMany();
         } catch (error) {
-            throw error
+            throw error;
         }
     }
 
@@ -113,16 +113,7 @@ export class UsersModels {
                 .where("users.id = :id", { id });
 
             if (ctx?.branchId && !ctx?.isAdmin) {
-                if (ctx?.isAdmin && ctx?.userId) {
-                    query.andWhere(
-                        new Brackets((qb) => {
-                            qb.where("users.branch_id = :branchId", { branchId: ctx.branchId })
-                                .orWhere("users.id = :ctxUserId", { ctxUserId: ctx.userId });
-                        })
-                    );
-                } else {
-                    query.andWhere("users.branch_id = :branchId", { branchId: ctx.branchId });
-                }
+                query.andWhere("users.branch_id = :branchId", { branchId: ctx.branchId });
             }
 
             if (ctx?.role === "Manager" && !ctx?.isAdmin) {
@@ -146,7 +137,7 @@ export class UsersModels {
 
             return await query.getOne();
         } catch (error) {
-            throw error
+            throw error;
         }
     }
 
@@ -157,9 +148,9 @@ export class UsersModels {
                 .leftJoinAndSelect("users.roles", "roles")
                 .leftJoinAndSelect("users.branch", "branch")
                 .where("users.username = :username", { username })
-                .getOne()
+                .getOne();
         } catch (error) {
-            throw error
+            throw error;
         }
     }
 
@@ -170,9 +161,9 @@ export class UsersModels {
             if (ctx?.branchId) {
                 (users as any).branch_id = ctx.branchId;
             }
-            return getRepository(Users).save(users)
+            return getRepository(Users).save(users);
         } catch (error) {
-            throw error
+            throw error;
         }
     }
 
@@ -185,14 +176,14 @@ export class UsersModels {
             if (ctx?.branchId && !ctx?.isAdmin) {
                 const existing = await this.findOne(id);
                 if (!existing) {
-                    throw new Error("ไม่พบผู้ใช้");
+                    throw new Error("User not found");
                 }
                 (users as any).branch_id = ctx.branchId;
             }
 
-            return getRepository(Users).save({ ...users, id })
+            return getRepository(Users).save({ ...users, id });
         } catch (error) {
-            throw error
+            throw error;
         }
     }
 
@@ -204,14 +195,14 @@ export class UsersModels {
             if (ctx?.branchId && !ctx?.isAdmin) {
                 const result = await usersRepo.delete({ id, branch_id: ctx.branchId } as any);
                 if (!result.affected) {
-                    throw new Error("ไม่พบผู้ใช้");
+                    throw new Error("User not found");
                 }
                 return;
             }
 
-            await usersRepo.delete(id)
+            await usersRepo.delete(id);
         } catch (error) {
-            throw error
+            throw error;
         }
     }
 

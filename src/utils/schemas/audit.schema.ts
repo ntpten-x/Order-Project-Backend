@@ -2,6 +2,8 @@ import { z } from "zod";
 import { AuditActionType } from "../auditTypes";
 import { uuid } from "./common.schema";
 
+const createdSortSchema = z.enum(["old", "new"]);
+
 // Filters for audit log listing
 export const auditQuerySchema = z.object({
     query: z
@@ -16,6 +18,7 @@ export const auditQuerySchema = z.object({
             start_date: z.coerce.date().optional(),
             end_date: z.coerce.date().optional(),
             search: z.string().max(200).optional(),
+            sort_created: createdSortSchema.optional(),
         })
         .passthrough(),
 });

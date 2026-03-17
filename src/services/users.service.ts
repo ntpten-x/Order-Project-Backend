@@ -7,6 +7,7 @@ import { PermissionScope } from "../middleware/permission.middleware";
 import { metrics } from "../utils/metrics";
 import { invalidatePermissionDecisionCacheByUser } from "../utils/permissionCache";
 import { CreatedSort } from "../utils/sortCreated";
+import { sanitizeUser } from "../utils/userResponse";
 
 type AccessContext = {
     scope?: PermissionScope;
@@ -72,7 +73,9 @@ export class UsersService {
             users.password = await bcrypt.hash(users.password, 10);
             await this.usersModel.create(users);
             const createdUser = await this.usersModel.findOneByUsername(users.username);
-            this.socketService.emitToRole("Admin", RealtimeEvents.users.create, createdUser);
+            if (createdUser) {
+                this.socketService.emitToRole("Admin", RealtimeEvents.users.create, sanitizeUser(createdUser));
+            }
             return createdUser!;
         } catch (error) {
             throw error;
@@ -115,7 +118,7 @@ export class UsersService {
             const lookupUsername = users.username ?? findUser.username;
             const updatedUser = await this.usersModel.findOneByUsername(lookupUsername);
             const resultUser = updatedUser ?? savedUser;
-            this.socketService.emitToRole("Admin", RealtimeEvents.users.update, resultUser);
+            this.socketService.emitToRole("Admin", RealtimeEvents.users.update, sanitizeUser(resultUser));
             return resultUser!;
         } catch (error) {
             if (typeof users.is_use === "boolean" && users.is_use === false) {

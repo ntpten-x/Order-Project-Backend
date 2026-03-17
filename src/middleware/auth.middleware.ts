@@ -4,7 +4,7 @@ import { AppDataSource } from "../database/database";
 import { Branch } from "../entity/Branch";
 import { Users } from "../entity/Users";
 import { securityLogger, getClientIp } from "../utils/securityLogger";
-import { runWithDbContext } from "../database/dbContext";
+import { getRepository, runWithDbContext } from "../database/dbContext";
 import { ApiResponses } from "../utils/ApiResponse";
 import { getRedisClient, getSessionKey, isRedisConfigured } from "../lib/redisClient";
 import { normalizeRoleName } from "../utils/role";
@@ -168,6 +168,19 @@ async function loadAuthUserSnapshot(userId: string): Promise<AuthUserSnapshot | 
         isUse: toBoolean(row.isUse),
         isActive: toBoolean(row.isActive),
     };
+}
+
+export async function resolveAdminSelectedBranchId(cookieBranchId: string): Promise<string | null> {
+    const selectedBranch = await runWithDbContext(
+        { isAdmin: true },
+        async () =>
+            getRepository(Branch).findOneBy({
+                id: cookieBranchId,
+                is_active: true,
+            })
+    );
+
+    return selectedBranch?.id ?? null;
 }
 
 // Cache session snapshots briefly to reduce Redis/DB round-trips on read-heavy traffic.
@@ -404,11 +417,7 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
         const cookieBranchId = cookieBranchIdRaw.trim();
         let effectiveBranchId = userSnapshot.branchId ?? user.branch_id;
         if (isAdmin && cookieBranchId && UUID_RE.test(cookieBranchId)) {
-            const selectedBranch = await AppDataSource.getRepository(Branch).findOneBy({
-                id: cookieBranchId,
-                is_active: true,
-            });
-            effectiveBranchId = selectedBranch?.id ?? effectiveBranchId;
+            effectiveBranchId = (await resolveAdminSelectedBranchId(cookieBranchId)) ?? effectiveBranchId;
         }
 
         // Run the rest of the request inside a DB context so Postgres RLS (if enabled)

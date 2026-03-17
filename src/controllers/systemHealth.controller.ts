@@ -19,11 +19,13 @@ export class SystemHealthController {
         const methodQuery = parseQueryValue(req.query.method)?.trim().toUpperCase();
         const minSamplesQuery = parseQueryValue(req.query.minSamples)?.trim();
         const minSamplesParsed = Number(minSamplesQuery);
+        const minSamples =
+            Number.isFinite(minSamplesParsed) ? Math.min(100, Math.max(1, Math.trunc(minSamplesParsed))) : undefined;
 
         const report = await systemHealthService.getReport({
             slowEndpointMethod:
                 methodQuery && methodQuery !== "ALL" && ALLOWED_METHODS.has(methodQuery) ? methodQuery : undefined,
-            slowEndpointMinSamples: Number.isFinite(minSamplesParsed) ? minSamplesParsed : undefined,
+            slowEndpointMinSamples: minSamples,
         });
         setNoStoreHeaders(res);
         return ApiResponses.ok(res, report);

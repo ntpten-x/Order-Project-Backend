@@ -8,6 +8,7 @@ import { getClientIp } from "../utils/securityLogger";
 import { setNoStoreHeaders } from "../utils/cacheHeaders";
 import { AuthRequest } from "../middleware/auth.middleware";
 import { parseCreatedSort } from "../utils/sortCreated";
+import { sanitizeUser, sanitizeUsers } from "../utils/userResponse";
 
 export class UsersController {
     constructor(private usersService: UsersService) { }
@@ -55,7 +56,7 @@ export class UsersController {
             sortCreated
         );
         setNoStoreHeaders(res);
-        return ApiResponses.paginated(res, users.data, {
+        return ApiResponses.paginated(res, sanitizeUsers(users.data), {
             page: users.page,
             limit: users.limit,
             total: users.total,
@@ -71,7 +72,7 @@ export class UsersController {
             throw AppError.notFound("User");
         }
         setNoStoreHeaders(res);
-        return ApiResponses.ok(res, user);
+        return ApiResponses.ok(res, sanitizeUser(user));
     })
 
     create = catchAsync(async (req: AuthRequest, res: Response) => {
@@ -93,7 +94,7 @@ export class UsersController {
             description: `Create user ${user.username || user.id}`,
         });
 
-        return ApiResponses.created(res, user);
+        return ApiResponses.created(res, sanitizeUser(user));
     })
 
     update = catchAsync(async (req: AuthRequest, res: Response) => {
@@ -117,7 +118,7 @@ export class UsersController {
             description: `Update user ${user.username || user.id}`,
         });
 
-        return ApiResponses.ok(res, user);
+        return ApiResponses.ok(res, sanitizeUser(user));
     })
 
     delete = catchAsync(async (req: AuthRequest, res: Response) => {

@@ -6,6 +6,7 @@ import { AppError } from "../utils/AppError";
 import { AuthRequest } from "../middleware/auth.middleware";
 import { setNoStoreHeaders } from "../utils/cacheHeaders";
 import { parseCreatedSort } from "../utils/sortCreated";
+import { sanitizeAuditLogForResponse } from "../utils/auditSanitizer";
 
 export class AuditController {
     private auditService = new AuditService();
@@ -16,7 +17,7 @@ export class AuditController {
 
         const page = query.page ? Number(query.page) : 1;
         const limit = query.limit ? Number(query.limit) : 20;
-        const sortCreated = parseCreatedSort(query.sort_created);
+        const sortCreated = query.sort_created ? parseCreatedSort(query.sort_created) : "new";
 
         const requestedBranch = query.branch_id as string | undefined;
         const effectiveBranchId = isAdmin ? requestedBranch : req.user?.branch_id;
@@ -41,9 +42,10 @@ export class AuditController {
         };
 
         const { logs, total } = await this.auditService.getLogs(filters);
+        const sanitizedLogs = logs.map((log) => sanitizeAuditLogForResponse(log));
 
         setNoStoreHeaders(res);
-        return ApiResponses.paginated(res, logs, {
+        return ApiResponses.paginated(res, sanitizedLogs, {
             page: filters.page || 1,
             limit: filters.limit || 20,
             total,
@@ -63,6 +65,6 @@ export class AuditController {
         }
 
         setNoStoreHeaders(res);
-        return ApiResponses.ok(res, log);
+        return ApiResponses.ok(res, sanitizeAuditLogForResponse(log));
     });
 }

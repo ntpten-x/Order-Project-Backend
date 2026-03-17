@@ -5,6 +5,7 @@ import { catchAsync } from "../../utils/catchAsync";
 import { ApiResponses } from "../../utils/ApiResponse";
 import { AppError } from "../../utils/AppError";
 import { getClientIp } from "../../utils/securityLogger";
+import { setNoStoreHeaders } from "../../utils/cacheHeaders";
 import { PrintSettingsModel } from "../../models/pos/printSettings.model";
 import { PrintSettingsService } from "../../services/pos/printSettings.service";
 
@@ -15,6 +16,7 @@ export const getPrintSettings = catchAsync(async (req: Request, res: Response) =
     if (!branchId) throw AppError.forbidden("Access denied: No branch assigned to user");
 
     const settings = await service.getSettings(branchId);
+    setNoStoreHeaders(res);
     return ApiResponses.ok(res, settings);
 });
 
@@ -41,6 +43,6 @@ export const updatePrintSettings = catchAsync(async (req: Request, res: Response
         description: `Update print settings ${settings.id}`,
     });
 
+    setNoStoreHeaders(res);
     return ApiResponses.ok(res, settings);
 });
-

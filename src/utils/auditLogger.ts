@@ -7,6 +7,7 @@
 import { getDbContext, getRepository } from "../database/dbContext";
 import { AuditLog } from "../entity/AuditLog";
 import { AuditActionType } from "./auditTypes";
+import { sanitizeAuditSnapshot } from "./auditSanitizer";
 
 class AuditLogger {
     private get repository() {
@@ -38,6 +39,8 @@ class AuditLogger {
             const auditLog = this.repository.create({
                 ...params,
                 branch_id,
+                old_values: sanitizeAuditSnapshot(params.old_values) as Record<string, any> | undefined,
+                new_values: sanitizeAuditSnapshot(params.new_values) as Record<string, any> | undefined,
                 created_at: new Date(),
             });
 
