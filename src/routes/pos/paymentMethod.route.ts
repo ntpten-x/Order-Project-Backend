@@ -24,11 +24,31 @@ router.use(authenticateToken)
 router.use(requireBranch)
 
 router.get("/", authorizePermission("payment_method.page", "view"), validate(paginationQuerySchema), paymentMethodController.findAll)
-router.get("/:id", authorizePermission("payment_method.page", "view"), validate(paymentMethodIdParamSchema), paymentMethodController.findOne)
-router.get("/getByName/:name", authorizePermission("payment_method.page", "view"), validate(paymentMethodNameParamSchema), paymentMethodController.findByName)
+router.get("/:id", authorizePermission("payment_method.manager.feature", "access"), validate(paymentMethodIdParamSchema), paymentMethodController.findOne)
+router.get("/getByName/:name", authorizePermission("payment_method.manager.feature", "access"), validate(paymentMethodNameParamSchema), paymentMethodController.findByName)
 
-router.post("/", authorizePermission("payment_method.page", "create"), validate(createPaymentMethodSchema), paymentMethodController.create)
-router.put("/:id", authorizePermission("payment_method.page", "update"), validate(updatePaymentMethodSchema), paymentMethodController.update)
-router.delete("/:id", authorizePermission("payment_method.page", "delete"), validate(paymentMethodIdParamSchema), paymentMethodController.delete)
+router.post(
+    "/",
+    authorizePermission("payment_method.page", "create"),
+    authorizePermission("payment_method.manager.feature", "access"),
+    authorizePermission("payment_method.create.feature", "create"),
+    validate(createPaymentMethodSchema),
+    paymentMethodController.create
+)
+router.put(
+    "/:id",
+    authorizePermission("payment_method.page", "update"),
+    authorizePermission("payment_method.manager.feature", "access"),
+    validate(updatePaymentMethodSchema),
+    paymentMethodController.update
+)
+router.delete(
+    "/:id",
+    authorizePermission("payment_method.page", "delete"),
+    authorizePermission("payment_method.manager.feature", "access"),
+    authorizePermission("payment_method.delete.feature", "delete"),
+    validate(paymentMethodIdParamSchema),
+    paymentMethodController.delete
+)
 
 export default router

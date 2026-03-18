@@ -8,6 +8,39 @@ import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../../util
 import { getClientIp } from "../../utils/securityLogger";
 import { setPrivateSwrHeaders } from "../../utils/cacheHeaders";
 import { parseCreatedSort } from "../../utils/sortCreated";
+import { resolvePermissionForRequest } from "../../middleware/permission.middleware";
+import type { AuthRequest } from "../../middleware/auth.middleware";
+
+const PRODUCTS_UNIT_SEARCH_FEATURE = "products_unit.search.feature";
+const PRODUCTS_UNIT_FILTER_FEATURE = "products_unit.filter.feature";
+const PRODUCTS_UNIT_EDIT_FEATURE = "products_unit.edit.feature";
+const PRODUCTS_UNIT_STATUS_FEATURE = "products_unit.status.feature";
+
+async function requireProductsUnitFeature(
+    req: Request,
+    res: Response,
+    resourceKey: string,
+    actionKey: "access" | "view" | "update"
+): Promise<boolean> {
+    const permission = await resolvePermissionForRequest(req as AuthRequest, resourceKey, actionKey);
+    if (permission) {
+        return true;
+    }
+
+    res.status(403).json({
+        success: false,
+        error: {
+            code: "FORBIDDEN",
+            message: "Access denied: products unit capability not allowed",
+            details: {
+                reason: "products_unit_capability_denied",
+                resource: resourceKey,
+                action: actionKey,
+            },
+        },
+    });
+    return false;
+}
 
 export class ProductsUnitController {
     constructor(private productsUnitService: ProductsUnitService) { }
@@ -21,6 +54,17 @@ export class ProductsUnitController {
         const status = statusRaw === "active" || statusRaw === "inactive" ? statusRaw : undefined;
         const sortCreated = parseCreatedSort(req.query.sort_created);
         const branchId = getBranchId(req as any);
+
+        if (q?.trim()) {
+            const allowed = await requireProductsUnitFeature(req, res, PRODUCTS_UNIT_SEARCH_FEATURE, "view");
+            if (!allowed) return;
+        }
+
+        if (status || req.query.sort_created !== undefined) {
+            const allowed = await requireProductsUnitFeature(req, res, PRODUCTS_UNIT_FILTER_FEATURE, "view");
+            if (!allowed) return;
+        }
+
         const productsUnits = await this.productsUnitService.findAllPaginated(
             page,
             limit,
@@ -83,6 +127,31 @@ export class ProductsUnitController {
             req.body.branch_id = branchId;
         }
         const oldProductsUnit = await this.productsUnitService.findOne(req.params.id, branchId);
+        if (!oldProductsUnit) {
+            throw AppError.notFound("Products unit");
+        }
+
+        const requiredCapabilities = new Set<string>();
+        if ("display_name" in req.body) {
+            const nextDisplayName = typeof req.body.display_name === "string" ? req.body.display_name.trim() : "";
+            const currentDisplayName = oldProductsUnit.display_name?.trim() || "";
+            if (nextDisplayName !== currentDisplayName) {
+                requiredCapabilities.add(PRODUCTS_UNIT_EDIT_FEATURE);
+            }
+        }
+
+        if (
+            typeof req.body.is_active === "boolean" &&
+            Boolean(req.body.is_active) !== Boolean(oldProductsUnit.is_active)
+        ) {
+            requiredCapabilities.add(PRODUCTS_UNIT_STATUS_FEATURE);
+        }
+
+        for (const resourceKey of requiredCapabilities) {
+            const allowed = await requireProductsUnitFeature(req, res, resourceKey, "update");
+            if (!allowed) return;
+        }
+
         const productsUnit = await this.productsUnitService.update(req.params.id, req.body, branchId);
 
         if (productsUnit) {

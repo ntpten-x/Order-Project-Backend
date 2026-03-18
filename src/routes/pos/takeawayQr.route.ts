@@ -11,7 +11,7 @@ const controller = new TakeawayQrController(new TakeawayQrService());
 router.use(authenticateToken);
 router.use(requireBranch);
 
-router.get("/", authorizePermission("orders.page", "view"), controller.getInfo);
-router.post("/rotate", authorizePermission("orders.page", "update"), controller.rotateQr);
+router.get("/", authorizePermission("qr_code.takeaway.feature", "view"), controller.getInfo);
+router.post("/rotate", authorizePermission("qr_code.takeaway_rotate.feature", "update"), controller.rotateQr);
 
 export default router;

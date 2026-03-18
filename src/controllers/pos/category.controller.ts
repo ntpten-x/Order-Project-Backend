@@ -8,6 +8,39 @@ import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../../util
 import { getClientIp } from "../../utils/securityLogger";
 import { setPrivateSwrHeaders } from "../../utils/cacheHeaders";
 import { parseCreatedSort } from "../../utils/sortCreated";
+import { resolvePermissionForRequest } from "../../middleware/permission.middleware";
+import type { AuthRequest } from "../../middleware/auth.middleware";
+
+const CATEGORY_SEARCH_FEATURE = "category.search.feature";
+const CATEGORY_FILTER_FEATURE = "category.filter.feature";
+const CATEGORY_EDIT_FEATURE = "category.edit.feature";
+const CATEGORY_STATUS_FEATURE = "category.status.feature";
+
+async function requireCategoryFeature(
+    req: Request,
+    res: Response,
+    resourceKey: string,
+    actionKey: "access" | "view" | "update"
+): Promise<boolean> {
+    const permission = await resolvePermissionForRequest(req as AuthRequest, resourceKey, actionKey);
+    if (permission) {
+        return true;
+    }
+
+    res.status(403).json({
+        success: false,
+        error: {
+            code: "FORBIDDEN",
+            message: "Access denied: category capability not allowed",
+            details: {
+                reason: "category_capability_denied",
+                resource: resourceKey,
+                action: actionKey,
+            },
+        },
+    });
+    return false;
+}
 
 export class CategoryController {
     constructor(private categoryService: CategoryService) { }
@@ -21,6 +54,17 @@ export class CategoryController {
         const statusRaw = (req.query.status as string | undefined) || undefined;
         const status = statusRaw === "active" || statusRaw === "inactive" ? statusRaw : undefined;
         const sortCreated = parseCreatedSort(req.query.sort_created);
+
+        if (q?.trim()) {
+            const allowed = await requireCategoryFeature(req, res, CATEGORY_SEARCH_FEATURE, "view");
+            if (!allowed) return;
+        }
+
+        if (status || req.query.sort_created !== undefined) {
+            const allowed = await requireCategoryFeature(req, res, CATEGORY_FILTER_FEATURE, "view");
+            if (!allowed) return;
+        }
+
         const categories = await this.categoryService.findAllPaginated(
             page,
             limit,
@@ -87,6 +131,32 @@ export class CategoryController {
             req.body.branch_id = branchId;
         }
         const oldCategory = await this.categoryService.findOne(req.params.id, branchId);
+        if (!oldCategory) {
+            throw AppError.notFound("Category");
+        }
+
+        const requiredCapabilities = new Set<string>();
+        const nextDisplayName =
+            typeof req.body.display_name === "string" ? req.body.display_name.trim() : undefined;
+        if (
+            nextDisplayName !== undefined &&
+            nextDisplayName.toLowerCase() !== oldCategory.display_name.trim().toLowerCase()
+        ) {
+            requiredCapabilities.add(CATEGORY_EDIT_FEATURE);
+        }
+
+        if (
+            typeof req.body.is_active === "boolean" &&
+            Boolean(req.body.is_active) !== Boolean(oldCategory.is_active)
+        ) {
+            requiredCapabilities.add(CATEGORY_STATUS_FEATURE);
+        }
+
+        for (const resourceKey of requiredCapabilities) {
+            const allowed = await requireCategoryFeature(req, res, resourceKey, "update");
+            if (!allowed) return;
+        }
+
         const category = await this.categoryService.update(req.params.id, req.body, branchId);
 
         const userInfo = getUserInfoFromRequest(req as any);

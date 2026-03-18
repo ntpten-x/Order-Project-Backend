@@ -15,9 +15,9 @@ router.get("/", authorizePermission("print_settings.page", "view"), getPrintSett
 router.put(
     "/",
     authorizePermission("print_settings.page", "update"),
+    authorizePermission("print_settings.publish.feature", "update"),
     validate(updatePrintSettingsSchema),
     updatePrintSettings
 );
 
 export default router;
-

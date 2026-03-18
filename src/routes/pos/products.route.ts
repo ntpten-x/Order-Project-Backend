@@ -26,11 +26,31 @@ router.use(requireBranch)
 router.get("/", authorizePermission("products.page", "view"), validate(paginationQuerySchema), productsController.findAll)
 // NOTE: Keep static routes above "/:id" to avoid param route shadowing.
 router.get("/active-count", authorizePermission("products.page", "view"), validate(paginationQuerySchema), productsController.activeCount)
-router.get("/name/:name", authorizePermission("products.page", "view"), validate(productNameParamSchema), productsController.findOneByName)
-router.get("/:id", authorizePermission("products.page", "view"), validate(productIdParamSchema), productsController.findOne)
+router.get("/name/:name", authorizePermission("products.manager.feature", "access"), validate(productNameParamSchema), productsController.findOneByName)
+router.get("/:id", authorizePermission("products.manager.feature", "access"), validate(productIdParamSchema), productsController.findOne)
 
-router.post("/", authorizePermission("products.page", "create"), validate(createProductSchema), productsController.create)
-router.put("/:id", authorizePermission("products.page", "update"), validate(updateProductSchema), productsController.update)
-router.delete("/:id", authorizePermission("products.page", "delete"), validate(productIdParamSchema), productsController.delete)
+router.post(
+    "/",
+    authorizePermission("products.page", "create"),
+    authorizePermission("products.manager.feature", "access"),
+    authorizePermission("products.create.feature", "create"),
+    validate(createProductSchema),
+    productsController.create
+)
+router.put(
+    "/:id",
+    authorizePermission("products.page", "update"),
+    authorizePermission("products.manager.feature", "access"),
+    validate(updateProductSchema),
+    productsController.update
+)
+router.delete(
+    "/:id",
+    authorizePermission("products.page", "delete"),
+    authorizePermission("products.manager.feature", "access"),
+    authorizePermission("products.delete.feature", "delete"),
+    validate(productIdParamSchema),
+    productsController.delete
+)
 
 export default router

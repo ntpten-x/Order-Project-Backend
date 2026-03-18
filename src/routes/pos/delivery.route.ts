@@ -25,10 +25,35 @@ router.use(requireBranch)
 
 router.get("/", authorizePermission("delivery.page", "view"), validate(paginationQuerySchema), deliveryController.findAll)
 router.get("/:id", authorizePermission("delivery.page", "view"), validate(deliveryIdParamSchema), deliveryController.findOne)
-router.get("/getByName/:name", authorizePermission("delivery.page", "view"), validate(deliveryNameParamSchema), deliveryController.findByName)
+router.get(
+    "/getByName/:name",
+    authorizePermission("delivery.manager.feature", "access"),
+    validate(deliveryNameParamSchema),
+    deliveryController.findByName
+)
 
-router.post("/", authorizePermission("delivery.page", "create"), validate(createDeliverySchema), deliveryController.create)
-router.put("/:id", authorizePermission("delivery.page", "update"), validate(updateDeliverySchema), deliveryController.update)
-router.delete("/:id", authorizePermission("delivery.page", "delete"), validate(deliveryIdParamSchema), deliveryController.delete)
+router.post(
+    "/",
+    authorizePermission("delivery.page", "create"),
+    authorizePermission("delivery.manager.feature", "access"),
+    authorizePermission("delivery.create.feature", "create"),
+    validate(createDeliverySchema),
+    deliveryController.create
+)
+router.put(
+    "/:id",
+    authorizePermission("delivery.page", "update"),
+    authorizePermission("delivery.manager.feature", "access"),
+    validate(updateDeliverySchema),
+    deliveryController.update
+)
+router.delete(
+    "/:id",
+    authorizePermission("delivery.page", "delete"),
+    authorizePermission("delivery.manager.feature", "access"),
+    authorizePermission("delivery.delete.feature", "delete"),
+    validate(deliveryIdParamSchema),
+    deliveryController.delete
+)
 
 export default router

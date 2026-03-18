@@ -20,7 +20,7 @@ router.use(requireBranch)
 router.get("/", authorizePermission("payments.page", "view"), paymentsController.findAll)
 router.get("/:id", authorizePermission("payments.page", "view"), validate(paymentIdParamSchema), paymentsController.findOne)
 
-router.post("/", authorizePermission("payments.page", "create"), validate(createPaymentSchema), paymentsController.create)
+router.post("/", authorizePermission("payments.checkout.feature", "create"), validate(createPaymentSchema), paymentsController.create)
 router.put("/:id", authorizePermission("payments.page", "update"), validate(updatePaymentSchema), paymentsController.update)
 router.delete("/:id", authorizePermission("payments.page", "delete"), validate(paymentIdParamSchema), paymentsController.delete)
 

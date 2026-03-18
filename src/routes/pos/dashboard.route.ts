@@ -26,7 +26,7 @@ dashboardRouter.get(
 dashboardRouter.get(
     "/orders/:id",
     authenticateToken,
-    authorizePermission("reports.sales.page", "view"),
+    authorizePermission("reports.sales.order_detail.feature", "access"),
     requireBranch,
     enforceOrderTargetScope("id"),
     validate(orderIdParamSchema),
@@ -36,7 +36,7 @@ dashboardRouter.get(
 dashboardRouter.get(
     "/sales",
     authenticateToken,
-    authorizePermission("reports.sales.page", "view"),
+    authorizePermission("reports.sales.summary.feature", "view"),
     requireBranch,
     dashboardController.getSalesSummary
 );
@@ -44,7 +44,7 @@ dashboardRouter.get(
 dashboardRouter.get(
     "/top-items",
     authenticateToken,
-    authorizePermission("reports.sales.page", "view"),
+    authorizePermission("reports.sales.top_items.feature", "view"),
     requireBranch,
     dashboardController.getTopSellingItems
 );

@@ -24,11 +24,36 @@ router.use(authenticateToken)
 router.use(requireBranch)
 
 router.get("/", authorizePermission("category.page", "view"), validate(paginationQuerySchema), categoryController.findAll)
-router.get("/name/:name", authorizePermission("category.page", "view"), validate(categoryNameParamSchema), categoryController.findOneByName)
+router.get(
+    "/name/:name",
+    authorizePermission("category.manager.feature", "access"),
+    validate(categoryNameParamSchema),
+    categoryController.findOneByName
+)
 router.get("/:id", authorizePermission("category.page", "view"), validate(categoryIdParamSchema), categoryController.findOne)
 
-router.post("/", authorizePermission("category.page", "create"), validate(createCategorySchema), categoryController.create)
-router.put("/:id", authorizePermission("category.page", "update"), validate(updateCategorySchema), categoryController.update)
-router.delete("/:id", authorizePermission("category.page", "delete"), validate(categoryIdParamSchema), categoryController.delete)
+router.post(
+    "/",
+    authorizePermission("category.page", "create"),
+    authorizePermission("category.manager.feature", "access"),
+    authorizePermission("category.create.feature", "create"),
+    validate(createCategorySchema),
+    categoryController.create
+)
+router.put(
+    "/:id",
+    authorizePermission("category.page", "update"),
+    authorizePermission("category.manager.feature", "access"),
+    validate(updateCategorySchema),
+    categoryController.update
+)
+router.delete(
+    "/:id",
+    authorizePermission("category.page", "delete"),
+    authorizePermission("category.manager.feature", "access"),
+    authorizePermission("category.delete.feature", "delete"),
+    validate(categoryIdParamSchema),
+    categoryController.delete
+)
 
 export default router

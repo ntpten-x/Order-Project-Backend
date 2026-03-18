@@ -103,7 +103,7 @@ export class PermissionsModel {
                     AND rp.role_id = $1
                 WHERE pr.is_active = true
                   AND pa.is_active = true
-                  AND pr.resource_type IN ('page', 'menu')
+                  AND pr.resource_type IN ('page', 'menu', 'feature')
                 ORDER BY pr.sort_order ASC, pr.resource_name ASC, pa.action_key ASC
             `,
             [roleId]
@@ -126,7 +126,7 @@ export class PermissionsModel {
                     AND up.user_id = $1
                 WHERE pr.is_active = true
                   AND pa.is_active = true
-                  AND pr.resource_type IN ('page', 'menu')
+                  AND pr.resource_type IN ('page', 'menu', 'feature')
                 ORDER BY pr.sort_order ASC, pr.resource_name ASC, pa.action_key ASC
             `,
             [userId]
@@ -512,7 +512,7 @@ export class PermissionsModel {
                 INNER JOIN permission_resources pr
                     ON pr.resource_key = payload.resource_key
                    AND pr.is_active = true
-                   AND pr.resource_type IN ('page', 'menu')
+                   AND pr.resource_type IN ('page', 'menu', 'feature')
                 INNER JOIN permission_actions pa
                     ON pa.action_key = payload.action_key
                    AND pa.is_active = true
@@ -555,7 +555,7 @@ export class PermissionsModel {
                 INNER JOIN permission_resources pr
                     ON pr.resource_key = payload.resource_key
                    AND pr.is_active = true
-                   AND pr.resource_type IN ('page', 'menu')
+                   AND pr.resource_type IN ('page', 'menu', 'feature')
                 INNER JOIN permission_actions pa
                     ON pa.action_key = payload.action_key
                    AND pa.is_active = true

@@ -9,6 +9,41 @@ import { getClientIp } from "../../utils/securityLogger";
 import { setPrivateSwrHeaders } from "../../utils/cacheHeaders";
 import { parseCreatedSort } from "../../utils/sortCreated";
 import { normalizeImageSourceInput } from "../../utils/imageSource";
+import { resolvePermissionForRequest } from "../../middleware/permission.middleware";
+import type { AuthRequest } from "../../middleware/auth.middleware";
+
+const PRODUCTS_SEARCH_FEATURE = "products.search.feature";
+const PRODUCTS_FILTER_FEATURE = "products.filter.feature";
+const PRODUCTS_CATALOG_FEATURE = "products.catalog.feature";
+const PRODUCTS_PRICING_FEATURE = "products.pricing.feature";
+const PRODUCTS_STRUCTURE_FEATURE = "products.structure.feature";
+const PRODUCTS_STATUS_FEATURE = "products.status.feature";
+
+async function requireProductsFeature(
+    req: Request,
+    res: Response,
+    resourceKey: string,
+    actionKey: "access" | "view" | "update"
+): Promise<boolean> {
+    const permission = await resolvePermissionForRequest(req as AuthRequest, resourceKey, actionKey);
+    if (permission) {
+        return true;
+    }
+
+    res.status(403).json({
+        success: false,
+        error: {
+            code: "FORBIDDEN",
+            message: "Access denied: product capability not allowed",
+            details: {
+                reason: "products_capability_denied",
+                resource: resourceKey,
+                action: actionKey,
+            },
+        },
+    });
+    return false;
+}
 
 function normalizeDescription(value: unknown): string {
     return typeof value === "string" ? value.trim() : "";
@@ -53,6 +88,16 @@ export class ProductsController {
         })();
         const sortCreated = parseCreatedSort(req.query.sort_created);
         const branchId = getBranchId(req as any);
+
+        if (q?.trim()) {
+            const allowed = await requireProductsFeature(req, res, PRODUCTS_SEARCH_FEATURE, "view");
+            if (!allowed) return;
+        }
+
+        if (category_id || is_active !== undefined || req.query.sort_created !== undefined) {
+            const allowed = await requireProductsFeature(req, res, PRODUCTS_FILTER_FEATURE, "view");
+            if (!allowed) return;
+        }
         
         const result = await this.productsService.findAll(page, limit, category_id, q, is_active, branchId, sortCreated);
         setPrivateSwrHeaders(res);
@@ -66,6 +111,10 @@ export class ProductsController {
     activeCount = catchAsync(async (req: Request, res: Response) => {
         const category_id = req.query.category_id as string | undefined;
         const branchId = getBranchId(req as any);
+        if (category_id) {
+            const allowed = await requireProductsFeature(req, res, PRODUCTS_FILTER_FEATURE, "view");
+            if (!allowed) return;
+        }
         const total = await this.productsService.countActive(category_id, branchId);
         setPrivateSwrHeaders(res);
         return ApiResponses.ok(res, { total });
@@ -133,6 +182,76 @@ export class ProductsController {
             req.body.img_url = normalizeImageUrl(req.body.img_url);
         }
         const oldProduct = await this.productsService.findOne(req.params.id, branchId);
+        if (!oldProduct) {
+            throw AppError.notFound("สินค้า");
+        }
+
+        const requiredCapabilities = new Set<string>();
+        if ("display_name" in req.body) {
+            const nextDisplayName = typeof req.body.display_name === "string" ? req.body.display_name.trim() : "";
+            const currentDisplayName = oldProduct.display_name?.trim() || "";
+            if (nextDisplayName !== currentDisplayName) {
+                requiredCapabilities.add(PRODUCTS_CATALOG_FEATURE);
+            }
+        }
+
+        if ("description" in req.body) {
+            const nextDescription = normalizeDescription(req.body.description);
+            const currentDescription = normalizeDescription(oldProduct.description);
+            if (nextDescription !== currentDescription) {
+                requiredCapabilities.add(PRODUCTS_CATALOG_FEATURE);
+            }
+        }
+
+        if ("img_url" in req.body) {
+            const nextImageUrl = normalizeImageUrl(req.body.img_url) || null;
+            const currentImageUrl = normalizeImageUrl(oldProduct.img_url) || null;
+            if (nextImageUrl !== currentImageUrl) {
+                requiredCapabilities.add(PRODUCTS_CATALOG_FEATURE);
+            }
+        }
+
+        if ("price" in req.body && Number(req.body.price ?? 0) !== Number(oldProduct.price ?? 0)) {
+            requiredCapabilities.add(PRODUCTS_PRICING_FEATURE);
+        }
+
+        if (
+            "price_delivery" in req.body &&
+            Number(req.body.price_delivery ?? 0) !== Number(oldProduct.price_delivery ?? oldProduct.price ?? 0)
+        ) {
+            requiredCapabilities.add(PRODUCTS_PRICING_FEATURE);
+        }
+
+        if ("category_id" in req.body && req.body.category_id !== oldProduct.category_id) {
+            requiredCapabilities.add(PRODUCTS_STRUCTURE_FEATURE);
+        }
+
+        if ("unit_id" in req.body && req.body.unit_id !== oldProduct.unit_id) {
+            requiredCapabilities.add(PRODUCTS_STRUCTURE_FEATURE);
+        }
+
+        if ("topping_group_ids" in req.body) {
+            const nextGroups = Array.isArray(req.body.topping_group_ids)
+                ? [...req.body.topping_group_ids].map((value) => String(value)).sort()
+                : [];
+            const currentGroups = (oldProduct.topping_groups || []).map((group) => group.id).sort();
+            if (nextGroups.join("|") !== currentGroups.join("|")) {
+                requiredCapabilities.add(PRODUCTS_STRUCTURE_FEATURE);
+            }
+        }
+
+        if (
+            typeof req.body.is_active === "boolean" &&
+            Boolean(req.body.is_active) !== Boolean(oldProduct.is_active)
+        ) {
+            requiredCapabilities.add(PRODUCTS_STATUS_FEATURE);
+        }
+
+        for (const resourceKey of requiredCapabilities) {
+            const allowed = await requireProductsFeature(req, res, resourceKey, "update");
+            if (!allowed) return;
+        }
+
         const product = await this.productsService.update(req.params.id, req.body, branchId);
 
         if (product) {

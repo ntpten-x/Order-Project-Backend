@@ -24,11 +24,31 @@ router.use(authenticateToken)
 router.use(requireBranch)
 
 router.get("/", authorizePermission("products_unit.page", "view"), validate(paginationQuerySchema), productsUnitController.findAll)
-router.get("/name/:name", authorizePermission("products_unit.page", "view"), validate(productsUnitNameParamSchema), productsUnitController.findOneByName)
-router.get("/:id", authorizePermission("products_unit.page", "view"), validate(productsUnitIdParamSchema), productsUnitController.findOne)
+router.get("/name/:name", authorizePermission("products_unit.manager.feature", "access"), validate(productsUnitNameParamSchema), productsUnitController.findOneByName)
+router.get("/:id", authorizePermission("products_unit.manager.feature", "access"), validate(productsUnitIdParamSchema), productsUnitController.findOne)
 
-router.post("/", authorizePermission("products_unit.page", "create"), validate(createProductsUnitSchema), productsUnitController.create)
-router.put("/:id", authorizePermission("products_unit.page", "update"), validate(updateProductsUnitSchema), productsUnitController.update)
-router.delete("/:id", authorizePermission("products_unit.page", "delete"), validate(productsUnitIdParamSchema), productsUnitController.delete)
+router.post(
+    "/",
+    authorizePermission("products_unit.page", "create"),
+    authorizePermission("products_unit.manager.feature", "access"),
+    authorizePermission("products_unit.create.feature", "create"),
+    validate(createProductsUnitSchema),
+    productsUnitController.create
+)
+router.put(
+    "/:id",
+    authorizePermission("products_unit.page", "update"),
+    authorizePermission("products_unit.manager.feature", "access"),
+    validate(updateProductsUnitSchema),
+    productsUnitController.update
+)
+router.delete(
+    "/:id",
+    authorizePermission("products_unit.page", "delete"),
+    authorizePermission("products_unit.manager.feature", "access"),
+    authorizePermission("products_unit.delete.feature", "delete"),
+    validate(productsUnitIdParamSchema),
+    productsUnitController.delete
+)
 
 export default router

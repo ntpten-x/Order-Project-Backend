@@ -8,9 +8,75 @@ import { ApiResponses } from "../../utils/ApiResponse";
 import { getClientIp } from "../../utils/securityLogger";
 import { getBranchId } from "../../middleware/branch.middleware";
 import { parseCreatedSort } from "../../utils/sortCreated";
+import { resolvePermissionForRequest } from "../../middleware/permission.middleware";
+import type { AuthRequest } from "../../middleware/auth.middleware";
 
 export class ShiftsController {
     constructor(private shiftsService: ShiftsService) { }
+
+    private isShiftOwnedByActor(currentShift: Awaited<ReturnType<ShiftsService["getCurrentShift"]>>, actorUserId?: string | null): boolean {
+        if (!currentShift || !actorUserId) return false;
+        return currentShift.opened_by_user_id
+            ? currentShift.opened_by_user_id === actorUserId
+            : currentShift.user_id === actorUserId;
+    }
+
+    private sanitizeCurrentShiftFinancials<
+        T extends {
+            start_amount?: number | string | null;
+            end_amount?: number | string | null;
+            expected_amount?: number | string | null;
+            diff_amount?: number | string | null;
+        },
+    >(shift: T, canViewFinancials: boolean): T {
+        if (canViewFinancials) {
+            return shift;
+        }
+
+        return {
+            ...shift,
+            start_amount: 0,
+            end_amount: null,
+            expected_amount: null,
+            diff_amount: null,
+        };
+    }
+
+    private async sanitizeHistoryResponse(
+        req: AuthRequest,
+        result: Awaited<ReturnType<ShiftsService["getShiftHistory"]>>
+    ) {
+        const [canViewStats, canViewFinancials] = await Promise.all([
+            resolvePermissionForRequest(req, "shift_history.stats.feature", "view"),
+            resolvePermissionForRequest(req, "shift_history.financials.feature", "view"),
+        ]);
+
+        return {
+            ...result,
+            data: result.data.map((shift) =>
+                canViewFinancials
+                    ? shift
+                    : {
+                        ...shift,
+                        start_amount: 0,
+                        end_amount: null,
+                        expected_amount: null,
+                        diff_amount: null,
+                    }
+            ),
+            stats: canViewStats
+                ? result.stats
+                : {
+                    total: 0,
+                    open: 0,
+                    closed: 0,
+                    total_start_amount: 0,
+                    total_end_amount: 0,
+                    total_expected_amount: 0,
+                    total_diff_amount: 0,
+                },
+        };
+    }
 
     private async assertCanCloseShift(req: Request, branchId: string, userId: string): Promise<void> {
         const userRole = (req as any).user?.roles?.roles_name;
@@ -143,12 +209,45 @@ export class ShiftsController {
     getCurrentShift = catchAsync(async (req: Request, res: Response) => {
         const branchId = getBranchId(req as any);
         const shift = await this.shiftsService.getCurrentShift(branchId);
-        return ApiResponses.ok(res, shift);
+        if (!shift) {
+            return ApiResponses.ok(res, shift);
+        }
+
+        const actorUserId = (req as AuthRequest).user?.id;
+        const financialPermission = await resolvePermissionForRequest(
+            req as AuthRequest,
+            "shifts.financials.feature",
+            "view"
+        );
+        const canViewFinancials = Boolean(
+            financialPermission &&
+            (financialPermission.scope !== "own" || this.isShiftOwnedByActor(shift, actorUserId))
+        );
+
+        return ApiResponses.ok(res, this.sanitizeCurrentShiftFinancials(shift, canViewFinancials));
     });
 
     getSummary = catchAsync(async (req: Request, res: Response) => {
         const { id } = req.params;
         const branchId = getBranchId(req as any);
+        const actorUserId = (req as AuthRequest).user?.id;
+        const permission = (req as AuthRequest).permission;
+
+        if (permission?.scope === "own") {
+            if (!actorUserId) {
+                throw new AppError("Unauthorized - User not authenticated", 401);
+            }
+
+            const canAccessOwnShift = await this.shiftsService.canUserAccessShiftHistory(
+                id,
+                branchId,
+                actorUserId
+            );
+            if (!canAccessOwnShift) {
+                throw new AppError("Access denied: Own scope only", 403);
+            }
+        }
+
         const summary = await this.shiftsService.getShiftSummary(id, branchId);
         return ApiResponses.ok(res, summary);
     });
@@ -159,13 +258,47 @@ export class ShiftsController {
         if (!currentShift) throw new AppError("No active shift found", 404);
 
         const summary = await this.shiftsService.getShiftSummary(currentShift.id, branchId);
-        return ApiResponses.ok(res, summary);
+        const actorUserId = (req as AuthRequest).user?.id;
+        const [financialPermission, channelsPermission, topProductsPermission] = await Promise.all([
+            resolvePermissionForRequest(req as AuthRequest, "shifts.financials.feature", "view"),
+            resolvePermissionForRequest(req as AuthRequest, "shifts.channels.feature", "view"),
+            resolvePermissionForRequest(req as AuthRequest, "shifts.top_products.feature", "view"),
+        ]);
+
+        const ownsCurrentShift = this.isShiftOwnedByActor(currentShift, actorUserId);
+        const canViewFinancials = Boolean(
+            financialPermission &&
+            (financialPermission.scope !== "own" || ownsCurrentShift)
+        );
+        const canViewChannels = Boolean(channelsPermission);
+        const canViewTopProducts = Boolean(topProductsPermission);
+
+        return ApiResponses.ok(res, {
+            ...summary,
+            shift_info: this.sanitizeCurrentShiftFinancials(summary.shift_info, canViewFinancials),
+            summary: {
+                ...summary.summary,
+                payment_methods: canViewFinancials ? summary.summary.payment_methods : {},
+                order_types: canViewChannels ? summary.summary.order_types : {},
+            },
+            top_products: canViewTopProducts ? summary.top_products : [],
+        });
     });
 
     getHistory = catchAsync(async (req: Request, res: Response) => {
         const branchId = getBranchId(req as any);
         if (!branchId) {
             throw new AppError("Branch context is required", 400);
+        }
+
+        const actorUserId = (req as AuthRequest).user?.id;
+        const pagePermission = await resolvePermissionForRequest(
+            req as AuthRequest,
+            "shift_history.page",
+            "view"
+        );
+        if (!pagePermission) {
+            throw new AppError("Access denied: shift history permission required", 403);
         }
 
         const page = Math.max(parseInt(req.query.page as string) || 1, 1);
@@ -204,9 +337,11 @@ export class ShiftsController {
             status,
             dateFrom,
             dateTo,
-            sortCreated
+            sortCreated,
+            actorUserId: pagePermission.scope === "own" ? actorUserId : undefined,
         });
 
-        return ApiResponses.ok(res, result);
+        const sanitized = await this.sanitizeHistoryResponse(req as AuthRequest, result);
+        return ApiResponses.ok(res, sanitized);
     });
 }

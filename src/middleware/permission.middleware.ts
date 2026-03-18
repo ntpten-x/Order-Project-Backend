@@ -88,25 +88,35 @@ async function resolveEffectivePermission(
     };
 }
 
+export async function resolvePermissionForRequest(
+    req: AuthRequest,
+    resourceKey: string,
+    actionKey: string
+): Promise<RequestPermission | null> {
+    if (!req.user?.id || !req.user?.roles_id) {
+        return null;
+    }
+
+    const actorRole = normalizeRoleName(req.user.roles?.roles_name);
+    if (actorRole === "Admin" && isAdminPermissionBypassEnabled()) {
+        return {
+            resourceKey,
+            actionKey,
+            scope: "all",
+        };
+    }
+
+    return resolveEffectivePermission(req.user.id, req.user.roles_id, resourceKey, actionKey);
+}
+
 export const authorizePermission = (resourceKey: string, actionKey: string) => {
     return async (req: AuthRequest, res: Response, next: NextFunction) => {
         if (!req.user?.id || !req.user?.roles_id) {
             return ApiResponses.unauthorized(res, "Authentication required");
         }
 
-        // Explicit opt-in only. Keep disabled by default to avoid silent over-privilege in production.
-        const actorRole = normalizeRoleName(req.user.roles?.roles_name);
-        if (actorRole === "Admin" && isAdminPermissionBypassEnabled()) {
-            req.permission = {
-                resourceKey,
-                actionKey,
-                scope: "all",
-            };
-            return next();
-        }
-
         const startedAt = process.hrtime.bigint();
-        const permission = await resolveEffectivePermission(req.user.id, req.user.roles_id, resourceKey, actionKey);
+        const permission = await resolvePermissionForRequest(req, resourceKey, actionKey);
         const durationMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
         if (!permission) {
             metrics.observePermissionCheck({
@@ -140,6 +150,75 @@ export const authorizePermission = (resourceKey: string, actionKey: string) => {
             durationMs,
         });
         req.permission = permission;
+        next();
+    };
+};
+
+export const authorizeResolvedPermissions = (
+    resolver: (req: AuthRequest) => Array<{ resourceKey: string; actionKey: string }>
+) => {
+    return async (req: AuthRequest, res: Response, next: NextFunction) => {
+        if (!req.user?.id || !req.user?.roles_id) {
+            return ApiResponses.unauthorized(res, "Authentication required");
+        }
+
+        const requirements = resolver(req).filter(
+            (item): item is { resourceKey: string; actionKey: string } =>
+                Boolean(item?.resourceKey) && Boolean(item?.actionKey)
+        );
+
+        if (requirements.length === 0) {
+            return ApiResponses.badRequest(res, "Permission requirement is required");
+        }
+
+        let lastGrantedPermission: RequestPermission | null = null;
+
+        for (const requirement of requirements) {
+            const startedAt = process.hrtime.bigint();
+            const permission = await resolvePermissionForRequest(
+                req,
+                requirement.resourceKey,
+                requirement.actionKey
+            );
+            const durationMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
+
+            if (!permission) {
+                metrics.observePermissionCheck({
+                    resource: requirement.resourceKey,
+                    action: requirement.actionKey,
+                    decision: "deny",
+                    scope: "none",
+                    durationMs,
+                });
+
+                return res.status(403).json({
+                    success: false,
+                    error: {
+                        code: "FORBIDDEN",
+                        message: "Access denied: Insufficient permissions",
+                        details: {
+                            reason: "permission_denied",
+                            resource: requirement.resourceKey,
+                            action: requirement.actionKey,
+                            scope: "none",
+                        },
+                    },
+                });
+            }
+
+            metrics.observePermissionCheck({
+                resource: requirement.resourceKey,
+                action: requirement.actionKey,
+                decision: "allow",
+                scope: permission.scope,
+                durationMs,
+            });
+            lastGrantedPermission = permission;
+        }
+
+        if (lastGrantedPermission) {
+            req.permission = lastGrantedPermission;
+        }
         next();
     };
 };

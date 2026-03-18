@@ -9,6 +9,8 @@ import { getClientIp } from "../../utils/securityLogger";
 import { setPrivateSwrHeaders } from "../../utils/cacheHeaders";
 import { parseCreatedSort } from "../../utils/sortCreated";
 import { normalizeImageSourceInput } from "../../utils/imageSource";
+import { resolvePermissionForRequest } from "../../middleware/permission.middleware";
+import type { AuthRequest } from "../../middleware/auth.middleware";
 
 function normalizeText(value: unknown): string | undefined {
     if (typeof value !== "string") return undefined;
@@ -16,8 +18,44 @@ function normalizeText(value: unknown): string | undefined {
     return normalized.length > 0 ? normalized : undefined;
 }
 
+function normalizeDeliveryPrefix(value: unknown): string | null {
+    const normalized = normalizeText(value);
+    return normalized ? normalized.toUpperCase() : null;
+}
+
 function normalizeLogo(value: unknown): string | null {
     return normalizeImageSourceInput(value);
+}
+
+const DELIVERY_SEARCH_FEATURE = "delivery.search.feature";
+const DELIVERY_FILTER_FEATURE = "delivery.filter.feature";
+const DELIVERY_EDIT_FEATURE = "delivery.edit.feature";
+const DELIVERY_STATUS_FEATURE = "delivery.status.feature";
+
+async function requireDeliveryFeature(
+    req: Request,
+    res: Response,
+    resourceKey: string,
+    actionKey: "access" | "view" | "update"
+): Promise<boolean> {
+    const permission = await resolvePermissionForRequest(req as AuthRequest, resourceKey, actionKey);
+    if (permission) {
+        return true;
+    }
+
+    res.status(403).json({
+        success: false,
+        error: {
+            code: "FORBIDDEN",
+            message: "Access denied: delivery capability not allowed",
+            details: {
+                reason: "delivery_capability_denied",
+                resource: resourceKey,
+                action: actionKey,
+            },
+        },
+    });
+    return false;
 }
 
 export class DeliveryController {
@@ -32,6 +70,16 @@ export class DeliveryController {
         const status = statusRaw === "active" || statusRaw === "inactive" ? statusRaw : undefined;
         const sortCreated = parseCreatedSort(req.query.sort_created);
         const branchId = getBranchId(req as any);
+
+        if (q?.trim()) {
+            const allowed = await requireDeliveryFeature(req, res, DELIVERY_SEARCH_FEATURE, "view");
+            if (!allowed) return;
+        }
+
+        if (status || req.query.sort_created !== undefined) {
+            const allowed = await requireDeliveryFeature(req, res, DELIVERY_FILTER_FEATURE, "view");
+            if (!allowed) return;
+        }
 
         const result = await this.deliveryService.findAll(page, limit, q, branchId, sortCreated, status);
         setPrivateSwrHeaders(res);
@@ -67,7 +115,7 @@ export class DeliveryController {
             req.body.delivery_name = normalizeText(req.body.delivery_name) ?? req.body.delivery_name;
         }
         if ("delivery_prefix" in req.body) {
-            req.body.delivery_prefix = normalizeText(req.body.delivery_prefix) ?? null;
+            req.body.delivery_prefix = normalizeDeliveryPrefix(req.body.delivery_prefix);
         }
         if ("logo" in req.body) {
             req.body.logo = normalizeLogo(req.body.logo);
@@ -101,12 +149,52 @@ export class DeliveryController {
             req.body.delivery_name = normalizeText(req.body.delivery_name) ?? req.body.delivery_name;
         }
         if ("delivery_prefix" in req.body) {
-            req.body.delivery_prefix = normalizeText(req.body.delivery_prefix) ?? null;
+            req.body.delivery_prefix = normalizeDeliveryPrefix(req.body.delivery_prefix);
         }
         if ("logo" in req.body) {
             req.body.logo = normalizeLogo(req.body.logo);
         }
         const oldDelivery = await this.deliveryService.findOne(req.params.id, branchId);
+        if (!oldDelivery) {
+            throw AppError.notFound("Delivery");
+        }
+
+        const requiredCapabilities = new Set<string>();
+        const nextDeliveryName =
+            typeof req.body.delivery_name === "string" ? req.body.delivery_name.trim().toLowerCase() : undefined;
+        const currentDeliveryName = oldDelivery.delivery_name?.trim().toLowerCase();
+        if (nextDeliveryName !== undefined && nextDeliveryName !== currentDeliveryName) {
+            requiredCapabilities.add(DELIVERY_EDIT_FEATURE);
+        }
+
+        if ("delivery_prefix" in req.body) {
+            const nextPrefix = typeof req.body.delivery_prefix === "string" ? req.body.delivery_prefix.trim().toUpperCase() : null;
+            const currentPrefix = oldDelivery.delivery_prefix?.trim().toUpperCase() || null;
+            if (nextPrefix !== currentPrefix) {
+                requiredCapabilities.add(DELIVERY_EDIT_FEATURE);
+            }
+        }
+
+        if ("logo" in req.body) {
+            const nextLogo = typeof req.body.logo === "string" ? req.body.logo.trim() : null;
+            const currentLogo = oldDelivery.logo?.trim() || null;
+            if (nextLogo !== currentLogo) {
+                requiredCapabilities.add(DELIVERY_EDIT_FEATURE);
+            }
+        }
+
+        if (
+            typeof req.body.is_active === "boolean" &&
+            Boolean(req.body.is_active) !== Boolean(oldDelivery.is_active)
+        ) {
+            requiredCapabilities.add(DELIVERY_STATUS_FEATURE);
+        }
+
+        for (const resourceKey of requiredCapabilities) {
+            const allowed = await requireDeliveryFeature(req, res, resourceKey, "update");
+            if (!allowed) return;
+        }
+
         const delivery = await this.deliveryService.update(req.params.id, req.body, branchId);
 
         if (delivery) {

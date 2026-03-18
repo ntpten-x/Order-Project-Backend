@@ -8,6 +8,39 @@ import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../../util
 import { getClientIp } from "../../utils/securityLogger";
 import { setPrivateSwrHeaders } from "../../utils/cacheHeaders";
 import { parseCreatedSort } from "../../utils/sortCreated";
+import { resolvePermissionForRequest } from "../../middleware/permission.middleware";
+import type { AuthRequest } from "../../middleware/auth.middleware";
+
+const PAYMENT_METHOD_SEARCH_FEATURE = "payment_method.search.feature";
+const PAYMENT_METHOD_FILTER_FEATURE = "payment_method.filter.feature";
+const PAYMENT_METHOD_CATALOG_FEATURE = "payment_method.catalog.feature";
+const PAYMENT_METHOD_STATUS_FEATURE = "payment_method.status.feature";
+
+async function requirePaymentMethodFeature(
+    req: Request,
+    res: Response,
+    resourceKey: string,
+    actionKey: "access" | "view" | "update"
+): Promise<boolean> {
+    const permission = await resolvePermissionForRequest(req as AuthRequest, resourceKey, actionKey);
+    if (permission) {
+        return true;
+    }
+
+    res.status(403).json({
+        success: false,
+        error: {
+            code: "FORBIDDEN",
+            message: "Access denied: payment method capability not allowed",
+            details: {
+                reason: "payment_method_capability_denied",
+                resource: resourceKey,
+                action: actionKey,
+            },
+        },
+    });
+    return false;
+}
 
 export class PaymentMethodController {
     constructor(private paymentMethodService: PaymentMethodService) { }
@@ -21,6 +54,16 @@ export class PaymentMethodController {
         const status = statusRaw === "active" || statusRaw === "inactive" ? statusRaw : undefined;
         const sortCreated = parseCreatedSort(req.query.sort_created);
         const branchId = getBranchId(req as any);
+
+        if (q?.trim()) {
+            const allowed = await requirePaymentMethodFeature(req, res, PAYMENT_METHOD_SEARCH_FEATURE, "view");
+            if (!allowed) return;
+        }
+
+        if (status || req.query.sort_created !== undefined) {
+            const allowed = await requirePaymentMethodFeature(req, res, PAYMENT_METHOD_FILTER_FEATURE, "view");
+            if (!allowed) return;
+        }
 
         const result = await this.paymentMethodService.findAll(page, limit, q, status, branchId, sortCreated);
         setPrivateSwrHeaders(res);
@@ -78,6 +121,38 @@ export class PaymentMethodController {
             req.body.branch_id = branchId;
         }
         const oldPaymentMethod = await this.paymentMethodService.findOne(req.params.id, branchId);
+        if (!oldPaymentMethod) {
+            throw AppError.notFound("Payment method");
+        }
+
+        const requiredCapabilities = new Set<string>();
+        const nextPaymentMethodName =
+            typeof req.body.payment_method_name === "string" ? req.body.payment_method_name.trim().toLowerCase() : undefined;
+        const currentPaymentMethodName = oldPaymentMethod.payment_method_name?.trim().toLowerCase();
+        if (nextPaymentMethodName !== undefined && nextPaymentMethodName !== currentPaymentMethodName) {
+            requiredCapabilities.add(PAYMENT_METHOD_CATALOG_FEATURE);
+        }
+
+        if ("display_name" in req.body) {
+            const nextDisplayName = typeof req.body.display_name === "string" ? req.body.display_name.trim() : "";
+            const currentDisplayName = oldPaymentMethod.display_name?.trim() || "";
+            if (nextDisplayName !== currentDisplayName) {
+                requiredCapabilities.add(PAYMENT_METHOD_CATALOG_FEATURE);
+            }
+        }
+
+        if (
+            typeof req.body.is_active === "boolean" &&
+            Boolean(req.body.is_active) !== Boolean(oldPaymentMethod.is_active)
+        ) {
+            requiredCapabilities.add(PAYMENT_METHOD_STATUS_FEATURE);
+        }
+
+        for (const resourceKey of requiredCapabilities) {
+            const allowed = await requirePaymentMethodFeature(req, res, resourceKey, "update");
+            if (!allowed) return;
+        }
+
         const paymentMethod = await this.paymentMethodService.update(req.params.id, req.body, branchId);
 
         if (paymentMethod) {

@@ -8,6 +8,40 @@ import { auditLogger, AuditActionType, getUserInfoFromRequest } from "../../util
 import { getClientIp } from "../../utils/securityLogger";
 import { setPrivateSwrHeaders } from "../../utils/cacheHeaders";
 import { parseCreatedSort } from "../../utils/sortCreated";
+import { resolvePermissionForRequest } from "../../middleware/permission.middleware";
+import type { AuthRequest } from "../../middleware/auth.middleware";
+
+const DISCOUNTS_SEARCH_FEATURE = "discounts.search.feature";
+const DISCOUNTS_FILTER_FEATURE = "discounts.filter.feature";
+const DISCOUNTS_EDIT_FEATURE = "discounts.edit.feature";
+const DISCOUNTS_PRICING_FEATURE = "discounts.pricing.feature";
+const DISCOUNTS_STATUS_FEATURE = "discounts.status.feature";
+
+async function requireDiscountsFeature(
+    req: Request,
+    res: Response,
+    resourceKey: string,
+    actionKey: "access" | "view" | "update"
+): Promise<boolean> {
+    const permission = await resolvePermissionForRequest(req as AuthRequest, resourceKey, actionKey);
+    if (permission) {
+        return true;
+    }
+
+    res.status(403).json({
+        success: false,
+        error: {
+            code: "FORBIDDEN",
+            message: "Access denied: discounts capability not allowed",
+            details: {
+                reason: "discounts_capability_denied",
+                resource: resourceKey,
+                action: actionKey,
+            },
+        },
+    });
+    return false;
+}
 
 export class DiscountsController {
     constructor(private discountsService: DiscountsService) { }
@@ -22,6 +56,17 @@ export class DiscountsController {
         const type = (req.query.type as string | undefined) || undefined;
         const sortCreated = parseCreatedSort(req.query.sort_created);
         const branchId = getBranchId(req as any);
+
+        if (q?.trim()) {
+            const allowed = await requireDiscountsFeature(req, res, DISCOUNTS_SEARCH_FEATURE, "view");
+            if (!allowed) return;
+        }
+
+        if (status || type || req.query.sort_created !== undefined) {
+            const allowed = await requireDiscountsFeature(req, res, DISCOUNTS_FILTER_FEATURE, "view");
+            if (!allowed) return;
+        }
+
         const discounts = await this.discountsService.findAllPaginated(
             page,
             limit,
@@ -87,6 +132,53 @@ export class DiscountsController {
             req.body.branch_id = branchId;
         }
         const oldDiscount = await this.discountsService.findOne(req.params.id, branchId);
+        if (!oldDiscount) {
+            throw AppError.notFound("Discount");
+        }
+
+        const requiredCapabilities = new Set<string>();
+        const nextDisplayName =
+            typeof req.body.display_name === "string" ? req.body.display_name.trim().toLowerCase() : undefined;
+        const currentDisplayName = oldDiscount.display_name?.trim().toLowerCase();
+        if (nextDisplayName !== undefined && nextDisplayName !== currentDisplayName) {
+            requiredCapabilities.add(DISCOUNTS_EDIT_FEATURE);
+        }
+
+        if ("description" in req.body) {
+            const nextDescription = typeof req.body.description === "string" ? req.body.description.trim() : "";
+            const currentDescription = oldDiscount.description?.trim() || "";
+            if (nextDescription !== currentDescription) {
+                requiredCapabilities.add(DISCOUNTS_EDIT_FEATURE);
+            }
+        }
+
+        if ("discount_type" in req.body) {
+            const nextType = typeof req.body.discount_type === "string" ? req.body.discount_type : undefined;
+            if (nextType !== undefined && nextType !== oldDiscount.discount_type) {
+                requiredCapabilities.add(DISCOUNTS_PRICING_FEATURE);
+            }
+        }
+
+        if ("discount_amount" in req.body) {
+            const nextAmount = Number(req.body.discount_amount);
+            const currentAmount = Number(oldDiscount.discount_amount || 0);
+            if (!Number.isNaN(nextAmount) && nextAmount !== currentAmount) {
+                requiredCapabilities.add(DISCOUNTS_PRICING_FEATURE);
+            }
+        }
+
+        if (
+            typeof req.body.is_active === "boolean" &&
+            Boolean(req.body.is_active) !== Boolean(oldDiscount.is_active)
+        ) {
+            requiredCapabilities.add(DISCOUNTS_STATUS_FEATURE);
+        }
+
+        for (const resourceKey of requiredCapabilities) {
+            const allowed = await requireDiscountsFeature(req, res, resourceKey, "update");
+            if (!allowed) return;
+        }
+
         const discount = await this.discountsService.update(req.params.id, req.body, branchId);
 
         if (discount) {

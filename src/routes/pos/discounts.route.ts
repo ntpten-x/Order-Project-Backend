@@ -24,11 +24,31 @@ router.use(authenticateToken)
 router.use(requireBranch)
 
 router.get("/", authorizePermission("discounts.page", "view"), validate(paginationQuerySchema), discountsController.findAll)
-router.get("/name/:name", authorizePermission("discounts.page", "view"), validate(discountNameParamSchema), discountsController.findByName)
+router.get("/name/:name", authorizePermission("discounts.manager.feature", "access"), validate(discountNameParamSchema), discountsController.findByName)
 router.get("/:id", authorizePermission("discounts.page", "view"), validate(discountIdParamSchema), discountsController.findOne)
 
-router.post("/", authorizePermission("discounts.page", "create"), validate(createDiscountSchema), discountsController.create)
-router.put("/:id", authorizePermission("discounts.page", "update"), validate(updateDiscountSchema), discountsController.update)
-router.delete("/:id", authorizePermission("discounts.page", "delete"), validate(discountIdParamSchema), discountsController.delete)
+router.post(
+    "/",
+    authorizePermission("discounts.page", "create"),
+    authorizePermission("discounts.manager.feature", "access"),
+    authorizePermission("discounts.create.feature", "create"),
+    validate(createDiscountSchema),
+    discountsController.create
+)
+router.put(
+    "/:id",
+    authorizePermission("discounts.page", "update"),
+    authorizePermission("discounts.manager.feature", "access"),
+    validate(updateDiscountSchema),
+    discountsController.update
+)
+router.delete(
+    "/:id",
+    authorizePermission("discounts.page", "delete"),
+    authorizePermission("discounts.manager.feature", "access"),
+    authorizePermission("discounts.delete.feature", "delete"),
+    validate(discountIdParamSchema),
+    discountsController.delete
+)
 
 export default router

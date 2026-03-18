@@ -390,6 +390,24 @@ export class ShiftsService {
         );
     }
 
+    async canUserAccessShiftHistory(shiftId: string, branchId: string | undefined, actorUserId: string): Promise<boolean> {
+        if (!branchId) {
+            return false;
+        }
+
+        const count = await this.shiftsRepo
+            .createQueryBuilder("shift")
+            .where("shift.id = :shiftId", { shiftId })
+            .andWhere("shift.branch_id = :branchId", { branchId })
+            .andWhere(
+                "(shift.user_id = :actorUserId OR shift.opened_by_user_id = :actorUserId OR shift.closed_by_user_id = :actorUserId)",
+                { actorUserId }
+            )
+            .getCount();
+
+        return count > 0;
+    }
+
     async getShiftHistory(options: {
         branchId: string;
         page?: number;
@@ -399,6 +417,7 @@ export class ShiftsService {
         dateFrom?: Date;
         dateTo?: Date;
         sortCreated?: CreatedSort;
+        actorUserId?: string;
     }) {
         const {
             branchId,
@@ -408,7 +427,8 @@ export class ShiftsService {
             status,
             dateFrom,
             dateTo,
-            sortCreated = "old"
+            sortCreated = "old",
+            actorUserId,
         } = options;
 
         const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
@@ -416,6 +436,13 @@ export class ShiftsService {
 
         const applyFilters = <T extends SelectQueryBuilder<Shifts>>(qb: T) => {
             qb.where("shift.branch_id = :branchId", { branchId });
+
+            if (actorUserId) {
+                qb.andWhere(
+                    "(shift.user_id = :actorUserId OR shift.opened_by_user_id = :actorUserId OR shift.closed_by_user_id = :actorUserId)",
+                    { actorUserId }
+                );
+            }
 
             if (status) {
                 qb.andWhere("shift.status = :status", { status });
